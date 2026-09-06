@@ -95,18 +95,26 @@ export function aiRoutes(repo: Repository, arkiv: BilagsLager): Router {
       res.setHeader('Connection', 'keep-alive');
       res.flushHeaders?.();
 
-      const { beskeder, beregning, brugWebsoegning } = req.body ?? {};
+      const { beskeder, beregning, brugWebsoegning, aktivtForslag } = req.body ?? {};
 
       const svar = await getUdbyder().chat(
         {
           beskeder: Array.isArray(beskeder) ? beskeder : [],
           beregning,
           brugWebsoegning: Boolean(brugWebsoegning),
+          aktivtForslag: aktivtForslag ?? null,
         },
         (fase) => send('status', { fase })
       );
 
-      if (!svar.tekst) {
+      if (svar.bekraeftet) {
+        // Kun et signal — serveren gemmer intet selv. Klienten holder allerede
+        // det udkast, der skal gemmes, og bruger sin egen gem-handler, akkurat
+        // som når "Godkend"-knappen klikkes.
+        send('bekraeft', {});
+      } else if (svar.forslag) {
+        send('forslag', { besked: rensProsa(svar.forslag.besked), forslag: svar.forslag });
+      } else if (!svar.tekst) {
         send('fejl', { fejl: 'Der kom ikke noget svar tilbage. Prøv igen.' });
       } else {
         send('faerdig', {

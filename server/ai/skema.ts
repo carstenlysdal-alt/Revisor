@@ -22,36 +22,51 @@ const tekstfelt = felt(z.coerce.string());
 const talfelt = felt(z.coerce.number());
 const boolfelt = felt(z.coerce.boolean());
 
-export const JobUdtraekSkema = z.object({
-  hvervgiver: tekstfelt,
-  honorar: talfelt,
-  startDato: tekstfelt,
-  slutDato: tekstfelt,
-  betalingsDato: tekstfelt,
-  destinationAdresse: tekstfelt,
-  transportmiddel: felt(z.enum(['NONE', 'OWN_CAR_MC', 'OWN_BIKE', 'PASSENGER'])),
-  antalKm: talfelt,
-  antalTure: talfelt,
-  amBidragFritaget: boolfelt,
-  erRubrik17: boolfelt,
-  type: tekstfelt,
-  timerJob: talfelt,
-  timerTransportForberedelse: talfelt,
-});
+/**
+ * .partial() gør hvert felt valgfrit, ikke kun dets vaerdi nullable.
+ *
+ * Geminis skema-håndhævede JSON-svar (analyserBilag) udfylder typisk alle
+ * felter i skemaet, men et funktions-kald i chatten (foreslaaPostering)
+ * håndhæves ikke på samme måde — modellen kan sende kun de felter, den
+ * faktisk har noget at sige om. Et manglende felt skal opføres sig som et
+ * felt med vaerdi: null, ikke crashe hele chatsvaret.
+ */
+export const JobUdtraekSkema = z
+  .object({
+    hvervgiver: tekstfelt,
+    honorar: talfelt,
+    startDato: tekstfelt,
+    slutDato: tekstfelt,
+    betalingsDato: tekstfelt,
+    destinationAdresse: tekstfelt,
+    transportmiddel: felt(z.enum(['NONE', 'OWN_CAR_MC', 'OWN_BIKE', 'PASSENGER'])),
+    antalKm: talfelt,
+    antalTure: talfelt,
+    amBidragFritaget: boolfelt,
+    erRubrik17: boolfelt,
+    type: tekstfelt,
+    timerJob: talfelt,
+    timerTransportForberedelse: talfelt,
+  })
+  .partial();
 
-export const FradragUdtraekSkema = z.object({
-  beskrivelse: tekstfelt,
-  typeKategori: tekstfelt,
-  fakturaDato: tekstfelt,
-  fakturaBeloeb: talfelt,
-  fradragsProcent: talfelt,
-});
+export const FradragUdtraekSkema = z
+  .object({
+    beskrivelse: tekstfelt,
+    typeKategori: tekstfelt,
+    fakturaDato: tekstfelt,
+    fakturaBeloeb: talfelt,
+    fradragsProcent: talfelt,
+  })
+  .partial();
 
-export const InvesteringUdtraekSkema = z.object({
-  titel: tekstfelt,
-  beloeb: talfelt,
-  fakturaDato: tekstfelt,
-});
+export const InvesteringUdtraekSkema = z
+  .object({
+    titel: tekstfelt,
+    beloeb: talfelt,
+    fakturaDato: tekstfelt,
+  })
+  .partial();
 
 export const BilagsAnalyseSkema = z.object({
   klassifikation: z.enum(['JOB', 'FRADRAG', 'INVESTERING', 'UKENDT']),
@@ -67,6 +82,82 @@ export const BilagsAnalyseSkema = z.object({
 });
 
 export type RaaBilagsAnalyse = z.infer<typeof BilagsAnalyseSkema>;
+
+/**
+ * Et forslag til en postering, foreslået af chatten via værktøjet
+ * foreslaaPostering — samme feltgrupper som bilagsudtrækket, minus alt der
+ * kun giver mening for et fysisk bilag (resume, UKENDT).
+ */
+export const PosteringForslagSkema = z.object({
+  klassifikation: z.enum(['JOB', 'FRADRAG', 'INVESTERING']),
+  /** Kort, menneskelig tekst modellen selv formulerer til chatboblen. */
+  besked: z.coerce.string().nullish().transform((v) => v ?? ''),
+  job: JobUdtraekSkema.nullish().transform((v) => v ?? undefined),
+  fradrag: FradragUdtraekSkema.nullish().transform((v) => v ?? undefined),
+  investering: InvesteringUdtraekSkema.nullish().transform((v) => v ?? undefined),
+});
+
+export type RaaPosteringForslag = z.infer<typeof PosteringForslagSkema>;
+
+/**
+ * JSON-skema (til OpenAI-kompatible tool-parametre, fx DeepSeek) for de tre
+ * feltgrupper. Genbruger ikke Zod-skemaet direkte, fordi tool-parametre skal
+ * være et almindeligt JSON Schema-objekt, ikke en Zod-instans — men de to skal
+ * holdes i takt manuelt, ligesom SKEMABESKRIVELSE allerede gør for analysen.
+ */
+const jsonFelt = (type: 'string' | 'number' | 'boolean') => ({
+  type: 'object' as const,
+  properties: {
+    vaerdi: { type: [type, 'null'] },
+    sikkerhed: { type: 'number', description: '0 til 1' },
+  },
+});
+
+export const JOB_JSON_SKEMA = {
+  type: 'object' as const,
+  properties: {
+    hvervgiver: jsonFelt('string'),
+    honorar: jsonFelt('number'),
+    startDato: jsonFelt('string'),
+    slutDato: jsonFelt('string'),
+    betalingsDato: jsonFelt('string'),
+    destinationAdresse: jsonFelt('string'),
+    transportmiddel: {
+      type: 'object' as const,
+      properties: {
+        vaerdi: { type: ['string', 'null'], enum: ['NONE', 'OWN_CAR_MC', 'OWN_BIKE', 'PASSENGER', null] },
+        sikkerhed: { type: 'number' },
+      },
+    },
+    antalKm: jsonFelt('number'),
+    antalTure: jsonFelt('number'),
+    amBidragFritaget: jsonFelt('boolean'),
+    erRubrik17: jsonFelt('boolean'),
+    type: jsonFelt('string'),
+    timerJob: jsonFelt('number'),
+    timerTransportForberedelse: jsonFelt('number'),
+  },
+};
+
+export const FRADRAG_JSON_SKEMA = {
+  type: 'object' as const,
+  properties: {
+    beskrivelse: jsonFelt('string'),
+    typeKategori: jsonFelt('string'),
+    fakturaDato: jsonFelt('string'),
+    fakturaBeloeb: jsonFelt('number'),
+    fradragsProcent: jsonFelt('number'),
+  },
+};
+
+export const INVESTERING_JSON_SKEMA = {
+  type: 'object' as const,
+  properties: {
+    titel: jsonFelt('string'),
+    beloeb: jsonFelt('number'),
+    fakturaDato: jsonFelt('string'),
+  },
+};
 
 /** Formen beskrevet i ord, til udbydere der ikke kan håndhæve et skema. */
 export const SKEMABESKRIVELSE = `Svar med ét JSON-objekt og intet andet. Objektet har denne form:

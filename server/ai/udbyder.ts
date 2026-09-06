@@ -1,4 +1,4 @@
-import type { BilagsAnalyse } from '../../src/types';
+import type { BilagsAnalyse, PosteringForslag } from '../../src/types';
 import type { Kilde } from './soegning';
 
 export interface BilagsInput {
@@ -12,6 +12,8 @@ export interface ChatIndgang {
   /** Færdigberegnede tal fra regelmotoren. Modellen regner aldrig selv. */
   beregning: unknown;
   brugWebsoegning: boolean;
+  /** Det udkast, brugeren endnu ikke har godkendt, hvis der er ét. */
+  aktivtForslag?: PosteringForslag | null;
 }
 
 export type ChatFase = 'laeser' | 'soeger' | 'laeser_kilder' | 'skriver';
@@ -19,6 +21,10 @@ export type ChatFase = 'laeser' | 'soeger' | 'laeser_kilder' | 'skriver';
 export interface ChatSvar {
   tekst: string;
   kilder: Kilde[];
+  /** Sat når modellen kaldte foreslaaPostering. Ikke gemt endnu. */
+  forslag?: PosteringForslag;
+  /** Sat når modellen kaldte bekraeftPostering — kun et signal, gemmer intet selv. */
+  bekraeftet?: boolean;
 }
 
 export interface AiUdbyder {

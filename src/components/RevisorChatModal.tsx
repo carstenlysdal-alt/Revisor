@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import type { ChatBesked, IndkomstAar } from '../types';
+import type { ChatBesked, Fradrag, IndkomstAar, Investering, Job, PosteringForslag } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
 import { kr, pct } from '../lib/format';
 import { laesEventStroem } from '../lib/sse';
 import { KineticLoader } from './KineticLoader';
+import { PosteringForslagKort } from './PosteringForslagKort';
 import { Advarsel, Knap, Modal } from './ui';
 
 interface Props {
@@ -13,6 +14,9 @@ interface Props {
   indkomstAar: IndkomstAar;
   beregning: SkatteBeregning;
   aiKlar: boolean;
+  onGemJob: (job: Job) => Promise<unknown>;
+  onGemFradrag: (fradrag: Fradrag) => Promise<unknown>;
+  onGemInvestering: (inv: Investering) => Promise<unknown>;
 }
 
 /** Faser vi faktisk kan skelne, fordi serveren melder dem fra strømmen. */
@@ -35,14 +39,35 @@ const FORSLAG = [
   'Hvad er forskellen på rubrik 29 og rubrik 51 for mig?',
 ];
 
-export function RevisorChatModal({ aaben, onLuk, indkomstAar, beregning, aiKlar }: Props) {
+export function RevisorChatModal({
+  aaben,
+  onLuk,
+  indkomstAar,
+  beregning,
+  aiKlar,
+  onGemJob,
+  onGemFradrag,
+  onGemInvestering,
+}: Props) {
   const [beskeder, setBeskeder] = useState<ChatBesked[]>([]);
   const [input, setInput] = useState('');
   const [arbejder, setArbejder] = useState(false);
   const [fase, setFase] = useState<string | null>(null);
   const [fejl, setFejl] = useState<string | null>(null);
   const [soegning, setSoegning] = useState(true);
+  /**
+   * Kun det seneste, endnu ikke godkendte udkast er interaktivt. Et ældre
+   * udkast, der er blevet erstattet af en rettelse, vises stadig som en
+   * almindelig chatboble, men uden knapper — der er kun ét gyldigt kort ad
+   * gangen, ellers bliver det uklart, hvilket der bekræftes.
+   */
+  const [aktivtForslagIndeks, setAktivtForslagIndeks] = useState<number | null>(null);
+  /** Øges hver gang modellen tolker en besked som en bekræftelse af kortet. */
+  const [bekraeftSignal, setBekraeftSignal] = useState(0);
   const bund = useRef<HTMLDivElement>(null);
+
+  const aktivtForslag =
+    aktivtForslagIndeks !== null ? beskeder[aktivtForslagIndeks]?.forslag ?? null : null;
 
   useEffect(() => {
     // Uden behavior: smooth. Ældre Safari understøtter det ikke.
@@ -91,11 +116,13 @@ export function RevisorChatModal({ aaben, onLuk, indkomstAar, beregning, aiKlar 
           beskeder: historik.map((b) => ({ rolle: b.rolle, indhold: b.indhold })),
           beregning: kontekst(),
           brugWebsoegning: soegning,
+          aktivtForslag,
         },
         (type, data) => {
           const d = data as Record<string, unknown>;
-          if (type === 'status') setFase(FASETEKST[String(d.fase)] ?? null);
-          else if (type === 'faerdig')
+          if (type === 'status') {
+            setFase(FASETEKST[String(d.fase)] ?? null);
+          } else if (type === 'faerdig') {
             setBeskeder((b) => [
               ...b,
               {
@@ -104,7 +131,22 @@ export function RevisorChatModal({ aaben, onLuk, indkomstAar, beregning, aiKlar 
                 kilder: (d.kilder as ChatBesked['kilder']) ?? undefined,
               },
             ]);
-          else if (type === 'fejl') setFejl(String(d.fejl));
+          } else if (type === 'forslag') {
+            const forslag = d.forslag as PosteringForslag;
+            setBeskeder((b) => {
+              const næste = [...b, { rolle: 'assistent' as const, indhold: String(d.besked ?? forslag.besked), forslag }];
+              setAktivtForslagIndeks(næste.length - 1);
+              return næste;
+            });
+          } else if (type === 'bekraeft') {
+            // Kun et signal fra modellen. Kortet gemmer det, der faktisk står
+            // i det lige nu — inklusive eventuelle rettelser brugeren har
+            // lavet direkte i felterne, ikke nødvendigvis det oprindelige
+            // AI-forslag.
+            setBekraeftSignal((n) => n + 1);
+          } else if (type === 'fejl') {
+            setFejl(String(d.fejl));
+          }
         }
       );
     } catch (err) {
@@ -213,6 +255,19 @@ export function RevisorChatModal({ aaben, onLuk, indkomstAar, beregning, aiKlar 
                             </li>
                           ))}
                         </ul>
+                      )}
+
+                      {b.forslag && i === aktivtForslagIndeks && (
+                        <PosteringForslagKort
+                          forslag={b.forslag}
+                          indkomstAarId={indkomstAar.id}
+                          onGemJob={onGemJob}
+                          onGemFradrag={onGemFradrag}
+                          onGemInvestering={onGemInvestering}
+                          bekraeftSignal={bekraeftSignal}
+                          onGemt={() => setAktivtForslagIndeks(null)}
+                          onForkast={() => setAktivtForslagIndeks(null)}
+                        />
                       )}
                     </div>
                   )}

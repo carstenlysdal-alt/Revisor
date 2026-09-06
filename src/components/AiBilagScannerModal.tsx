@@ -11,7 +11,16 @@ import type {
 } from '../types';
 import { SIKKERHEDSTAERSKEL } from '../types';
 import { api, filTilBase64 } from '../lib/api';
-import { datoLang, idag, kr } from '../lib/format';
+import { datoLang, kr } from '../lib/format';
+import {
+  byggFradragFraKladde,
+  byggInvesteringFraKladde,
+  byggJobFraKladde,
+  kanGemmeKladde,
+  kladdeFraUdtraek,
+  kladdeTal,
+  usikkertFelt,
+} from '../lib/posteringKladde';
 import { KineticLoader } from './KineticLoader';
 import {
   Advarsel,
@@ -46,7 +55,7 @@ const FASER = [
 
 /** Sikkerheden pr. felt afgør, om feltet skal fremhæves til manuel kontrol. */
 const usikkert = (sikkerhed: number | undefined) =>
-  (sikkerhed ?? 0) < SIKKERHEDSTAERSKEL;
+  usikkertFelt(sikkerhed, SIKKERHEDSTAERSKEL);
 
 function UsikkerMarkering({ sikkerhed }: { sikkerhed: number | undefined }) {
   if (!usikkert(sikkerhed)) return null;
@@ -146,21 +155,12 @@ export function AiBilagScannerModal({
    * Et felt uden værdi bliver tomt. Der udfyldes aldrig med et gæt.
    */
   const forbered = (a: BilagsAnalyse) => {
-    const t: Record<string, string> = {};
-    const f: Record<string, boolean> = {};
-
-    const læg = (kilde: Record<string, { vaerdi: unknown }> | undefined) => {
-      if (!kilde) return;
-      for (const [navn, felt] of Object.entries(kilde)) {
-        if (typeof felt?.vaerdi === 'boolean') f[navn] = felt.vaerdi;
-        else t[navn] = felt?.vaerdi == null ? '' : String(felt.vaerdi);
-      }
-    };
-
-    læg(a.job as never);
-    læg(a.fradrag as never);
-    læg(a.investering as never);
-    t.revisorNotat = a.revisorNotat;
+    const { tekst: t, flag: f } = kladdeFraUdtraek({
+      job: a.job as never,
+      fradrag: a.fradrag as never,
+      investering: a.investering as never,
+      revisorNotat: a.revisorNotat,
+    });
     setTekst(t);
     setFlag(f);
   };
@@ -170,7 +170,7 @@ export function AiBilagScannerModal({
       navn
     ]?.sikkerhed;
 
-  const tal = (navn: string) => Number(String(tekst[navn] ?? '').replace(',', '.')) || 0;
+  const tal = (navn: string) => kladdeTal(tekst, navn);
 
   const gem = async () => {
     if (!bilag) return;
@@ -179,66 +179,28 @@ export function AiBilagScannerModal({
 
     try {
       if (valgtType === 'JOB') {
-        const start = tekst.startDato || idag();
-        await onGemJob({
-          id: `job-${Date.now()}`,
-          indkomstAarId: indkomstAar.id,
-          hvervgiver: tekst.hvervgiver || '',
-          honorar: tal('honorar'),
-          startDato: start,
-          slutDato: tekst.slutDato || start,
-          betalingsDato: tekst.betalingsDato || '',
-          transportmiddel: (tekst.transportmiddel as TransportMiddel) || 'NONE',
-          antalKm: tal('antalKm'),
-          antalTure: Math.max(0, Math.round(tal('antalTure'))) || (tal('antalKm') ? 1 : 0),
-          destinationAdresse: tekst.destinationAdresse || '',
-          amBidragFritaget: Boolean(flag.amBidragFritaget),
-          erRubrik17: Boolean(flag.erRubrik17),
-          timerJob: tal('timerJob') || undefined,
-          timerTransportForberedelse: tal('timerTransportForberedelse') || undefined,
-          type: tekst.type || '',
-          bilagIds: [bilag.id],
-          noter: tekst.revisorNotat || '',
-        });
+        const nytJob = byggJobFraKladde(tekst, flag, indkomstAar.id, [bilag.id]);
+        await onGemJob({ id: `job-${Date.now()}`, ...nytJob });
         setLandede({
           hvor: 'Jobs og kørsel',
-          rubrik: flag.erRubrik17 ? 'rubrik 17' : 'rubrik 12',
-          beloeb: `${kr(tal('honorar'))} kr.`,
+          rubrik: nytJob.erRubrik17 ? 'rubrik 17' : 'rubrik 12',
+          beloeb: `${kr(nytJob.honorar)} kr.`,
         });
       } else if (valgtType === 'FRADRAG') {
-        const beloeb = tal('fakturaBeloeb');
-        const procent = tekst.fradragsProcent === '' ? 100 : tal('fradragsProcent');
-        await onGemFradrag({
-          id: `fradrag-${Date.now()}`,
-          indkomstAarId: indkomstAar.id,
-          beskrivelse: tekst.beskrivelse || '',
-          typeKategori: tekst.typeKategori || '',
-          fakturaDato: tekst.fakturaDato || idag(),
-          fakturaBeloeb: beloeb,
-          fradragsProcent: procent,
-          fradragIDKK: Math.round((beloeb * procent) / 100),
-          bilagIds: [bilag.id],
-          revisorNotat: tekst.revisorNotat || '',
-        });
+        const nytFradrag = byggFradragFraKladde(tekst, indkomstAar.id, [bilag.id]);
+        await onGemFradrag({ id: `fradrag-${Date.now()}`, ...nytFradrag });
         setLandede({
           hvor: 'Fradrag',
           rubrik: 'rubrik 29',
-          beloeb: `${kr(Math.round((beloeb * procent) / 100))} kr.`,
+          beloeb: `${kr(nytFradrag.fradragIDKK)} kr.`,
         });
       } else if (valgtType === 'INVESTERING') {
-        await onGemInvestering({
-          id: `inv-${Date.now()}`,
-          indkomstAarId: indkomstAar.id,
-          titel: tekst.titel || '',
-          beloeb: tal('beloeb'),
-          fakturaDato: tekst.fakturaDato || idag(),
-          bilagIds: [bilag.id],
-          noter: tekst.revisorNotat || '',
-        });
+        const nyInvestering = byggInvesteringFraKladde(tekst, indkomstAar.id, [bilag.id]);
+        await onGemInvestering({ id: `inv-${Date.now()}`, ...nyInvestering });
         setLandede({
           hvor: 'Investeringer',
           rubrik: 'arkivet, uden for skatteberegningen',
-          beloeb: `${kr(tal('beloeb'))} kr.`,
+          beloeb: `${kr(nyInvestering.beloeb)} kr.`,
         });
       }
       setTrin('gemt');
@@ -249,14 +211,7 @@ export function AiBilagScannerModal({
     }
   };
 
-  const kanGemme =
-    valgtType === 'JOB'
-      ? Boolean(tekst.hvervgiver?.trim())
-      : valgtType === 'FRADRAG'
-        ? Boolean(tekst.beskrivelse?.trim())
-        : valgtType === 'INVESTERING'
-          ? Boolean(tekst.titel?.trim())
-          : false;
+  const kanGemme = kanGemmeKladde(valgtType, tekst);
 
   return (
     <Modal

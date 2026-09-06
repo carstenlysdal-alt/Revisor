@@ -1,8 +1,15 @@
 import OpenAI from 'openai';
 import type { BilagsAnalyse } from '../../src/types';
 import { ANALYSE_SYSTEMPROMPT, chatSystemprompt } from './prompts';
-import { BilagsAnalyseSkema, SKEMABESKRIVELSE } from './skema';
-import { rensAnalyse } from './normaliser';
+import {
+  BilagsAnalyseSkema,
+  FRADRAG_JSON_SKEMA,
+  INVESTERING_JSON_SKEMA,
+  JOB_JSON_SKEMA,
+  PosteringForslagSkema,
+  SKEMABESKRIVELSE,
+} from './skema';
+import { rensAnalyse, rensPosteringForslag } from './normaliser';
 import { udtraekPdfTekst, PdfUdenTekstError } from './pdf';
 import { soeg, type Kilde } from './soegning';
 import {
@@ -20,6 +27,40 @@ const BILLEDMODEL = process.env.DEEPSEEK_VISION_MODEL || 'deepseek-v4-flash-visi
 
 /** DeepSeeks multimodale endpoint tager kun disse formater. Ikke PDF. */
 const BILLEDFORMATER = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+const VAERKTOEJER: OpenAI.Chat.ChatCompletionTool[] = [
+  {
+    type: 'function',
+    function: {
+      name: 'foreslaaPostering',
+      description:
+        'Opretter eller retter et udkast til en postering (honorarjob, fradrag eller investering) ud fra brugerens besked. Gemmer intet — brugeren skal selv godkende udkastet bagefter.',
+      parameters: {
+        type: 'object',
+        properties: {
+          klassifikation: { type: 'string', enum: ['JOB', 'FRADRAG', 'INVESTERING'] },
+          besked: {
+            type: 'string',
+            description: 'Kort, dansk tekst til chatboblen, der opsummerer udkastet.',
+          },
+          job: JOB_JSON_SKEMA,
+          fradrag: FRADRAG_JSON_SKEMA,
+          investering: INVESTERING_JSON_SKEMA,
+        },
+        required: ['klassifikation', 'besked'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'bekraeftPostering',
+      description:
+        'Bekræfter og beder brugerfladen gemme det udkast, der allerede er vist. Kaldes kun ved en utvetydig bekræftelse fra brugeren. Gemmer intet selv.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+];
 
 export function opretDeepseekUdbyder(): AiUdbyder {
   const klient = new OpenAI({
@@ -112,14 +153,33 @@ export function opretDeepseekUdbyder(): AiUdbyder {
 
       const svar = await klient.chat.completions.create({
         model: TEKSTMODEL,
+        tools: VAERKTOEJER,
         messages: [
-          { role: 'system', content: chatSystemprompt(indgang.beregning, kilder) },
+          {
+            role: 'system',
+            content: chatSystemprompt(indgang.beregning, kilder, indgang.aktivtForslag ?? null),
+          },
           ...indgang.beskeder.slice(-HISTORIK_VINDUE).map((b) => ({
             role: b.rolle === 'bruger' ? ('user' as const) : ('assistant' as const),
             content: b.indhold,
           })),
         ],
       });
+
+      const kald = svar.choices[0]?.message?.tool_calls?.[0];
+      if (kald?.type === 'function' && kald.function.name === 'bekraeftPostering') {
+        return { tekst: '', kilder: kilder ?? [], bekraeftet: true };
+      }
+      if (kald?.type === 'function' && kald.function.name === 'foreslaaPostering') {
+        let raa: unknown;
+        try {
+          raa = JSON.parse(kald.function.arguments || '{}');
+        } catch {
+          throw new Error('Forslaget til posteringen kunne ikke læses.');
+        }
+        const forslag = rensPosteringForslag(PosteringForslagSkema.parse(raa));
+        return { tekst: forslag.besked, kilder: kilder ?? [], forslag };
+      }
 
       return {
         tekst: (svar.choices[0]?.message?.content ?? '').trim(),

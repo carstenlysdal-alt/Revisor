@@ -524,6 +524,9 @@ export default function App() {
           indkomstAar={aktivtAar}
           beregning={beregning}
           aiKlar={aiKlar}
+          onGemJob={medFejlhaandtering(d.gemJob)}
+          onGemFradrag={medFejlhaandtering(d.gemFradrag)}
+          onGemInvestering={medFejlhaandtering(d.gemInvestering)}
         />
       )}
     </div>

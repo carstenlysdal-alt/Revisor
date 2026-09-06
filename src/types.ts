@@ -163,8 +163,24 @@ export interface Kladde {
 /** Felter under denne sikkerhed fremhæves og skal bekræftes aktivt. */
 export const SIKKERHEDSTAERSKEL = 0.75;
 
+/**
+ * Et forslag til en postering, som chatten selv har foreslået ud fra en
+ * besked — samme feltform som et bilagsudtræk. Intet gemmes, før brugeren
+ * godkender kortet, enten ved at klikke eller ved en utvetydig bekræftelse
+ * i chatten.
+ */
+export interface PosteringForslag {
+  klassifikation: Exclude<Bilagsklassifikation, 'UKENDT'>;
+  besked: string;
+  job?: JobUdtraek;
+  fradrag?: FradragUdtraek;
+  investering?: InvesteringUdtraek;
+}
+
 export interface ChatBesked {
   rolle: 'bruger' | 'assistent';
   indhold: string;
   kilder?: { titel: string; url: string }[];
+  /** Et endnu ikke godkendt forslag, hængt på denne besked. */
+  forslag?: PosteringForslag;
 }

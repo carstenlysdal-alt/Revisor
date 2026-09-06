@@ -1,5 +1,5 @@
-import type { BilagsAnalyse } from '../../src/types';
-import type { RaaBilagsAnalyse } from './skema';
+import type { BilagsAnalyse, PosteringForslag } from '../../src/types';
+import type { RaaBilagsAnalyse, RaaPosteringForslag } from './skema';
 import { rensFelt, rensProsa } from './rens';
 
 /**
@@ -35,4 +35,14 @@ export function rensAnalyse(raa: RaaBilagsAnalyse): BilagsAnalyse {
     fradrag: rensGruppe(raa.fradrag),
     investering: rensGruppe(raa.investering),
   } as BilagsAnalyse;
+}
+
+export function rensPosteringForslag(raa: RaaPosteringForslag): PosteringForslag {
+  return {
+    klassifikation: raa.klassifikation,
+    besked: rensProsa(raa.besked),
+    job: rensGruppe(raa.job),
+    fradrag: rensGruppe(raa.fradrag),
+    investering: rensGruppe(raa.investering),
+  } as PosteringForslag;
 }

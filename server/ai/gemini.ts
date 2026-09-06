@@ -1,8 +1,9 @@
 import { GoogleGenAI, Type } from '@google/genai';
+import type { FunctionDeclaration } from '@google/genai';
 import type { BilagsAnalyse } from '../../src/types';
 import { ANALYSE_SYSTEMPROMPT, chatSystemprompt } from './prompts';
-import { BilagsAnalyseSkema } from './skema';
-import { rensAnalyse } from './normaliser';
+import { BilagsAnalyseSkema, PosteringForslagSkema } from './skema';
+import { rensAnalyse, rensPosteringForslag } from './normaliser';
 import { soeg, type Kilde } from './soegning';
 import {
   HISTORIK_VINDUE,
@@ -75,6 +76,65 @@ const RESPONSE_SCHEMA = {
     },
   },
   required: ['klassifikation', 'sikkerhed', 'resume', 'revisorNotat'],
+};
+
+/** Samme feltgrupper som RESPONSE_SCHEMA, genbrugt til værktøjets parametre. */
+const JOB_FELTER = {
+  hvervgiver: felt(Type.STRING),
+  honorar: felt(Type.NUMBER),
+  startDato: felt(Type.STRING),
+  slutDato: felt(Type.STRING),
+  betalingsDato: felt(Type.STRING),
+  destinationAdresse: felt(Type.STRING),
+  transportmiddel: felt(Type.STRING),
+  antalKm: felt(Type.NUMBER),
+  antalTure: felt(Type.NUMBER),
+  amBidragFritaget: felt(Type.BOOLEAN),
+  erRubrik17: felt(Type.BOOLEAN),
+  type: felt(Type.STRING),
+  timerJob: felt(Type.NUMBER),
+  timerTransportForberedelse: felt(Type.NUMBER),
+};
+
+const FRADRAG_FELTER = {
+  beskrivelse: felt(Type.STRING),
+  typeKategori: felt(Type.STRING),
+  fakturaDato: felt(Type.STRING),
+  fakturaBeloeb: felt(Type.NUMBER),
+  fradragsProcent: felt(Type.NUMBER),
+};
+
+const INVESTERING_FELTER = {
+  titel: felt(Type.STRING),
+  beloeb: felt(Type.NUMBER),
+  fakturaDato: felt(Type.STRING),
+};
+
+const FORESLAA_POSTERING: FunctionDeclaration = {
+  name: 'foreslaaPostering',
+  description:
+    'Opretter eller retter et udkast til en postering (honorarjob, fradrag eller investering) ud fra brugerens besked. Gemmer intet — brugeren skal selv godkende udkastet bagefter.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      klassifikation: { type: Type.STRING, enum: ['JOB', 'FRADRAG', 'INVESTERING'] },
+      besked: {
+        type: Type.STRING,
+        description: 'Kort, dansk tekst til chatboblen, der opsummerer udkastet.',
+      },
+      job: { type: Type.OBJECT, nullable: true, properties: JOB_FELTER },
+      fradrag: { type: Type.OBJECT, nullable: true, properties: FRADRAG_FELTER },
+      investering: { type: Type.OBJECT, nullable: true, properties: INVESTERING_FELTER },
+    },
+    required: ['klassifikation', 'besked'],
+  },
+};
+
+const BEKRAEFT_POSTERING: FunctionDeclaration = {
+  name: 'bekraeftPostering',
+  description:
+    'Bekræfter og beder brugerfladen gemme det udkast, der allerede er vist. Kaldes kun ved en utvetydig bekræftelse fra brugeren. Gemmer intet selv.',
+  parameters: { type: Type.OBJECT, properties: {} },
 };
 
 export function opretGeminiUdbyder(): AiUdbyder {
@@ -157,8 +217,24 @@ export function opretGeminiUdbyder(): AiUdbyder {
           role: b.rolle === 'bruger' ? 'user' : 'model',
           parts: [{ text: b.indhold }],
         })),
-        config: { systemInstruction: chatSystemprompt(indgang.beregning, kilder) },
+        config: {
+          systemInstruction: chatSystemprompt(
+            indgang.beregning,
+            kilder,
+            indgang.aktivtForslag ?? null
+          ),
+          tools: [{ functionDeclarations: [FORESLAA_POSTERING, BEKRAEFT_POSTERING] }],
+        },
       });
+
+      const kald = svar.functionCalls?.[0];
+      if (kald?.name === 'bekraeftPostering') {
+        return { tekst: '', kilder: kilder ?? [], bekraeftet: true };
+      }
+      if (kald?.name === 'foreslaaPostering') {
+        const forslag = rensPosteringForslag(PosteringForslagSkema.parse(kald.args ?? {}));
+        return { tekst: forslag.besked, kilder: kilder ?? [], forslag };
+      }
 
       return { tekst: (svar.text ?? '').trim(), kilder: kilder ?? [] };
     },
