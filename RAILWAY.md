@@ -38,6 +38,10 @@ den skal slå en regel op på skat.dk.
 afstand"-knappen ved kørselsfelterne bare ikke, og man taster kilometer
 manuelt som hidtil. Gratis nøgle uden betalingskort på openrouteservice.org.
 
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` og `GOOGLE_REDIRECT_URI` er også
+valgfri — se afsnittet "Google Drev-backup" nedenfor. Uden dem vises
+Drev-blokken i sidepanelet slet ikke.
+
 ## 3. Udrul
 
 Railway læser `railway.json`. Nixpacks' egen installationsfase installerer alle
@@ -80,6 +84,39 @@ REVISOR_URL="https://din-app.up.railway.app" REVISOR_KODEORD="..." npm run backu
 ```
 
 Mappen `backup/` er i `.gitignore` og bliver aldrig committet.
+
+## Google Drev-backup
+
+Sidepanelet får en "Forbind Google Drev"-knap, når `GOOGLE_CLIENT_ID`,
+`GOOGLE_CLIENT_SECRET` og `GOOGLE_REDIRECT_URI` alle er sat. Herefter
+sikkerhedskopieres hvert uploadet bilag automatisk, plus et periodisk
+datasnapshot af hele regnskabet — som endnu en kopi, ikke et lager appen
+selv læser fra. Dette er ekstra sikkerhed oven på Postgres, ikke en
+erstatning for den.
+
+**Sådan sættes det op:**
+
+1. Opret et projekt i [Google Cloud Console](https://console.cloud.google.com),
+   aktivér Google Drive API, og opret et OAuth-klient-id under
+   **API'er og tjenester → Legitimationsoplysninger** (type: webapplication).
+2. Sæt "Authorized redirect URI" til `https://din-app.up.railway.app/api/google/callback`
+   — den skal matche `GOOGLE_REDIRECT_URI` byte for byte.
+3. Sæt de tre variabler i Railway.
+
+**Vigtigt, og let at overse:** så længe OAuth-samtykkeskærmen i Google Cloud
+Console står i status **"Testing"**, udløber ethvert refresh token efter
+nøjagtigt 7 dage — uanset hvor ofte appen bruges, og uanset om du har
+tilføjet dig selv som testbruger (det løser kun 100-brugergrænsen, ikke
+levetiden). Sæt samtykkeskærmen til **"In production"**, før forbindelsen
+bruges til noget, det ville være et problem at miste. Fordi scopet
+(`drive.file`) tæller som "sensitive" hos Google, viser browseren en
+"Google har ikke verificeret denne app"-advarsel ved forbindelse — for en
+enkeltbrugerapp er løsningen at klikke sig igennem den (Avanceret → Gå til
+appen), ikke at gennemgå Googles fulde appverifikationsproces.
+
+Bliver forbindelsen ugyldig (tilbagekaldt manuelt, eller udløbet), viser
+sidepanelet det tydeligt i stedet for at fejle stille — næste upload eller
+snapshot rammer bare no-op, indtil der genforbindes.
 
 ## Det du selv skal tage stilling til
 

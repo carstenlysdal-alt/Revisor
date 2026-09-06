@@ -108,6 +108,17 @@ export const api = {
 
   beregnAfstand: (fra: string, til: string) =>
     kald<{ km: number }>(`/ruter/afstand?${new URLSearchParams({ fra, til }).toString()}`),
+
+  googleDriveStatus: () =>
+    kald<{
+      konfigureret: boolean;
+      forbundet: boolean;
+      forbundetTidspunkt: string | null;
+      sidsteFejl: string | null;
+      sidsteFejlTidspunkt: string | null;
+    }>('/google/status'),
+
+  googleDriveAfbryd: () => kald<{ ok: true }>('/google/afbryd', { method: 'POST' }),
 };
 
 /** Læser en fil som base64 uden data-URL-præfikset. */

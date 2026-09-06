@@ -11,7 +11,7 @@ import type {
 } from '../../src/types';
 import { BilagFindesIkkeError, type BilagsLager } from '../storage/lager';
 import { beregnHash } from '../storage/bilag';
-import { DataSnapshot, Repository, tomtSnapshot } from './repository';
+import { DataSnapshot, GoogleDriveForbindelse, Repository, tomtSnapshot } from './repository';
 
 // pg returnerer numeric som streng for ikke at tabe præcision. Beløbene her
 // ligger langt inden for det, en double kan bære, og resten af koden regner
@@ -423,5 +423,59 @@ export class PostgresRepository implements Repository, BilagsLager {
     for (const f of snapshot.fradrag) await this.gemFradrag(f);
     for (const i of snapshot.investeringer) await this.gemInvestering(i);
     for (const [id, o] of Object.entries(snapshot.opsparing)) await this.gemOpsparing(id, o);
+  }
+
+  /* ---------------------------------------------- Google Drive-forbindelse */
+
+  async hentGoogleDriveForbindelse(): Promise<GoogleDriveForbindelse | null> {
+    const { rows } = await this.pool.query(
+      `SELECT refresh_token, mappe_id, snapshot_fil_id, forbundet_tidspunkt,
+              sidste_fejl, sidste_fejl_tidspunkt
+       FROM google_drive_forbindelse WHERE id = 'enkelt'`
+    );
+    const r = rows[0];
+    if (!r) return null;
+
+    return {
+      refreshToken: r.refresh_token,
+      mappeId: r.mappe_id,
+      snapshotFilId: r.snapshot_fil_id,
+      forbundetTidspunkt:
+        r.forbundet_tidspunkt instanceof Date
+          ? r.forbundet_tidspunkt.toISOString()
+          : String(r.forbundet_tidspunkt),
+      sidsteFejl: r.sidste_fejl,
+      sidsteFejlTidspunkt:
+        r.sidste_fejl_tidspunkt instanceof Date
+          ? r.sidste_fejl_tidspunkt.toISOString()
+          : r.sidste_fejl_tidspunkt,
+    };
+  }
+
+  async gemGoogleDriveForbindelse(f: GoogleDriveForbindelse): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO google_drive_forbindelse
+         (id, refresh_token, mappe_id, snapshot_fil_id, forbundet_tidspunkt, sidste_fejl, sidste_fejl_tidspunkt)
+       VALUES ('enkelt', $1, $2, $3, $4, $5, $6)
+       ON CONFLICT (id) DO UPDATE SET
+         refresh_token = EXCLUDED.refresh_token,
+         mappe_id = EXCLUDED.mappe_id,
+         snapshot_fil_id = EXCLUDED.snapshot_fil_id,
+         forbundet_tidspunkt = EXCLUDED.forbundet_tidspunkt,
+         sidste_fejl = EXCLUDED.sidste_fejl,
+         sidste_fejl_tidspunkt = EXCLUDED.sidste_fejl_tidspunkt`,
+      [
+        f.refreshToken,
+        f.mappeId,
+        f.snapshotFilId,
+        f.forbundetTidspunkt,
+        f.sidsteFejl,
+        f.sidsteFejlTidspunkt,
+      ]
+    );
+  }
+
+  async sletGoogleDriveForbindelse(): Promise<void> {
+    await this.pool.query(`DELETE FROM google_drive_forbindelse WHERE id = 'enkelt'`);
   }
 }

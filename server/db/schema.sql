@@ -110,3 +110,21 @@ CREATE TABLE IF NOT EXISTS opsparing (
   indbetalt_til_skat  numeric(14,2) NOT NULL DEFAULT 0,
   opsparet_privat     numeric(14,2) NOT NULL DEFAULT 0
 );
+
+-- Enkeltbrugerapp, derfor én række med et fast id i stedet for en fremmednøgle
+-- til en bruger. refresh_token er den eneste reelle hemmelighed i hele
+-- skemaet — den sendes aldrig med i noget, klienten henter.
+CREATE TABLE IF NOT EXISTS google_drive_forbindelse (
+  id                    text PRIMARY KEY DEFAULT 'enkelt',
+  refresh_token         text NOT NULL,
+  mappe_id              text,
+  snapshot_fil_id       text,
+  forbundet_tidspunkt   timestamptz NOT NULL DEFAULT now(),
+  sidste_fejl           text,
+  sidste_fejl_tidspunkt timestamptz
+);
+
+-- Bilag skal kunne markeres som sikkerhedskopieret til Drev, uafhængigt af
+-- om forbindelsen findes endnu — status skal overleve en genudrulning.
+ALTER TABLE bilag ADD COLUMN IF NOT EXISTS drev_backup_tidspunkt timestamptz;
+ALTER TABLE bilag ADD COLUMN IF NOT EXISTS drev_backup_fejl text;

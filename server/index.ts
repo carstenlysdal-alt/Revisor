@@ -10,6 +10,7 @@ import { dataRoutes } from './routes/data';
 import { bilagRoutes } from './routes/bilag';
 import { aiRoutes } from './routes/ai';
 import { ruterRoutes } from './routes/ruter';
+import { integrationerRoutes } from './routes/integrationer';
 import { authRoutes, harKodeord, hastighedsgraense, kraevLogin } from './auth';
 import { udbyderStatus } from './ai/faktor';
 
@@ -89,6 +90,7 @@ async function start() {
     }),
     ruterRoutes()
   );
+  app.use('/api', integrationerRoutes(repo));
 
   app.use('/api', (err: Error, _req: Request, res: Response, _next: NextFunction) => {
     console.error('Serverfejl:', err);

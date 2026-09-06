@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import type { IndkomstAar, OpsparingsTracker } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
 import { kr, pct } from '../lib/format';
+import { api } from '../lib/api';
 import { Advarsel, Knap } from './ui';
 
 interface Props {
@@ -36,6 +37,106 @@ function Noegletal({
         {vaerdi}
       </p>
       {note && <p className="mt-0.5 text-2xs text-ink-muted">{note}</p>}
+    </div>
+  );
+}
+
+interface GoogleDriveStatus {
+  konfigureret: boolean;
+  forbundet: boolean;
+  sidsteFejl: string | null;
+}
+
+/**
+ * Egen fetch, ligesom rutestatus i JobsModule — sidebaren behøver ikke gå
+ * gennem App.tsx for en status, kun den selv bruger.
+ */
+function GoogleDriveStatusBlok() {
+  const [status, setStatus] = useState<GoogleDriveStatus | null>(null);
+  const [urlBesked, setUrlBesked] = useState<string | null>(null);
+  const [afbryderLige, setAfbryderLige] = useState(false);
+
+  const hentStatus = () => api.googleDriveStatus().then(setStatus).catch(() => setStatus(null));
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const drev = params.get('drev');
+    if (drev) {
+      setUrlBesked(
+        drev === 'forbundet'
+          ? 'Google Drev blev forbundet.'
+          : drev === 'ikke-konfigureret'
+            ? 'Google Drev er ikke sat op på serveren endnu.'
+            : 'Forbindelsen til Google Drev fejlede. Prøv igen.'
+      );
+      params.delete('drev');
+      const rest = params.toString();
+      window.history.replaceState({}, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
+    }
+    void hentStatus();
+  }, []);
+
+  if (!status || !status.konfigureret) return null;
+
+  async function afbryd() {
+    if (
+      !window.confirm(
+        'Afbryd forbindelsen til Google Drev? Filer, der allerede ligger der, bliver ikke slettet.'
+      )
+    ) {
+      return;
+    }
+    setAfbryderLige(true);
+    try {
+      await api.googleDriveAfbryd();
+      await hentStatus();
+    } finally {
+      setAfbryderLige(false);
+    }
+  }
+
+  return (
+    <div className="mt-5 border-t border-rule pt-4">
+      <p className="text-2xs uppercase tracking-wide text-ink-faint">Google Drev-backup</p>
+
+      {urlBesked && <p className="mt-1.5 text-2xs text-ink-muted">{urlBesked}</p>}
+
+      {status.forbundet && !status.sidsteFejl && (
+        <>
+          <p className="mt-1.5 text-2xs text-ink-muted">
+            Forbundet. Bilag og et datasnapshot sikkerhedskopieres automatisk.
+          </p>
+          <button
+            type="button"
+            onClick={afbryd}
+            disabled={afbryderLige}
+            className="mt-1.5 text-2xs text-ink-muted underline underline-offset-2"
+          >
+            Afbryd forbindelse
+          </button>
+        </>
+      )}
+
+      {status.forbundet && status.sidsteFejl && (
+        <div className="mt-1.5">
+          <Advarsel titel="Forbindelsen skal genoprettes">{status.sidsteFejl}</Advarsel>
+          <a
+            href="/api/google/start"
+            className="mt-1.5 inline-block text-2xs text-ink-muted underline underline-offset-2"
+          >
+            Genforbind Google Drev
+          </a>
+        </div>
+      )}
+
+      {!status.forbundet && (
+        <a
+          href="/api/google/start"
+          className="mt-1.5 inline-block text-2xs text-ink-muted underline underline-offset-2"
+        >
+          Forbind Google Drev
+        </a>
+      )}
     </div>
   );
 }
@@ -119,6 +220,8 @@ export function GlobalSidebar({
             </p>
           )}
         </div>
+
+        <GoogleDriveStatusBlok />
 
         <div className="mt-5 border-t border-rule pt-4 text-2xs text-ink-faint">
           <p>

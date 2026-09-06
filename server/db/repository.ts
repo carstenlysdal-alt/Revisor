@@ -26,6 +26,20 @@ export const tomtSnapshot = (): DataSnapshot => ({
 });
 
 /**
+ * Enkeltbrugerapp, én forbindelse. Ligger UDEN FOR DataSnapshot/hentAlt() med
+ * vilje — refresh-tokenet må aldrig følge med i det payload, som /api/data
+ * allerede sender ukrypteret til klienten.
+ */
+export interface GoogleDriveForbindelse {
+  refreshToken: string;
+  mappeId: string | null;
+  snapshotFilId: string | null;
+  forbundetTidspunkt: string;
+  sidsteFejl: string | null;
+  sidsteFejlTidspunkt: string | null;
+}
+
+/**
  * Kontrakten mellem routes og lagringen. Routes taler kun med denne grænseflade,
  * så en Postgres-driver kan skiftes ind uden at røre noget andet.
  */
@@ -53,4 +67,8 @@ export interface Repository {
 
   /** Erstatter hele datasættet. Bruges af eksempeldata og nulstilling. */
   erstatAlt(snapshot: DataSnapshot): Promise<void>;
+
+  hentGoogleDriveForbindelse(): Promise<GoogleDriveForbindelse | null>;
+  gemGoogleDriveForbindelse(forbindelse: GoogleDriveForbindelse): Promise<void>;
+  sletGoogleDriveForbindelse(): Promise<void>;
 }

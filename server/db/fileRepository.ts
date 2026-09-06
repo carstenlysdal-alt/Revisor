@@ -8,7 +8,7 @@ import type {
   Job,
   OpsparingsTracker,
 } from '../../src/types';
-import { DataSnapshot, Repository, tomtSnapshot } from './repository';
+import { DataSnapshot, GoogleDriveForbindelse, Repository, tomtSnapshot } from './repository';
 
 /**
  * Fil-baseret lager. Holder hele datasættet i én JSON-fil under DATA_DIR.
@@ -20,10 +20,18 @@ import { DataSnapshot, Repository, tomtSnapshot } from './repository';
  */
 export class FileRepository implements Repository {
   private readonly filsti: string;
+  /**
+   * Bevidst en helt separat fil fra data.json. refresh-tokenet er den eneste
+   * reelle hemmelighed i hele lageret, og /api/data sender data.json's
+   * indhold ukrypteret til klienten — de to må aldrig kunne blandes sammen
+   * ved en fremtidig rettelse et andet sted i koden.
+   */
+  private readonly driveFilsti: string;
   private kø: Promise<unknown> = Promise.resolve();
 
   constructor(dataDir: string) {
     this.filsti = path.join(dataDir, 'data.json');
+    this.driveFilsti = path.join(dataDir, 'google-drive.json');
   }
 
   private async læs(): Promise<DataSnapshot> {
@@ -143,5 +151,28 @@ export class FileRepository implements Repository {
     return this.transaktion<void>((s) => {
       Object.assign(s, snapshot);
     });
+  }
+
+  /* ---------------------------------------------- Google Drive-forbindelse */
+
+  async hentGoogleDriveForbindelse(): Promise<GoogleDriveForbindelse | null> {
+    try {
+      const rå = await fs.readFile(this.driveFilsti, 'utf8');
+      return JSON.parse(rå) as GoogleDriveForbindelse;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw err;
+    }
+  }
+
+  async gemGoogleDriveForbindelse(forbindelse: GoogleDriveForbindelse): Promise<void> {
+    await fs.mkdir(path.dirname(this.driveFilsti), { recursive: true });
+    const temp = `${this.driveFilsti}.${process.pid}.tmp`;
+    await fs.writeFile(temp, JSON.stringify(forbindelse, null, 2), 'utf8');
+    await fs.rename(temp, this.driveFilsti);
+  }
+
+  async sletGoogleDriveForbindelse(): Promise<void> {
+    await fs.rm(this.driveFilsti, { force: true });
   }
 }
