@@ -1,13 +1,10 @@
 import { Router } from 'express';
 import type { Repository } from '../db/repository';
-import {
-  BilagsArkiv,
-  MAKS_FILSTOERRELSE,
-  TILLADTE_MIMETYPER,
-} from '../storage/bilag';
+import { beregnHash, MAKS_FILSTOERRELSE, TILLADTE_MIMETYPER } from '../storage/bilag';
+import { BilagFindesIkkeError, type BilagsLager } from '../storage/lager';
 import type { Bilag } from '../../src/types';
 
-export function bilagRoutes(repo: Repository, arkiv: BilagsArkiv): Router {
+export function bilagRoutes(repo: Repository, arkiv: BilagsLager): Router {
   const r = Router();
 
   /**
@@ -35,7 +32,7 @@ export function bilagRoutes(repo: Repository, arkiv: BilagsArkiv): Router {
         });
       }
 
-      const sha256 = BilagsArkiv.hash(indhold);
+      const sha256 = beregnHash(indhold);
       const eksisterende = await repo.findBilagVedHash(sha256);
 
       await arkiv.gem(indhold, mimeType);
@@ -80,10 +77,8 @@ export function bilagRoutes(repo: Repository, arkiv: BilagsArkiv): Router {
       );
       res.send(indhold);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-        return res.status(410).json({
-          fejl: 'Bilaget er registreret, men selve filen findes ikke længere i arkivet.',
-        });
+      if (err instanceof BilagFindesIkkeError) {
+        return res.status(410).json({ fejl: err.message });
       }
       next(err);
     }

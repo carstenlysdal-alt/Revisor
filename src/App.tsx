@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRevisorData } from './hooks/useRevisorData';
+import { useAuth } from './hooks/useAuth';
+import { Login } from './components/Login';
 import { useUrlState } from './hooks/useUrlState';
 import { api } from './lib/api';
 import { beregnSkat, type SkatteBeregning } from './lib/tax/beregn';
@@ -84,7 +86,8 @@ const FANER = [
 ];
 
 export default function App() {
-  const d = useRevisorData();
+  const auth = useAuth();
+  const d = useRevisorData(auth.tilstand === 'aaben');
   const { visning, naviger } = useUrlState('jobs');
   const [ai, setAi] = useState<{
     klar: boolean;
@@ -187,6 +190,28 @@ export default function App() {
     visBesked('Eksempeldataene er indlæst. De er markeret som eksempel.');
   };
 
+  if (auth.tilstand === 'tjekker') {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-24">
+        <p className="text-sm text-ink-muted">Et øjeblik…</p>
+      </main>
+    );
+  }
+
+  if (auth.tilstand === 'utilgaengelig') {
+    return (
+      <main className="mx-auto max-w-2xl px-4 py-24">
+        <Advarsel titel="Der er ikke forbindelse til serveren">
+          Appen kan ikke få fat i serveren. Kører den?
+        </Advarsel>
+      </main>
+    );
+  }
+
+  if (auth.tilstand === 'kraever-login') {
+    return <Login onLoggetInd={auth.tjekIgen} />;
+  }
+
   if (d.tilstand === 'indlaeser') {
     return (
       <main className="mx-auto max-w-3xl px-4 py-24">
@@ -235,7 +260,8 @@ export default function App() {
             <span className="tal text-2xs text-ink-faint">B-indkomst</span>
           </button>
 
-          {aarListe.length > 0 && (
+          <div className="flex items-center gap-4">
+            {aarListe.length > 0 && (
             <div className="flex items-center gap-2">
               <label htmlFor="aar-vaelger" className="text-2xs text-ink-muted">
                 Indkomstår
@@ -254,7 +280,17 @@ export default function App() {
                 ))}
               </select>
             </div>
-          )}
+            )}
+            {auth.status?.kraeverLogin && (
+              <button
+                type="button"
+                onClick={() => void auth.logUd()}
+                className="text-2xs text-ink-muted underline underline-offset-4 hover:text-ink"
+              >
+                Log ud
+              </button>
+            )}
+          </div>
         </div>
 
         <nav aria-label="Moduler" className="mx-auto max-w-7xl overflow-x-auto px-4 sm:px-6">

@@ -34,6 +34,15 @@ CREATE TABLE IF NOT EXISTS bilag (
 -- Samme indhold uploadet to gange skal kunne opdages.
 CREATE UNIQUE INDEX IF NOT EXISTS bilag_sha256_idx ON bilag (sha256);
 
+-- Selve filen. Nøglet på indholdets hash, så to uploads af samme bilag kun
+-- fylder én gang. Filerne ligger i databasen frem for på disk, fordi en
+-- container på Railway får nyt filsystem ved hver udrulning, og fordi
+-- dokumentationen for et fradrag skal kunne findes frem år efter.
+CREATE TABLE IF NOT EXISTS bilag_indhold (
+  sha256   text PRIMARY KEY,
+  indhold  bytea NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS job (
   id                            text PRIMARY KEY,
   indkomstaar_id                text NOT NULL REFERENCES indkomstaar(id) ON DELETE CASCADE,

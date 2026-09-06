@@ -26,7 +26,7 @@ export type IndlaesningsTilstand = 'indlaeser' | 'klar' | 'fejl';
  * vigtigere end at UI'et føles hurtigt: et fradrag, der ser gemt ud uden at
  * være det, opdages først ved årsopgørelsen.
  */
-export function useRevisorData() {
+export function useRevisorData(aktiv: boolean) {
   const [data, setData] = useState<DataSnapshot>(tomt);
   const [tilstand, setTilstand] = useState<IndlaesningsTilstand>('indlaeser');
   const [fejl, setFejl] = useState<string | null>(null);
@@ -44,8 +44,8 @@ export function useRevisorData() {
   }, []);
 
   useEffect(() => {
-    void hent();
-  }, [hent]);
+    if (aktiv) void hent();
+  }, [aktiv, hent]);
 
   const opsæt = <T extends { id: string }>(liste: T[], post: T): T[] => {
     const i = liste.findIndex((p) => p.id === post.id);

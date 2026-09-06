@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import OpenAI from 'openai';
 import type { Repository } from '../db/repository';
-import { BilagsArkiv } from '../storage/bilag';
+import type { BilagsLager } from '../storage/lager';
 import { getUdbyder, udbyderStatus } from '../ai/faktor';
 import { ManglendeApiNoegleError } from '../ai/udbyder';
 import { PdfUdenTekstError } from '../ai/pdf';
@@ -45,7 +45,7 @@ function tilBrugerfejl(err: unknown): { status: number; fejl: string } {
   };
 }
 
-export function aiRoutes(repo: Repository, arkiv: BilagsArkiv): Router {
+export function aiRoutes(repo: Repository, arkiv: BilagsLager): Router {
   const r = Router();
 
   r.get('/ai/status', (_req, res) => {

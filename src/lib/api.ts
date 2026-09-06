@@ -50,7 +50,21 @@ const gem = <T>(sti: string, krop: unknown) =>
 
 const slet = (sti: string) => kald<void>(sti, { method: 'DELETE' });
 
+export interface AuthStatus {
+  kraeverLogin: boolean;
+  loggetInd: boolean;
+  kunLokalt: boolean;
+}
+
 export const api = {
+  authStatus: () => kald<AuthStatus>('/auth/status'),
+  login: (kodeord: string) =>
+    kald<{ loggetInd: boolean }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ kodeord }),
+    }),
+  logout: () => kald<{ loggetInd: boolean }>('/auth/logout', { method: 'POST' }),
+
   hentAlt: () => kald<DataSnapshot>('/data'),
   aiStatus: () =>
     kald<{

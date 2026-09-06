@@ -9,3 +9,6 @@ coverage/
 
 # Lokale data og bilag
 /data
+
+# Lokale backups
+backup/
