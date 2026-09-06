@@ -83,7 +83,7 @@ const SATSER_2025: Satser = {
     satsOver120: 1.12,
     graenseKm: 120,
   },
-  uverificerede: ['jobfradrag.bundgraense'],
+  uverificerede: [],
 };
 
 const SATSER_2026: Satser = {
@@ -126,11 +126,18 @@ const SATSER_2026: Satser = {
   },
   befordring: {
     bundfradragKm: 24,
-    sats25til120: 2.28,
-    satsOver120: 1.14,
+    // Midlertidigt og tilbagevirkende forhøjet i juni 2026: den oprindelige
+    // sats var 2,28 kr., men Skatterådets reviderede udmelding hæver den til
+    // 3,17 kr. for hele 2026. Se kommentaren ovenfor.
+    sats25til120: 3.17,
+    // Tilsvarende forhøjet fra 1,14 kr. til 1,59 kr.
+    satsOver120: 1.59,
     graenseKm: 120,
   },
-  uverificerede: [],
+  uverificerede: [
+    'befordring.sats25til120 og befordring.satsOver120 (midlertidig, tilbagevirkende forhøjelse — bekræftet via fagforbund/revisionshus, ikke direkte set på skat.dk selv)',
+    'progressiveSkatter[].skatteloftProcent for mellemskat/topskat/topTopskat hver for sig — kun det samlede skatteloft på 44,57 % er officielt publiceret; opdelingen pr. lag er en fortolkning',
+  ],
 };
 
 export const SATSER_PR_AAR: Record<number, Satser> = {

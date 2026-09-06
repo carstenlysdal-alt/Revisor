@@ -9,6 +9,7 @@ import {
 } from './beregn';
 import { getSatser, UkendtIndkomstAarError } from './satser';
 import { beregnAaretsKoersel, beregnBefordringPrDag } from './koersel';
+import { erKommuneBekraeftet } from './kommuner';
 
 const aar = (over: Partial<IndkomstAarInput> = {}): IndkomstAarInput => ({
   aar: 2026,
@@ -107,7 +108,7 @@ describe('AC-02 — passager lander i rubrik 51', () => {
   });
 
   it('bruger befordringssatsen med bundfradrag på 24 km', () => {
-    expect(beregning.befordringsFradragRubrik51).toBe(Math.round((100 - 24) * 2.28 * 2));
+    expect(beregning.befordringsFradragRubrik51).toBe(Math.round((100 - 24) * 3.17 * 2));
   });
 });
 
@@ -121,7 +122,7 @@ describe('befordringsfradragets trin', () => {
 
   it('giver halv sats over 120 km', () => {
     const km = 200;
-    const forventet = (120 - 24) * 2.28 + (km - 120) * 1.14;
+    const forventet = (120 - 24) * 3.17 + (km - 120) * 1.59;
     expect(beregnBefordringPrDag(km, satser)).toBeCloseTo(forventet, 6);
   });
 });
@@ -319,5 +320,16 @@ describe('skattelinjerne skal kunne lægges sammen', () => {
   it('lader aldrig skatten blive negativ ved en meget lille B-indkomst', () => {
     const b = beregnSkat(aar(), [job({ honorar: 5_000 })], []);
     expect(b.beregnetSkatIAlt).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('bekræftede kommunesatser fra den officielle satsopgørelse', () => {
+  it('kender flere kommuner for 2026 end blot dem der var kendt før september-opdateringen', () => {
+    expect(erKommuneBekraeftet('Herning', 2026)).toBe(true);
+    expect(erKommuneBekraeftet('Gentofte', 2026)).toBe(true);
+  });
+
+  it('kender nu mindst én kommune for 2025', () => {
+    expect(erKommuneBekraeftet('Læsø', 2025)).toBe(true);
   });
 });
