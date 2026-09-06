@@ -36,7 +36,12 @@ den skal slå en regel op på skat.dk.
 
 ## 3. Udrul
 
-Railway læser `railway.json` og bygger med `npm ci --include=dev && npm run build`.
+Railway læser `railway.json`. Nixpacks' egen installationsfase installerer alle
+afhængigheder (inklusive devDependencies — moderne npm skjuler dem ikke længere
+ud fra `NODE_ENV`), og `buildCommand` kører derefter kun `npm run build`. Kør
+ikke `npm ci` igen i `buildCommand` — et andet `npm ci`-kald oven på et allerede
+udfyldt `node_modules` rammer en fillås på Nixpacks' cache-mount og fejler
+bygningen med `EBUSY: resource busy or locked, rmdir '.../node_modules/.cache'`.
 Skemaet i `server/db/schema.sql` køres automatisk ved opstart, og alt i det er
 `IF NOT EXISTS`, så en genudrulning rører ikke eksisterende data.
 
