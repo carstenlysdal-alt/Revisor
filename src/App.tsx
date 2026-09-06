@@ -1,45 +1,11 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import React, { useState, useEffect } from 'react';
-import {
-  Briefcase,
-  Receipt,
-  FileText,
-  FileCheck2,
-  PiggyBank,
-  BarChart3,
-  Layers,
-  MapPin,
-  Sparkles,
-  MessageSquare,
-  ChevronDown,
-  Plus,
-  Compass,
-  CheckCircle2,
-  Calendar,
-  Building,
-  ShieldCheck
-} from 'lucide-react';
-import {
-  IndkomstAar,
-  Job,
-  Fradrag,
-  Investering,
-  OpsparingsTracker,
-  AiExtractionResult,
-  TransportMiddel
-} from './types';
-import {
-  INITIAL_INDKOMSTAAR,
-  INITIAL_JOBS,
-  INITIAL_FRADRAG,
-  INITIAL_INVESTERINGER,
-  INITIAL_OPSPARING
-} from './data/initialData';
-import { calculateSkatOgFradrag } from './utils/taxCalculator';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useRevisorData } from './hooks/useRevisorData';
+import { useUrlState } from './hooks/useUrlState';
+import { api } from './lib/api';
+import { beregnSkat, type SkatteBeregning } from './lib/tax/beregn';
+import { UkendtIndkomstAarError } from './lib/tax/satser';
+import { byggEksempeldata } from './data/eksempeldata';
+import { IndkomstAarModule } from './components/IndkomstAarModule';
 import { JobsModule } from './components/JobsModule';
 import { FradragModule } from './components/FradragModule';
 import { InvesteringerModule } from './components/InvesteringerModule';
@@ -47,441 +13,472 @@ import { SkatOverblikModule } from './components/SkatOverblikModule';
 import { AarsopgoerelseModule } from './components/AarsopgoerelseModule';
 import { OpsparingTrackerModule } from './components/OpsparingTrackerModule';
 import { StatistikModule } from './components/StatistikModule';
-import { PlanningRoadmapView } from './components/PlanningRoadmapView';
+import { GlobalSidebar } from './components/GlobalSidebar';
 import { AiBilagScannerModal } from './components/AiBilagScannerModal';
 import { RevisorChatModal } from './components/RevisorChatModal';
-import { GlobalSidebar } from './components/GlobalSidebar';
+import { Advarsel, Knap } from './components/ui';
+import { kr } from './lib/format';
 
-export default function App() {
-  // Persistence state
-  const [indkomstAarList, setIndkomstAarList] = useState<IndkomstAar[]>(() => {
-    const saved = localStorage.getItem('revisor_aar_list');
-    return saved ? JSON.parse(saved) : INITIAL_INDKOMSTAAR;
-  });
-
-  const [activeAarId, setActiveAarId] = useState<string>('aar-2026');
-
-  const [jobs, setJobs] = useState<Job[]>(() => {
-    const saved = localStorage.getItem('revisor_jobs');
-    return saved ? JSON.parse(saved) : INITIAL_JOBS;
-  });
-
-  const [fradragList, setFradragList] = useState<Fradrag[]>(() => {
-    const saved = localStorage.getItem('revisor_fradrag');
-    return saved ? JSON.parse(saved) : INITIAL_FRADRAG;
-  });
-
-  const [investeringer, setInvesteringer] = useState<Investering[]>(() => {
-    const saved = localStorage.getItem('revisor_investeringer');
-    return saved ? JSON.parse(saved) : INITIAL_INVESTERINGER;
-  });
-
-  const [opsparinger, setOpsparinger] = useState<Record<string, OpsparingsTracker>>(() => {
-    const saved = localStorage.getItem('revisor_opsparing');
-    return saved ? JSON.parse(saved) : INITIAL_OPSPARING;
-  });
-
-  // UI state
-  const [activeTab, setActiveTab] = useState<string>('jobs');
-  const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
-  const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Sync state to LocalStorage
-  useEffect(() => {
-    localStorage.setItem('revisor_aar_list', JSON.stringify(indkomstAarList));
-  }, [indkomstAarList]);
-
-  useEffect(() => {
-    localStorage.setItem('revisor_jobs', JSON.stringify(jobs));
-  }, [jobs]);
-
-  useEffect(() => {
-    localStorage.setItem('revisor_fradrag', JSON.stringify(fradragList));
-  }, [fradragList]);
-
-  useEffect(() => {
-    localStorage.setItem('revisor_investeringer', JSON.stringify(investeringer));
-  }, [investeringer]);
-
-  useEffect(() => {
-    localStorage.setItem('revisor_opsparing', JSON.stringify(opsparinger));
-  }, [opsparinger]);
-
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
-  };
-
-  // Find active year
-  const activeIndkomstAar =
-    indkomstAarList.find((a) => a.id === activeAarId) || indkomstAarList[0];
-
-  // Filter items for current year
-  const yearJobs = jobs.filter((j) => j.indkomstAarId === activeIndkomstAar.id);
-  const yearFradrag = fradragList.filter((f) => f.indkomstAarId === activeIndkomstAar.id);
-  const yearInvesteringer = investeringer.filter((i) => i.indkomstAarId === activeIndkomstAar.id);
-  const activeOpsparing: OpsparingsTracker = opsparinger[activeIndkomstAar.id] || {
-    indbetaltTilSkat: 0,
-    opsparetPrivat: 0,
-  };
-
-  // Run deterministic Danish Tax Engine
-  const skatteBeregning = calculateSkatOgFradrag(
-    activeIndkomstAar,
-    yearJobs,
-    yearFradrag
-  );
-
-  // Handlers for Jobs
-  const handleAddJob = (jobData: Omit<Job, 'id'>) => {
-    const newJob: Job = {
-      ...jobData,
-      id: `job-${Date.now()}`,
-    };
-    setJobs((prev) => [newJob, ...prev]);
-    showToast(`Job "${newJob.hvervgiver}" tilføjet!`);
-  };
-
-  const handleUpdateJob = (id: string, updates: Partial<Job>) => {
-    setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...updates } : j)));
-    showToast('Job opdateret!');
-  };
-
-  const handleDeleteJob = (id: string) => {
-    setJobs((prev) => prev.filter((j) => j.id !== id));
-    showToast('Job slettet');
-  };
-
-  // Handlers for Fradrag
-  const handleAddFradrag = (fradragData: Omit<Fradrag, 'id'>) => {
-    const newF: Fradrag = {
-      ...fradragData,
-      id: `fradrag-${Date.now()}`,
-    };
-    setFradragList((prev) => [newF, ...prev]);
-    showToast(`Fradrag "${newF.beskrivelse}" tilføjet!`);
-  };
-
-  const handleUpdateFradrag = (id: string, updates: Partial<Fradrag>) => {
-    setFradragList((prev) => prev.map((f) => (f.id === id ? { ...f, ...updates } : f)));
-    showToast('Fradrag opdateret!');
-  };
-
-  const handleDeleteFradrag = (id: string) => {
-    setFradragList((prev) => prev.filter((f) => f.id !== id));
-    showToast('Fradrag slettet');
-  };
-
-  // Handlers for Investeringer
-  const handleAddInvestering = (invData: Omit<Investering, 'id'>) => {
-    const newInv: Investering = {
-      ...invData,
-      id: `inv-${Date.now()}`,
-    };
-    setInvesteringer((prev) => [newInv, ...prev]);
-    showToast(`Investering "${newInv.titel}" registreret!`);
-  };
-
-  const handleDeleteInvestering = (id: string) => {
-    setInvesteringer((prev) => prev.filter((i) => i.id !== id));
-    showToast('Investering slettet');
-  };
-
-  // Handler for Opsparing
-  const handleUpdateOpsparing = (updatedData: OpsparingsTracker) => {
-    setOpsparinger((prev) => ({
-      ...prev,
-      [activeIndkomstAar.id]: updatedData,
-    }));
-    showToast('Opsparingstal opdateret!');
-  };
-
-  // Handle AI Scanner Extraction
-  const handleApplyAiResult = (res: AiExtractionResult, rawFile?: File) => {
-    if (res.classification === 'JOB') {
-      const data = res.job;
-      if (data) {
-        handleAddJob({
-          indkomstAarId: activeIndkomstAar.id,
-          hvervgiver: data.hvervgiver || 'Ubekendt kunde',
-          honorar: Number(data.honorar) || 0,
-          startDato: data.startDato || new Date().toISOString().split('T')[0],
-          slutDato: data.slutDato || data.startDato || new Date().toISOString().split('T')[0],
-          betalingsDato: data.betalingsDato || data.startDato || new Date().toISOString().split('T')[0],
-          transportmiddel: (data.transportmiddel as TransportMiddel) || 'NONE',
-          antalKm: Number(data.antalKm) || 0,
-          antalTure: 1,
-          destinationAdresse: data.destinationAdresse || '',
-          koerselsFradrag: Number(data.koerselsFradrag) || 0,
-          amBidragFritaget: Boolean(data.amBidragFritaget),
-          timerJob: Number(data.timerJob) || 4,
-          timerTransportForberedelse: Number(data.timerTransportForberedelse) || 2,
-          type: data.type || 'Musik & Scene',
-          bilagNavne: rawFile ? [rawFile.name] : ['Scannet_bilag.pdf'],
-          noter: res.revisorNotat || res.summary || 'Automatisk scannet med Revisor AI.',
-        });
-        setActiveTab('jobs');
-      }
-    } else if (res.classification === 'INVESTERING') {
-      const data = res.investering;
-      if (data) {
-        handleAddInvestering({
-          indkomstAarId: activeIndkomstAar.id,
-          titel: data.titel || 'Nyt anlægsaktiv',
-          beloeb: Number(data.beloeb) || 0,
-          fakturaDato: data.fakturaDato || new Date().toISOString().split('T')[0],
-          bilagNavne: rawFile ? [rawFile.name] : ['Scannet_investering.pdf'],
-        });
-        setActiveTab('investeringer');
-      }
-    } else {
-      const data = res.fradrag;
-      if (data) {
-        handleAddFradrag({
-          indkomstAarId: activeIndkomstAar.id,
-          beskrivelse: data.beskrivelse || 'Kvittering',
-          typeKategori: data.typeKategori || 'Udstyr',
-          fakturaDato: data.fakturaDato || new Date().toISOString().split('T')[0],
-          fakturaBeloeb: Number(data.fakturaBeloeb) || 0,
-          fradragsProcent: Number(data.fradragsProcent) || 100,
-          fradragIDKK: Number(data.fradragIDKK) || Number(data.fakturaBeloeb) || 0,
-          bilagNavne: rawFile ? [rawFile.name] : ['Scannet_kvittering.pdf'],
-          revisorNotat: res.revisorNotat || res.summary || 'Godkendt via AI scanning i Rubrik 29.',
-        });
-        setActiveTab('fradrag');
-      }
-    }
-  };
-
-  const navTabs = [
-    { id: 'jobs', label: 'Jobs & Kørsel', icon: Briefcase, count: yearJobs.length },
-    { id: 'fradrag', label: 'Fradrag (Rubrik 29)', icon: Receipt, count: yearFradrag.length },
-    { id: 'skat-overblik', label: 'Skat Overblik', icon: FileText },
-    { id: 'aarsopgoerelse', label: 'Årsopgørelse', icon: FileCheck2 },
-    { id: 'opsparing', label: 'Sæt til side', icon: PiggyBank },
-    { id: 'statistik', label: 'Statistik & Timer', icon: BarChart3 },
-    { id: 'investeringer', label: 'Investeringer', icon: Layers, count: yearInvesteringer.length },
-    { id: 'roadmap', label: 'Plan & Roadmap', icon: Compass },
-  ];
+function MobilOverblik({
+  beregning,
+  afsat,
+  onGaaTil,
+}: {
+  beregning: SkatteBeregning;
+  afsat: number;
+  onGaaTil: (fane: string) => void;
+}) {
+  const mangler = Math.max(0, beregning.samletSkatOgAM - afsat);
 
   return (
-    <div className="min-h-screen bg-stone-100/70 text-stone-900 font-sans flex flex-col">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-5 right-5 z-50 bg-stone-900 text-white px-4 py-2.5 rounded-xl shadow-lg text-xs font-semibold flex items-center gap-2 animate-fade-in border border-stone-700">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          {toastMessage}
+    <div className="ikke-print mb-6 lg:hidden">
+      <dl className="grid grid-cols-3 border-y border-rule">
+        <div className="border-r border-rule py-2.5 pr-3">
+          <dt className="text-2xs uppercase tracking-wide text-ink-faint">Skat i alt</dt>
+          <dd className="tal mt-0.5 text-sm font-semibold text-ink">
+            {kr(beregning.samletSkatOgAM)}
+            <span className="ml-1 text-2xs font-normal text-ink-faint">kr.</span>
+          </dd>
         </div>
+        <div className="border-r border-rule py-2.5 pl-3 pr-3">
+          <dt className="text-2xs uppercase tracking-wide text-ink-faint">Sat til side</dt>
+          <dd className="tal mt-0.5 text-sm font-semibold text-ink">
+            {kr(afsat)}
+            <span className="ml-1 text-2xs font-normal text-ink-faint">kr.</span>
+          </dd>
+        </div>
+        <div className="py-2.5 pl-3">
+          <dt className="text-2xs uppercase tracking-wide text-ink-faint">Mangler</dt>
+          <dd
+            className={`tal mt-0.5 text-sm font-semibold ${
+              mangler > 0 ? 'text-negative' : 'text-positive'
+            }`}
+          >
+            {kr(mangler)}
+            <span className="ml-1 text-2xs font-normal text-ink-faint">kr.</span>
+          </dd>
+        </div>
+      </dl>
+      {mangler > 0 && (
+        <button
+          type="button"
+          onClick={() => onGaaTil('opsparing')}
+          className="mt-1.5 text-2xs text-negative underline underline-offset-4"
+        >
+          Se hvad der skal sættes til side
+        </button>
       )}
-
-      {/* Top Header */}
-      <header className="sticky top-0 z-30 bg-white border-b border-stone-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16">
-          {/* Logo & Title */}
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-stone-950 text-white flex items-center justify-center font-bold font-mono shadow-xs">
-              <span className="text-amber-300 text-sm">RAI</span>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-stone-900">
-                  Revisor AI
-                </h1>
-                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-900">
-                  B-indkomst & Fradrag
-                </span>
-              </div>
-              <p className="text-[11px] text-stone-500 hidden sm:block">
-                Fra bilag til skat, årsopgørelse og kørsel
-              </p>
-            </div>
-          </div>
-
-          {/* Right Header Actions */}
-          <div className="flex items-center gap-3">
-            {/* Year Selector */}
-            <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 px-2.5 py-1.5 rounded-lg text-xs">
-              <Calendar className="w-3.5 h-3.5 text-stone-500" />
-              <span className="font-semibold text-stone-700 text-[11px] hidden sm:inline">År:</span>
-              <select
-                value={activeAarId}
-                onChange={(e) => setActiveAarId(e.target.value)}
-                className="bg-transparent font-bold text-stone-900 text-xs focus:outline-hidden cursor-pointer"
-              >
-                {indkomstAarList.map((aar) => (
-                  <option key={aar.id} value={aar.id}>
-                    {aar.aar} ({aar.kommune})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* AI Scanner Button */}
-            <button
-              type="button"
-              onClick={() => setIsScannerOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-900 hover:bg-stone-800 text-white rounded-lg text-xs font-semibold transition shadow-xs"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span className="hidden sm:inline">Scan Bilag</span>
-            </button>
-
-            {/* Revisor Chat Button */}
-            <button
-              type="button"
-              onClick={() => setIsChatOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-100 hover:bg-stone-200/70 text-stone-800 border border-stone-200 rounded-lg text-xs font-semibold transition"
-            >
-              <MessageSquare className="w-3.5 h-3.5 text-stone-600" />
-              <span className="hidden sm:inline">Revisor Chat</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 overflow-x-auto scrollbar-none">
-          <nav className="flex space-x-1 border-t border-stone-100 pt-1 pb-1">
-            {navTabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg whitespace-nowrap transition ${
-                    isActive
-                      ? 'bg-stone-900 text-white shadow-xs'
-                      : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
-                  }`}
-                >
-                  <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-amber-300' : 'text-stone-500'}`} />
-                  {tab.label}
-                  {tab.count !== undefined && (
-                    <span
-                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
-                        isActive
-                          ? 'bg-stone-700 text-stone-100'
-                          : 'bg-stone-200 text-stone-700'
-                      }`}
-                    >
-                      {tab.count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-      </header>
-
-      {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full">
-        <div className="flex flex-col lg:flex-row gap-6">
-          {/* Active Tab View */}
-          <div className="flex-1 min-w-0">
-            {activeTab === 'jobs' && (
-              <JobsModule
-                jobs={yearJobs}
-                indkomstAar={activeIndkomstAar}
-                onAddJob={handleAddJob}
-                onUpdateJob={handleUpdateJob}
-                onDeleteJob={handleDeleteJob}
-                onOpenAiScanner={() => setIsScannerOpen(true)}
-              />
-            )}
-
-            {activeTab === 'fradrag' && (
-              <FradragModule
-                fradragList={yearFradrag}
-                indkomstAar={activeIndkomstAar}
-                skatteBeregning={skatteBeregning}
-                onAddFradrag={handleAddFradrag}
-                onUpdateFradrag={handleUpdateFradrag}
-                onDeleteFradrag={handleDeleteFradrag}
-                onOpenAiScanner={() => setIsScannerOpen(true)}
-              />
-            )}
-
-            {activeTab === 'skat-overblik' && (
-              <SkatOverblikModule
-                indkomstAar={activeIndkomstAar}
-                skatteBeregning={skatteBeregning}
-              />
-            )}
-
-            {activeTab === 'aarsopgoerelse' && (
-              <AarsopgoerelseModule
-                skatteBeregning={skatteBeregning}
-                indkomstAar={activeIndkomstAar}
-              />
-            )}
-
-            {activeTab === 'opsparing' && (
-              <OpsparingTrackerModule
-                indkomstAar={activeIndkomstAar}
-                skatteBeregning={skatteBeregning}
-                opsparing={activeOpsparing}
-                onUpdateOpsparing={handleUpdateOpsparing}
-              />
-            )}
-
-            {activeTab === 'statistik' && (
-              <StatistikModule
-                jobs={yearJobs}
-                indkomstAar={activeIndkomstAar}
-              />
-            )}
-
-            {activeTab === 'investeringer' && (
-              <InvesteringerModule
-                investeringer={yearInvesteringer}
-                indkomstAar={activeIndkomstAar}
-                onAddInvestering={handleAddInvestering}
-                onDeleteInvestering={handleDeleteInvestering}
-              />
-            )}
-
-            {activeTab === 'roadmap' && (
-              <PlanningRoadmapView />
-            )}
-          </div>
-
-          {/* Right Global Sidebar (only when not in roadmap view) */}
-          {activeTab !== 'roadmap' && (
-            <GlobalSidebar
-              activeIndkomstAar={activeIndkomstAar}
-              allIndkomstAar={indkomstAarList}
-              allJobs={jobs}
-              allFradrag={fradragList}
-              activeSkatteBeregning={skatteBeregning}
-              activeOpsparing={activeOpsparing}
-              onOpenAiScanner={() => setIsScannerOpen(true)}
-              onOpenRevisorChat={() => setIsChatOpen(true)}
-              onSelectTab={(tab) => setActiveTab(tab)}
-            />
-          )}
-        </div>
-      </main>
-
-      {/* AI Scanner Modal */}
-      <AiBilagScannerModal
-        isOpen={isScannerOpen}
-        onClose={() => setIsScannerOpen(false)}
-        onApplyResult={handleApplyAiResult}
-      />
-
-      {/* Revisor AI Chat Modal */}
-      <RevisorChatModal
-        isOpen={isChatOpen}
-        onClose={() => setIsChatOpen(false)}
-        indkomstAar={activeIndkomstAar}
-        jobs={yearJobs}
-        fradragList={yearFradrag}
-        skatteBeregning={skatteBeregning}
-      />
     </div>
   );
 }
 
+const FANER = [
+  { id: 'jobs', navn: 'Jobs og kørsel' },
+  { id: 'fradrag', navn: 'Fradrag' },
+  { id: 'overblik', navn: 'Skatteoverblik' },
+  { id: 'aarsopgoerelse', navn: 'Årsopgørelse' },
+  { id: 'opsparing', navn: 'Sæt til side' },
+  { id: 'statistik', navn: 'Statistik' },
+  { id: 'investeringer', navn: 'Investeringer' },
+  { id: 'aar', navn: 'Indkomstår' },
+];
+
+export default function App() {
+  const d = useRevisorData();
+  const { visning, naviger } = useUrlState('jobs');
+  const [ai, setAi] = useState<{
+    klar: boolean;
+    udbyder: string | null;
+    modeller: { tekst: string; billede: string } | null;
+  }>({ klar: false, udbyder: null, modeller: null });
+  const aiKlar = ai.klar;
+  const [scannerAaben, setScannerAaben] = useState(false);
+  const [chatAaben, setChatAaben] = useState(false);
+  const [besked, setBesked] = useState<string | null>(null);
+  const [handlingsfejl, setHandlingsfejl] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .aiStatus()
+      .then(setAi)
+      .catch(() => setAi({ klar: false, udbyder: null, modeller: null }));
+  }, []);
+
+  const visBesked = (tekst: string) => {
+    setBesked(tekst);
+    window.setTimeout(() => setBesked(null), 3500);
+  };
+
+  /** Fanger en fejl fra en skrivning, så tallet ikke ser gemt ud uden at være det. */
+  const medFejlhaandtering =
+    <A extends unknown[], R>(fn: (...a: A) => Promise<R>) =>
+    async (...a: A): Promise<R> => {
+      setHandlingsfejl(null);
+      try {
+        return await fn(...a);
+      } catch (err) {
+        setHandlingsfejl(
+          err instanceof Error ? err.message : 'Handlingen kunne ikke gennemføres.'
+        );
+        throw err;
+      }
+    };
+
+  const aarListe = useMemo(
+    () => [...d.data.indkomstAar].sort((a, b) => b.aar - a.aar),
+    [d.data.indkomstAar]
+  );
+
+  const aktivtAar =
+    aarListe.find((a) => a.id === visning.aar) ?? aarListe[0] ?? null;
+
+  // Året skal stå i URL'en, så et genindlæs og et delt link viser det samme.
+  useEffect(() => {
+    if (aktivtAar && visning.aar !== aktivtAar.id) {
+      naviger({ aar: aktivtAar.id }, true);
+    }
+  }, [aktivtAar, visning.aar, naviger]);
+
+  const aaretsJobs = useMemo(
+    () => d.data.jobs.filter((j) => j.indkomstAarId === aktivtAar?.id),
+    [d.data.jobs, aktivtAar]
+  );
+  const aaretsFradrag = useMemo(
+    () => d.data.fradrag.filter((f) => f.indkomstAarId === aktivtAar?.id),
+    [d.data.fradrag, aktivtAar]
+  );
+  const aaretsInvesteringer = useMemo(
+    () => d.data.investeringer.filter((i) => i.indkomstAarId === aktivtAar?.id),
+    [d.data.investeringer, aktivtAar]
+  );
+
+  const { beregning, beregningsfejl } = useMemo((): {
+    beregning: SkatteBeregning | null;
+    beregningsfejl: string | null;
+  } => {
+    if (!aktivtAar) return { beregning: null, beregningsfejl: null };
+    try {
+      return {
+        beregning: beregnSkat(aktivtAar, aaretsJobs, aaretsFradrag),
+        beregningsfejl: null,
+      };
+    } catch (err) {
+      return {
+        beregning: null,
+        beregningsfejl:
+          err instanceof UkendtIndkomstAarError
+            ? err.message
+            : 'Skatten kunne ikke beregnes for året.',
+      };
+    }
+  }, [aktivtAar, aaretsJobs, aaretsFradrag]);
+
+  const indlaesEksempel = async () => {
+    const data = byggEksempeldata(2026);
+    if (d.data.indkomstAar.some((a) => a.id === data.indkomstAar.id)) {
+      visBesked('Eksempeldataene er allerede indlæst.');
+      return;
+    }
+    await d.gemIndkomstAar(data.indkomstAar);
+    for (const j of data.jobs) await d.gemJob(j);
+    for (const f of data.fradrag) await d.gemFradrag(f);
+    for (const i of data.investeringer) await d.gemInvestering(i);
+    naviger({ aar: data.indkomstAar.id, fane: 'jobs' });
+    visBesked('Eksempeldataene er indlæst. De er markeret som eksempel.');
+  };
+
+  if (d.tilstand === 'indlaeser') {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-24">
+        <p className="text-sm text-ink-muted">Henter dine data…</p>
+      </main>
+    );
+  }
+
+  if (d.tilstand === 'fejl') {
+    return (
+      <main className="mx-auto max-w-2xl px-4 py-24">
+        <Advarsel titel="Dine data kunne ikke hentes">{d.fejl}</Advarsel>
+        <div className="mt-4">
+          <Knap art="primaer" onClick={() => void d.hentIgen()}>
+            Prøv igen
+          </Knap>
+        </div>
+      </main>
+    );
+  }
+
+  const visSidebar =
+    aktivtAar && beregning && !['aar', 'statistik'].includes(visning.fane);
+
+  return (
+    <div className="min-h-screen">
+      {besked && (
+        <div
+          role="status"
+          className="ikke-print fixed bottom-5 right-5 z-50 border border-rule-strong bg-surface px-4 py-2.5 text-xs shadow-lg"
+        >
+          {besked}
+        </div>
+      )}
+
+      <header className="ikke-print sticky top-0 z-30 border-b border-rule bg-surface">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+          <button
+            type="button"
+            onClick={() => naviger({ fane: 'jobs' })}
+            className="overgang flex items-baseline gap-2 hover:opacity-70"
+          >
+            <span className="font-display text-base font-extrabold tracking-tight text-ink">
+              Revisor
+            </span>
+            <span className="tal text-2xs text-ink-faint">B-indkomst</span>
+          </button>
+
+          {aarListe.length > 0 && (
+            <div className="flex items-center gap-2">
+              <label htmlFor="aar-vaelger" className="text-2xs text-ink-muted">
+                Indkomstår
+              </label>
+              <select
+                id="aar-vaelger"
+                value={aktivtAar?.id ?? ''}
+                onChange={(e) => naviger({ aar: e.target.value })}
+                className="tal rounded-[4px] border border-rule-strong bg-surface px-2 py-1 text-xs text-ink"
+              >
+                {aarListe.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.aar}
+                    {a.laast ? ' (låst)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+
+        <nav aria-label="Moduler" className="mx-auto max-w-7xl overflow-x-auto px-4 sm:px-6">
+          <ul className="flex gap-1 pb-px">
+            {FANER.map((f) => {
+              const aktiv = visning.fane === f.id;
+              return (
+                <li key={f.id}>
+                  <button
+                    type="button"
+                    onClick={() => naviger({ fane: f.id })}
+                    aria-current={aktiv ? 'page' : undefined}
+                    className={`overgang whitespace-nowrap border-b-2 px-3 py-2 text-xs ${
+                      aktiv
+                        ? 'border-ink font-semibold text-ink'
+                        : 'border-transparent text-ink-muted hover:text-ink'
+                    }`}
+                  >
+                    {f.navn}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      </header>
+
+      <main className="mx-auto max-w-7xl px-4 pt-6 pb-28 sm:px-6 sm:pt-8 lg:pb-8">
+        {handlingsfejl && (
+          <div className="mb-5">
+            <Advarsel titel="Handlingen slog fejl">{handlingsfejl}</Advarsel>
+          </div>
+        )}
+
+        {!aktivtAar ? (
+          <IndkomstAarModule
+            indkomstAarListe={aarListe}
+            aktivtAarId={null}
+            antalPoster={() => ({ jobs: 0, fradrag: 0, investeringer: 0 })}
+            onGem={medFejlhaandtering(d.gemIndkomstAar)}
+            onSlet={medFejlhaandtering(d.sletIndkomstAar)}
+            onVaelg={(id) => naviger({ aar: id })}
+            onIndlaesEksempel={indlaesEksempel}
+          />
+        ) : (
+          <div className="flex flex-col gap-8 lg:flex-row">
+            <div className="min-w-0 flex-1">
+              {beregning && !['aar'].includes(visning.fane) && (
+                <MobilOverblik
+                  beregning={beregning}
+                  afsat={
+                    (d.data.opsparing[aktivtAar.id]?.indbetaltTilSkat ?? 0) +
+                    (d.data.opsparing[aktivtAar.id]?.opsparetPrivat ?? 0)
+                  }
+                  onGaaTil={(fane) => naviger({ fane })}
+                />
+              )}
+
+              {beregningsfejl && (
+                <div className="mb-5">
+                  <Advarsel titel="Året kan ikke beregnes">{beregningsfejl}</Advarsel>
+                </div>
+              )}
+
+              {visning.fane === 'aar' && (
+                <IndkomstAarModule
+                  indkomstAarListe={aarListe}
+                  aktivtAarId={aktivtAar.id}
+                  antalPoster={(id) => ({
+                    jobs: d.data.jobs.filter((j) => j.indkomstAarId === id).length,
+                    fradrag: d.data.fradrag.filter((f) => f.indkomstAarId === id).length,
+                    investeringer: d.data.investeringer.filter((i) => i.indkomstAarId === id)
+                      .length,
+                  })}
+                  onGem={medFejlhaandtering(d.gemIndkomstAar)}
+                  onSlet={medFejlhaandtering(d.sletIndkomstAar)}
+                  onVaelg={(id) => naviger({ aar: id })}
+                  onIndlaesEksempel={indlaesEksempel}
+                />
+              )}
+
+              {beregning && (
+                <>
+                  {visning.fane === 'jobs' && (
+                    <JobsModule
+                      jobs={aaretsJobs}
+                      bilag={d.data.bilag}
+                      indkomstAar={aktivtAar}
+                      beregning={beregning}
+                      onGem={medFejlhaandtering(d.gemJob)}
+                      onSlet={medFejlhaandtering(d.sletJob)}
+                      onAabnScanner={() => setScannerAaben(true)}
+                    />
+                  )}
+
+                  {visning.fane === 'fradrag' && (
+                    <FradragModule
+                      fradragListe={aaretsFradrag}
+                      bilag={d.data.bilag}
+                      indkomstAar={aktivtAar}
+                      beregning={beregning}
+                      onGem={medFejlhaandtering(d.gemFradrag)}
+                      onSlet={medFejlhaandtering(d.sletFradrag)}
+                      onAabnScanner={() => setScannerAaben(true)}
+                    />
+                  )}
+
+                  {visning.fane === 'overblik' && (
+                    <SkatOverblikModule indkomstAar={aktivtAar} beregning={beregning} />
+                  )}
+
+                  {visning.fane === 'aarsopgoerelse' && (
+                    <AarsopgoerelseModule indkomstAar={aktivtAar} beregning={beregning} />
+                  )}
+
+                  {visning.fane === 'opsparing' && (
+                    <OpsparingTrackerModule
+                      beregning={beregning}
+                      jobs={aaretsJobs}
+                      opsparing={
+                        d.data.opsparing[aktivtAar.id] ?? {
+                          indbetaltTilSkat: 0,
+                          opsparetPrivat: 0,
+                        }
+                      }
+                      onGem={medFejlhaandtering((o) => d.gemOpsparing(aktivtAar.id, o))}
+                    />
+                  )}
+
+                  {visning.fane === 'statistik' && <StatistikModule jobs={aaretsJobs} />}
+
+                  {visning.fane === 'investeringer' && (
+                    <InvesteringerModule
+                      investeringer={aaretsInvesteringer}
+                      bilag={d.data.bilag}
+                      indkomstAar={aktivtAar}
+                      onGem={medFejlhaandtering(d.gemInvestering)}
+                      onSlet={medFejlhaandtering(d.sletInvestering)}
+                      onAabnScanner={() => setScannerAaben(true)}
+                    />
+                  )}
+                </>
+              )}
+            </div>
+
+            {visSidebar && beregning && (
+              <div className="hidden lg:block">
+                <GlobalSidebar
+                indkomstAar={aktivtAar}
+                beregning={beregning}
+                opsparing={
+                  d.data.opsparing[aktivtAar.id] ?? {
+                    indbetaltTilSkat: 0,
+                    opsparetPrivat: 0,
+                  }
+                }
+                aiKlar={aiKlar}
+                aiUdbyder={ai.udbyder}
+                aiModel={ai.modeller?.tekst ?? null}
+                onAabnScanner={() => setScannerAaben(true)}
+                onAabnChat={() => setChatAaben(true)}
+                  onGaaTil={(fane) => naviger({ fane })}
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+
+      {aktivtAar && (
+        <nav
+          aria-label="Hurtige handlinger"
+          className="ikke-print fixed inset-x-0 bottom-0 z-40 flex items-stretch gap-px border-t border-rule-strong bg-rule lg:hidden"
+        >
+          <button
+            type="button"
+            onClick={() => setScannerAaben(true)}
+            className="flex flex-1 items-center justify-center gap-2 bg-ink px-4 py-3.5 text-sm font-semibold text-surface"
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2a1.5 1.5 0 0 0 1.3-.75l.6-1a1.5 1.5 0 0 1 1.3-.75h4.2a1.5 1.5 0 0 1 1.3.75l.6 1A1.5 1.5 0 0 0 17.3 7h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z" />
+              <circle cx="12" cy="13" r="3.4" />
+            </svg>
+            Læs et bilag
+          </button>
+          <button
+            type="button"
+            onClick={() => setChatAaben(true)}
+            className="flex shrink-0 items-center justify-center bg-surface px-5 py-3.5 text-sm font-medium text-ink"
+          >
+            Revisor
+          </button>
+        </nav>
+      )}
+
+      {aktivtAar && (
+        <AiBilagScannerModal
+          aaben={scannerAaben}
+          onLuk={() => setScannerAaben(false)}
+          indkomstAar={aktivtAar}
+          aiKlar={aiKlar}
+          onGemJob={medFejlhaandtering(d.gemJob)}
+          onGemFradrag={medFejlhaandtering(d.gemFradrag)}
+          onGemInvestering={medFejlhaandtering(d.gemInvestering)}
+          onNytBilag={d.tilfoejBilag}
+        />
+      )}
+
+      {aktivtAar && beregning && (
+        <RevisorChatModal
+          aaben={chatAaben}
+          onLuk={() => setChatAaben(false)}
+          indkomstAar={aktivtAar}
+          beregning={beregning}
+          aiKlar={aiKlar}
+        />
+      )}
+    </div>
+  );
+}

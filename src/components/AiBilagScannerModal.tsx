@@ -1,544 +1,697 @@
 import React, { useState } from 'react';
+import type {
+  Bilag,
+  BilagsAnalyse,
+  Bilagsklassifikation,
+  Fradrag,
+  IndkomstAar,
+  Investering,
+  Job,
+  TransportMiddel,
+} from '../types';
+import { SIKKERHEDSTAERSKEL } from '../types';
+import { api, filTilBase64 } from '../lib/api';
+import { datoLang, idag, kr } from '../lib/format';
+import { KineticLoader } from './KineticLoader';
 import {
-  X,
-  UploadCloud,
-  FileText,
-  Sparkles,
-  CheckCircle2,
-  Calendar,
-  AlertCircle,
-  Briefcase,
-  Receipt,
-  Car,
-  DollarSign,
-  ArrowRight,
-  Loader2,
-  ExternalLink
-} from 'lucide-react';
-import { Job, Fradrag, Investering, AiExtractionResult } from '../types';
-import { SKATTESATSER } from '../data/danishTaxData';
-import { createGoogleCalendarUrl, downloadIcsFile } from '../utils/calendarExport';
+  Advarsel,
+  BeloebFelt,
+  Datofelt,
+  Felt,
+  Knap,
+  Modal,
+  Notatfelt,
+  Tekstfelt,
+  Vaelger,
+} from './ui';
 
 interface Props {
-  isOpen: boolean;
-  onClose: () => void;
-  activeIndkomstAarId: string;
-  onAddJob: (job: Omit<Job, 'id'>) => void;
-  onAddFradrag: (fradrag: Omit<Fradrag, 'id'>) => void;
-  onAddInvestering: (inv: Omit<Investering, 'id'>) => void;
+  aaben: boolean;
+  onLuk: () => void;
+  indkomstAar: IndkomstAar;
+  aiKlar: boolean;
+  onGemJob: (job: Job) => Promise<unknown>;
+  onGemFradrag: (fradrag: Fradrag) => Promise<unknown>;
+  onGemInvestering: (inv: Investering) => Promise<unknown>;
+  onNytBilag: (bilag: Bilag) => void;
 }
 
-export const AiBilagScannerModal: React.FC<Props> = ({
-  isOpen,
-  onClose,
-  activeIndkomstAarId,
-  onAddJob,
-  onAddFradrag,
-  onAddInvestering,
-}) => {
-  const [file, setFile] = useState<File | null>(null);
-  const [previewName, setPreviewName] = useState<string>('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<AiExtractionResult | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successNotice, setSuccessNotice] = useState<string | null>(null);
+type Trin = 'vaelg' | 'dublet' | 'laeser' | 'kladde' | 'gemt' | 'fejl';
 
-  if (!isOpen) return null;
+const FASER = [
+  'Læser bilaget…',
+  'Finder beløb og datoer…',
+  'Vurderer hvilken rubrik posten hører til…',
+];
 
-  // Sample templates to test instantly with a single click
-  const handleLoadSample = (sampleType: 'KONTRAKT' | 'PARKERING' | 'COPYDAN') => {
-    setErrorMessage(null);
-    setSuccessNotice(null);
+/** Sikkerheden pr. felt afgør, om feltet skal fremhæves til manuel kontrol. */
+const usikkert = (sikkerhed: number | undefined) =>
+  (sikkerhed ?? 0) < SIKKERHEDSTAERSKEL;
 
-    if (sampleType === 'KONTRAKT') {
-      setPreviewName('Musikhuset_Aarhus_Honorar_Kontrakt_2026.pdf');
-      analyzeData({
-        fileName: 'Musikhuset_Aarhus_Honorar_Kontrakt_2026.pdf',
-        textContent: `ENGAGEMENTSAFTALE & KONTRAKT
-Hvervgiver: Musikhuset Aarhus, Thomas Jensens Allé, 8000 Aarhus C
-Artist / Modtager: Carsten Lysdal
-Dato for arrangement: 2026-06-12
-Honorar: 6.500,00 DKK før skat.
-Udbetaling: Den 25. juni 2026 via B-indkomst.
-Transport: Egen bil fra København til Aarhus. Distance: 310 km.
-Der indeholdes 8% AM-bidrag af Musikhuset.`,
+function UsikkerMarkering({ sikkerhed }: { sikkerhed: number | undefined }) {
+  if (!usikkert(sikkerhed)) return null;
+  return (
+    <span className="ml-1.5 text-2xs font-normal text-negative">
+      usikker aflæsning, kontrollér
+    </span>
+  );
+}
+
+export function AiBilagScannerModal({
+  aaben,
+  onLuk,
+  indkomstAar,
+  aiKlar,
+  onGemJob,
+  onGemFradrag,
+  onGemInvestering,
+  onNytBilag,
+}: Props) {
+  const [trin, setTrin] = useState<Trin>('vaelg');
+  const [fejl, setFejl] = useState<string | null>(null);
+  const [bilag, setBilag] = useState<Bilag | null>(null);
+  const [dublet, setDublet] = useState<{ filnavn: string; uploadet: string } | null>(null);
+  const [analyse, setAnalyse] = useState<BilagsAnalyse | null>(null);
+  const [valgtType, setValgtType] = useState<Bilagsklassifikation>('UKENDT');
+  const [gemmer, setGemmer] = useState(false);
+  const [landede, setLandede] = useState<{ hvor: string; rubrik: string; beloeb: string } | null>(null);
+
+  // Redigerbare kladdefelter. Alt kan rettes, før noget gemmes.
+  const [tekst, setTekst] = useState<Record<string, string>>({});
+  const [flag, setFlag] = useState<Record<string, boolean>>({});
+
+  const nulstil = () => {
+    setTrin('vaelg');
+    setFejl(null);
+    setBilag(null);
+    setDublet(null);
+    setAnalyse(null);
+    setValgtType('UKENDT');
+    setTekst({});
+    setFlag({});
+    setLandede(null);
+  };
+
+  const luk = () => {
+    nulstil();
+    onLuk();
+  };
+
+  const vaelgFil = async (fil: File) => {
+    setFejl(null);
+    try {
+      const data = await filTilBase64(fil);
+      const svar = await api.uploadBilag({
+        data,
+        mimeType: fil.type || 'application/pdf',
+        filnavn: fil.name,
       });
-    } else if (sampleType === 'PARKERING') {
-      setPreviewName('EasyPark_Kvittering_Aarhus_Havn.pdf');
-      analyzeData({
-        fileName: 'EasyPark_Kvittering_Aarhus_Havn.pdf',
-        textContent: `EasyPark Kvittering
-Dato: 2026-06-12
-Område: Aarhus C Havn / Musikhuset
-Køretøj: AB 12 345
-Varighed: 4 timer 30 min.
-Beløb i alt: 220,00 DKK (heraf moms 44,00 kr).
-Betalt med Dankort.
-Formål: Parkering i forbindelse med optræden.`,
-      });
-    } else if (sampleType === 'COPYDAN') {
-      setPreviewName('Copydan_Udbetalingsspecifikation_Q1_2026.pdf');
-      analyzeData({
-        fileName: 'Copydan_Udbetalingsspecifikation_Q1_2026.pdf',
-        textContent: `Copydan Verdens-TV & Billedkunst
-Udbetalingsmeddelelse
-Modtager: Carsten Lysdal
-Dato: 2026-05-10
-Udbetalt vederlag: 4.800,00 DKK
-B-indkomst: Fritaget for AM-bidrag i henhold til kildeskattelovens § 49 B (ophavsretsvederlag/royalty).
-Skal angives i rubrik 12 på årsopgørelsen uden AM-bidrag.`,
-      });
+
+      setBilag(svar.bilag);
+      onNytBilag(svar.bilag);
+
+      if (svar.dublet) {
+        setDublet({ filnavn: svar.dublet.filnavn, uploadet: svar.dublet.uploadet });
+        setTrin('dublet');
+      } else {
+        await analyser(svar.bilag);
+      }
+    } catch (err) {
+      setFejl(err instanceof Error ? err.message : 'Filen kunne ikke lægges op.');
+      setTrin('fejl');
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (!selectedFile) return;
-
-    setFile(selectedFile);
-    setPreviewName(selectedFile.name);
-    setErrorMessage(null);
-    setSuccessNotice(null);
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const resultStr = reader.result as string;
-      const base64Data = resultStr.split(',')[1];
-      const mimeType = selectedFile.type || 'application/pdf';
-
-      analyzeData({
-        fileData: base64Data,
-        mimeType,
-        fileName: selectedFile.name,
-      });
-    };
-    reader.onerror = () => {
-      setErrorMessage('Kunne ikke indlæse filen lokalt.');
-    };
-    reader.readAsDataURL(selectedFile);
+  const analyser = async (b: Bilag) => {
+    setTrin('laeser');
+    setFejl(null);
+    try {
+      const svar = await api.analyserBilag(b.id);
+      setAnalyse(svar.analyse);
+      setValgtType(svar.analyse.klassifikation);
+      forbered(svar.analyse);
+      setTrin('kladde');
+    } catch (err) {
+      setFejl(
+        err instanceof Error
+          ? err.message
+          : 'Bilaget kunne ikke læses. Prøv igen, eller opret posten manuelt.'
+      );
+      setTrin('fejl');
+    }
   };
 
-  const analyzeData = async (payload: {
-    fileData?: string;
-    mimeType?: string;
-    fileName: string;
-    textContent?: string;
-  }) => {
-    setIsAnalyzing(true);
-    setErrorMessage(null);
-    setAnalysisResult(null);
+  /**
+   * Lægger udtrækket ind i redigerbare felter.
+   * Et felt uden værdi bliver tomt. Der udfyldes aldrig med et gæt.
+   */
+  const forbered = (a: BilagsAnalyse) => {
+    const t: Record<string, string> = {};
+    const f: Record<string, boolean> = {};
+
+    const læg = (kilde: Record<string, { vaerdi: unknown }> | undefined) => {
+      if (!kilde) return;
+      for (const [navn, felt] of Object.entries(kilde)) {
+        if (typeof felt?.vaerdi === 'boolean') f[navn] = felt.vaerdi;
+        else t[navn] = felt?.vaerdi == null ? '' : String(felt.vaerdi);
+      }
+    };
+
+    læg(a.job as never);
+    læg(a.fradrag as never);
+    læg(a.investering as never);
+    t.revisorNotat = a.revisorNotat;
+    setTekst(t);
+    setFlag(f);
+  };
+
+  const sik = (gruppe: 'job' | 'fradrag' | 'investering', navn: string): number | undefined =>
+    (analyse?.[gruppe] as unknown as Record<string, { sikkerhed: number }> | undefined)?.[
+      navn
+    ]?.sikkerhed;
+
+  const tal = (navn: string) => Number(String(tekst[navn] ?? '').replace(',', '.')) || 0;
+
+  const gem = async () => {
+    if (!bilag) return;
+    setGemmer(true);
+    setFejl(null);
 
     try {
-      const response = await fetch('/api/gemini/analyze-bilag', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        throw new Error(errJson.error || `Serverfejl (${response.status})`);
+      if (valgtType === 'JOB') {
+        const start = tekst.startDato || idag();
+        await onGemJob({
+          id: `job-${Date.now()}`,
+          indkomstAarId: indkomstAar.id,
+          hvervgiver: tekst.hvervgiver || '',
+          honorar: tal('honorar'),
+          startDato: start,
+          slutDato: tekst.slutDato || start,
+          betalingsDato: tekst.betalingsDato || '',
+          transportmiddel: (tekst.transportmiddel as TransportMiddel) || 'NONE',
+          antalKm: tal('antalKm'),
+          antalTure: Math.max(0, Math.round(tal('antalTure'))) || (tal('antalKm') ? 1 : 0),
+          destinationAdresse: tekst.destinationAdresse || '',
+          amBidragFritaget: Boolean(flag.amBidragFritaget),
+          erRubrik17: Boolean(flag.erRubrik17),
+          timerJob: tal('timerJob') || undefined,
+          timerTransportForberedelse: tal('timerTransportForberedelse') || undefined,
+          type: tekst.type || '',
+          bilagIds: [bilag.id],
+          noter: tekst.revisorNotat || '',
+        });
+        setLandede({
+          hvor: 'Jobs og kørsel',
+          rubrik: flag.erRubrik17 ? 'rubrik 17' : 'rubrik 12',
+          beloeb: `${kr(tal('honorar'))} kr.`,
+        });
+      } else if (valgtType === 'FRADRAG') {
+        const beloeb = tal('fakturaBeloeb');
+        const procent = tekst.fradragsProcent === '' ? 100 : tal('fradragsProcent');
+        await onGemFradrag({
+          id: `fradrag-${Date.now()}`,
+          indkomstAarId: indkomstAar.id,
+          beskrivelse: tekst.beskrivelse || '',
+          typeKategori: tekst.typeKategori || '',
+          fakturaDato: tekst.fakturaDato || idag(),
+          fakturaBeloeb: beloeb,
+          fradragsProcent: procent,
+          fradragIDKK: Math.round((beloeb * procent) / 100),
+          bilagIds: [bilag.id],
+          revisorNotat: tekst.revisorNotat || '',
+        });
+        setLandede({
+          hvor: 'Fradrag',
+          rubrik: 'rubrik 29',
+          beloeb: `${kr(Math.round((beloeb * procent) / 100))} kr.`,
+        });
+      } else if (valgtType === 'INVESTERING') {
+        await onGemInvestering({
+          id: `inv-${Date.now()}`,
+          indkomstAarId: indkomstAar.id,
+          titel: tekst.titel || '',
+          beloeb: tal('beloeb'),
+          fakturaDato: tekst.fakturaDato || idag(),
+          bilagIds: [bilag.id],
+          noter: tekst.revisorNotat || '',
+        });
+        setLandede({
+          hvor: 'Investeringer',
+          rubrik: 'arkivet, uden for skatteberegningen',
+          beloeb: `${kr(tal('beloeb'))} kr.`,
+        });
       }
-
-      const data: AiExtractionResult = await response.json();
-      setAnalysisResult(data);
-    } catch (err: any) {
-      console.warn('Gemini analyse kald fejlede eller ingen API-nøgle, bruger lokal revisor-motor fallback:', err);
-      // Fallback local smart classifier in case server lacks Gemini key
-      const fallbackResult = generateLocalSmartExtraction(payload.fileName, payload.textContent || '');
-      setAnalysisResult(fallbackResult);
+      setTrin('gemt');
+    } catch (err) {
+      setFejl(err instanceof Error ? err.message : 'Posten kunne ikke gemmes.');
     } finally {
-      setIsAnalyzing(false);
+      setGemmer(false);
     }
   };
 
-  // Local fallback parser ensuring instant zero-failure reliability
-  const generateLocalSmartExtraction = (fileName: string, text: string): AiExtractionResult => {
-    const lower = (fileName + ' ' + text).toLowerCase();
-
-    if (lower.includes('kontrakt') || lower.includes('honorar') || lower.includes('musikhuset') || lower.includes('spillested')) {
-      const km = lower.includes('aarhus') ? 310 : 25;
-      const fradragKm = Math.round(km * SKATTESATSER.takstBilMCPrKm);
-      return {
-        classification: 'JOB',
-        confidence: 0.96,
-        summary: 'Honorarjob identificeret: Koncert/arrangement med hvervgiver og kørselsfradrag.',
-        job: {
-          hvervgiver: 'Musikhuset Aarhus',
-          honorar: 6500,
-          startDato: '2026-06-12',
-          slutDato: '2026-06-12',
-          betalingsDato: '2026-06-25',
-          destinationAdresse: 'Thomas Jensens Allé, 8000 Aarhus C',
-          transportmiddel: 'OWN_CAR_MC',
-          antalKm: km,
-          antalTure: 1,
-          koerselsFradrag: fradragKm,
-          amBidragFritaget: false,
-          type: 'Musik & Koncert',
-          timerJob: 4,
-          timerTransportForberedelse: 5,
-        },
-        revisorNotat: `Dette er B-indkomst med AM-bidrag (rubrik 12). Kørselsfradraget på ${fradragKm} kr. tilfalder rubrik 29 (øvrige fradrag) med fuld skatteværdi, da du har kørt i egen bil.`,
-      };
-    } else if (lower.includes('parkering') || lower.includes('easypark') || lower.includes('bro') || lower.includes('kvittering')) {
-      return {
-        classification: 'FRADRAG',
-        confidence: 0.94,
-        summary: 'Driftsudgift identificeret: Parkeringsudgift i forbindelse med honorarjob.',
-        fradrag: {
-          beskrivelse: 'EasyPark - Parkering ved Musikhuset',
-          typeKategori: 'Parkering',
-          fakturaDato: '2026-06-12',
-          fakturaBeloeb: 220,
-          fradragsProcent: 100,
-          fradragIDKK: 220,
-          revisorNotat: '100% erhvervsmæssig kørsel og parkering ved spillejob.',
-        },
-        revisorNotat: 'Dokumenteret driftsomkostning tilknyttet B-indkomstarbejde. Fuld fradragsret i rubrik 29.',
-      };
-    } else {
-      return {
-        classification: 'JOB',
-        confidence: 0.91,
-        summary: 'Royalty/ophavsretsvederlag fra Copydan eller lignende.',
-        job: {
-          hvervgiver: 'Copydan Verdens-TV',
-          honorar: 4800,
-          startDato: '2026-05-10',
-          slutDato: '2026-05-10',
-          betalingsDato: '2026-05-20',
-          transportmiddel: 'NONE',
-          antalKm: 0,
-          antalTure: 0,
-          koerselsFradrag: 0,
-          amBidragFritaget: true,
-          type: 'Ophavsret / Royalty',
-        },
-        revisorNotat: 'AM-bidragsfri B-indkomst. Skal indgå i rubrik 12, men der beregnes 0% i AM-bidrag i henhold til SKATs regler.',
-      };
-    }
-  };
-
-  const handleApproveAndSave = () => {
-    if (!analysisResult) return;
-
-    if (analysisResult.classification === 'JOB' && analysisResult.job) {
-      const j = analysisResult.job;
-      const km = j.antalKm || 0;
-      const takst = j.transportmiddel === 'OWN_CAR_MC' ? SKATTESATSER.takstBilMCPrKm : 0.63;
-      const calcFradrag = j.koerselsFradrag || Math.round(km * takst * (j.antalTure || 1));
-
-      const newJob: Omit<Job, 'id'> = {
-        indkomstAarId: activeIndkomstAarId,
-        hvervgiver: j.hvervgiver || 'Ukendt Hvervgiver',
-        honorar: Number(j.honorar) || 0,
-        startDato: j.startDato || new Date().toISOString().split('T')[0],
-        slutDato: j.slutDato || j.startDato || new Date().toISOString().split('T')[0],
-        betalingsDato: j.betalingsDato || j.startDato || new Date().toISOString().split('T')[0],
-        transportmiddel: (j.transportmiddel as any) || 'NONE',
-        antalKm: km,
-        antalTure: j.antalTure || (km > 0 ? 1 : 0),
-        destinationAdresse: j.destinationAdresse || '',
-        koerselsFradrag: calcFradrag,
-        amBidragFritaget: Boolean(j.amBidragFritaget),
-        timerJob: j.timerJob || 4,
-        timerTransportForberedelse: j.timerTransportForberedelse || 2,
-        type: j.type || 'Honorarjob',
-        bilagNavne: previewName ? [previewName] : ['bilag.pdf'],
-        noter: analysisResult.revisorNotat,
-      };
-
-      onAddJob(newJob);
-      setSuccessNotice(`Jobbet hos "${newJob.hvervgiver}" på ${newJob.honorar.toLocaleString('da-DK')} DKK er oprettet!`);
-    } else if (analysisResult.classification === 'FRADRAG' && analysisResult.fradrag) {
-      const f = analysisResult.fradrag;
-      const beloeb = Number(f.fakturaBeloeb) || 0;
-      const pct = Number(f.forslagFradragsprocent ?? 100);
-      const fradragDkk = Math.round((beloeb * pct) / 100);
-
-      const newFradrag: Omit<Fradrag, 'id'> = {
-        indkomstAarId: activeIndkomstAarId,
-        beskrivelse: f.beskrivelse || 'Driftsomkostning',
-        typeKategori: f.typeKategori || 'Andet',
-        fakturaDato: f.fakturaDato || new Date().toISOString().split('T')[0],
-        fakturaBeloeb: beloeb,
-        fradragsProcent: pct,
-        fradragIDKK: fradragDkk,
-        bilagNavne: previewName ? [previewName] : ['kvittering.pdf'],
-        revisorNotat: analysisResult.revisorNotat,
-      };
-
-      onAddFradrag(newFradrag);
-      setSuccessNotice(`Fradraget "${newFradrag.beskrivelse}" på ${newFradrag.fradragIDKK.toLocaleString('da-DK')} DKK er tilføjet til Rubrik 29!`);
-    } else if (analysisResult.classification === 'INVESTERING' && analysisResult.investering) {
-      const inv = analysisResult.investering;
-      const newInv: Omit<Investering, 'id'> = {
-        indkomstAarId: activeIndkomstAarId,
-        titel: inv.titel || 'Investering i udstyr',
-        beloeb: Number(inv.beloeb) || 0,
-        fakturaDato: inv.fakturaDato || new Date().toISOString().split('T')[0],
-        bilagNavne: previewName ? [previewName] : ['investering.pdf'],
-      };
-      onAddInvestering(newInv);
-      setSuccessNotice(`Investeringen "${newInv.titel}" er registreret i arkivet.`);
-    }
-
-    setTimeout(() => {
-      onClose();
-    }, 1200);
-  };
+  const kanGemme =
+    valgtType === 'JOB'
+      ? Boolean(tekst.hvervgiver?.trim())
+      : valgtType === 'FRADRAG'
+        ? Boolean(tekst.beskrivelse?.trim())
+        : valgtType === 'INVESTERING'
+          ? Boolean(tekst.titel?.trim())
+          : false;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-2xl shadow-xl overflow-hidden my-6">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 bg-stone-50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-stone-900 text-white flex items-center justify-center shadow-xs">
-              <Sparkles className="w-5 h-5 text-amber-300" />
-            </div>
-            <div>
-              <h3 className="font-bold text-stone-900 text-base">AI Bilags-Scanner</h3>
-              <p className="text-xs text-stone-500">"Upload, så sker resten" — Gemini dokumentforståelse</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-200/60 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-6">
-          {/* Quick Demo Templates */}
-          <div>
-            <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider block mb-2">
-              Prøv lynhurtigt med et typisk bilag:
-            </span>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => handleLoadSample('KONTRAKT')}
-                className="text-left p-3 rounded-lg border border-stone-200 hover:border-stone-400 hover:bg-stone-50 transition text-xs group"
-              >
-                <div className="font-semibold text-stone-800 flex items-center gap-1.5 mb-1">
-                  <Briefcase className="w-3.5 h-3.5 text-blue-600" />
-                  Honorar Kontrakt
-                </div>
-                <div className="text-stone-500">Musikhuset (6.500 kr + kørsel)</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleLoadSample('PARKERING')}
-                className="text-left p-3 rounded-lg border border-stone-200 hover:border-stone-400 hover:bg-stone-50 transition text-xs group"
-              >
-                <div className="font-semibold text-stone-800 flex items-center gap-1.5 mb-1">
-                  <Receipt className="w-3.5 h-3.5 text-emerald-600" />
-                  Driftskvittering
-                </div>
-                <div className="text-stone-500">EasyPark (220 kr, 100% fradrag)</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleLoadSample('COPYDAN')}
-                className="text-left p-3 rounded-lg border border-stone-200 hover:border-stone-400 hover:bg-stone-50 transition text-xs group"
-              >
-                <div className="font-semibold text-stone-800 flex items-center gap-1.5 mb-1">
-                  <DollarSign className="w-3.5 h-3.5 text-purple-600" />
-                  Copydan Royalty
-                </div>
-                <div className="text-stone-500">AM-bidragsfritaget honorar</div>
-              </button>
-            </div>
-          </div>
-
-          {/* Upload Dropzone */}
-          <div className="border-2 border-dashed border-stone-300 rounded-xl p-6 text-center hover:border-stone-400 transition bg-stone-50/50 relative">
+    <Modal
+      aaben={aaben}
+      onLuk={luk}
+      titel="Læs et bilag"
+      beskrivelse="Kontrakt, honorarnota, faktura eller kvittering. Bilaget bliver gemt, og oplysningerne bliver til en kladde, du godkender."
+      bund={
+        trin === 'kladde' ? (
+          <>
+            <Knap onClick={luk}>Annullér</Knap>
+            <Knap art="primaer" onClick={gem} disabled={gemmer || !kanGemme}>
+              {gemmer ? 'Gemmer' : 'Godkend og opret posten'}
+            </Knap>
+          </>
+        ) : trin === 'gemt' ? (
+          <>
+            <Knap onClick={luk}>Luk</Knap>
+            <Knap art="primaer" onClick={nulstil}>
+              Læs et bilag mere
+            </Knap>
+          </>
+        ) : undefined
+      }
+    >
+      {!aiKlar ? (
+        <Advarsel titel="Bilagslæsning er slået fra">
+          Der er ingen AI-nøgle på serveren. Sæt GEMINI_API_KEY eller DEEPSEEK_API_KEY i .env
+          og start serveren igen. Indtil da oprettes posterne manuelt.
+        </Advarsel>
+      ) : trin === 'vaelg' ? (
+        <div className="space-y-3">
+          {/* Kameraet står først, fordi kvitteringen som regel ligger på bordet
+              og telefonen i hånden. capture="environment" åbner bagkameraet
+              direkte i stedet for et filgalleri. */}
+          <label className="flex cursor-pointer items-center gap-4 border border-rule-strong bg-ink px-5 py-5 text-surface md:hidden">
             <input
               type="file"
-              accept=".pdf,.png,.jpg,.jpeg,.heic"
-              onChange={handleFileUpload}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              accept="image/*"
+              capture="environment"
+              className="sr-only"
+              onChange={(e) => {
+                const fil = e.target.files?.[0];
+                if (fil) void vaelgFil(fil);
+              }}
             />
-            <div className="flex flex-col items-center">
-              <UploadCloud className="w-10 h-10 text-stone-400 mb-2" />
-              <p className="text-sm font-semibold text-stone-800">
-                {previewName ? previewName : 'Træk og slip dit bilag her, eller klik for at vælge'}
-              </p>
-              <p className="text-xs text-stone-500 mt-1">
-                Understøtter PDF, PNG, JPG, JPEG (kontrakter, kvitteringer, honorarsedler)
-              </p>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-7 w-7 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2a1.5 1.5 0 0 0 1.3-.75l.6-1a1.5 1.5 0 0 1 1.3-.75h4.2a1.5 1.5 0 0 1 1.3.75l.6 1A1.5 1.5 0 0 0 17.3 7h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z" />
+              <circle cx="12" cy="13" r="3.4" />
+            </svg>
+            <span>
+              <span className="block text-sm font-semibold">Tag et billede</span>
+              <span className="mt-0.5 block text-2xs opacity-75">
+                Hold kvitteringen fladt og fyld billedet ud
+              </span>
+            </span>
+          </label>
+
+          <label className="flex cursor-pointer items-center justify-center border border-dashed border-rule-strong px-6 py-8 text-center hover:bg-sunk md:py-12">
+            <input
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,application/pdf,image/*"
+              className="sr-only"
+              onChange={(e) => {
+                const fil = e.target.files?.[0];
+                if (fil) void vaelgFil(fil);
+              }}
+            />
+            <span>
+              <span className="block text-sm font-medium text-ink">Vælg en fil</span>
+              <span className="mt-1 block text-2xs text-ink-muted">
+                PDF, PNG, JPG, WEBP eller HEIC. Højst 20 MB.
+              </span>
+            </span>
+          </label>
+
+          {fejl && <Advarsel titel="Filen blev ikke lagt op">{fejl}</Advarsel>}
+        </div>
+      ) : trin === 'dublet' ? (
+        <div className="space-y-4">
+          <Advarsel titel="Det her bilag ligger allerede i arkivet">
+            En fil med præcis samme indhold blev lagt op som {dublet?.filnavn} den{' '}
+            {datoLang(dublet?.uploadet ?? '')}. Er det den samme udgift, skal den ikke
+            oprettes igen.
+          </Advarsel>
+          <div className="flex flex-wrap gap-2">
+            <Knap onClick={luk}>Det er en dublet, luk</Knap>
+            <Knap art="primaer" onClick={() => bilag && analyser(bilag)}>
+              Læs det alligevel
+            </Knap>
+          </div>
+        </div>
+      ) : trin === 'laeser' ? (
+        <div className="py-10">
+          <KineticLoader faser={FASER} />
+          <p className="mt-4 text-2xs text-ink-faint">{bilag?.filnavn}</p>
+        </div>
+      ) : trin === 'gemt' && landede ? (
+        <div className="py-4">
+          <Advarsel art="positiv" titel={`Lagt i ${landede.hvor}`}>
+            Posten på {landede.beloeb} er oprettet og tæller nu med i {landede.rubrik}.
+            Bilaget hænger på den, så dokumentationen kan findes frem igen.
+          </Advarsel>
+          <p className="mt-3 text-2xs text-ink-muted">
+            Har du flere bilag liggende, er det hurtigere at tage dem nu end at
+            lede efter dem i marts.
+          </p>
+        </div>
+      ) : trin === 'fejl' ? (
+        <div className="space-y-4">
+          <Advarsel titel="Bilaget blev ikke læst">{fejl}</Advarsel>
+          <p className="max-w-[64ch] text-2xs text-ink-muted">
+            Der bliver ikke gættet på et resultat. Et opfundet beløb, der ser rigtigt ud,
+            ender i en årsopgørelse, og det er værre end ingen aflæsning.
+          </p>
+          <div className="flex gap-2">
+            <Knap onClick={nulstil}>Vælg en anden fil</Knap>
+            {bilag && (
+              <Knap art="primaer" onClick={() => analyser(bilag)}>
+                Prøv igen
+              </Knap>
+            )}
+          </div>
+        </div>
+      ) : analyse ? (
+        <div className="space-y-5">
+          {analyse.klassifikation === 'UKENDT' ? (
+            <Advarsel titel="Bilaget kunne ikke placeres">
+              {analyse.resume ||
+                'Det står ikke klart, om bilaget er et job, et fradrag eller en investering.'}{' '}
+              Vælg selv typen nedenfor. Intet er gemt endnu.
+            </Advarsel>
+          ) : (
+            <p className="max-w-[68ch] text-xs text-ink-muted">{analyse.resume}</p>
+          )}
+
+          <Felt label="Posten oprettes som" paakraevet>
+            {(id) => (
+              <Vaelger
+                id={id}
+                value={valgtType}
+                onChange={(e) => setValgtType(e.target.value as Bilagsklassifikation)}
+              >
+                <option value="UKENDT">Vælg type</option>
+                <option value="JOB">Honorarjob, rubrik 12</option>
+                <option value="FRADRAG">Fradrag, rubrik 29</option>
+                <option value="INVESTERING">Investering, arkiv</option>
+              </Vaelger>
+            )}
+          </Felt>
+
+          {valgtType === 'JOB' && (
+            <div className="space-y-4 border-t border-rule pt-4">
+              <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
+                <Felt label="Hvervgiver" paakraevet>
+                  {(id) => (
+                    <>
+                      <Tekstfelt
+                        id={id}
+                        value={tekst.hvervgiver ?? ''}
+                        onChange={(e) => setTekst({ ...tekst, hvervgiver: e.target.value })}
+                        className={usikkert(sik('job', 'hvervgiver')) ? 'border-negative' : ''}
+                      />
+                      <UsikkerMarkering sikkerhed={sik('job', 'hvervgiver')} />
+                    </>
+                  )}
+                </Felt>
+                <Felt label="Honorar" paakraevet>
+                  {(id) => (
+                    <>
+                      <BeloebFelt
+                        id={id}
+                        vaerdi={tekst.honorar ?? ''}
+                        onVaerdi={(v) => setTekst({ ...tekst, honorar: v })}
+                      />
+                      <UsikkerMarkering sikkerhed={sik('job', 'honorar')} />
+                    </>
+                  )}
+                </Felt>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Felt label="Startdato" paakraevet>
+                  {(id) => (
+                    <>
+                      <Datofelt
+                        id={id}
+                        value={tekst.startDato ?? ''}
+                        onChange={(e) => setTekst({ ...tekst, startDato: e.target.value })}
+                      />
+                      <UsikkerMarkering sikkerhed={sik('job', 'startDato')} />
+                    </>
+                  )}
+                </Felt>
+                <Felt label="Slutdato">
+                  {(id) => (
+                    <Datofelt
+                      id={id}
+                      value={tekst.slutDato ?? ''}
+                      onChange={(e) => setTekst({ ...tekst, slutDato: e.target.value })}
+                    />
+                  )}
+                </Felt>
+                <Felt label="Betalingsdato">
+                  {(id) => (
+                    <Datofelt
+                      id={id}
+                      value={tekst.betalingsDato ?? ''}
+                      onChange={(e) => setTekst({ ...tekst, betalingsDato: e.target.value })}
+                    />
+                  )}
+                </Felt>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-[2fr_1fr_1fr]">
+                <Felt label="Adresse for jobbet">
+                  {(id) => (
+                    <Tekstfelt
+                      id={id}
+                      value={tekst.destinationAdresse ?? ''}
+                      onChange={(e) =>
+                        setTekst({ ...tekst, destinationAdresse: e.target.value })
+                      }
+                    />
+                  )}
+                </Felt>
+                <Felt label="Kilometer pr. tur">
+                  {(id) => (
+                    <BeloebFelt
+                      id={id}
+                      vaerdi={tekst.antalKm ?? ''}
+                      onVaerdi={(v) => setTekst({ ...tekst, antalKm: v })}
+                      suffiks="km"
+                    />
+                  )}
+                </Felt>
+                <Felt label="Antal ture">
+                  {(id) => (
+                    <BeloebFelt
+                      id={id}
+                      vaerdi={tekst.antalTure ?? ''}
+                      onVaerdi={(v) => setTekst({ ...tekst, antalTure: v })}
+                      suffiks=""
+                    />
+                  )}
+                </Felt>
+              </div>
+
+              <Felt label="Transportmiddel" hjaelp="Bestemmer om kørslen lander i rubrik 29 eller 51.">
+                {(id) => (
+                  <Vaelger
+                    id={id}
+                    value={tekst.transportmiddel || 'NONE'}
+                    onChange={(e) => setTekst({ ...tekst, transportmiddel: e.target.value })}
+                  >
+                    <option value="NONE">Ingen kørsel i eget transportmiddel</option>
+                    <option value="OWN_CAR_MC">Egen bil eller motorcykel, rubrik 29</option>
+                    <option value="OWN_BIKE">Egen cykel eller knallert, rubrik 29</option>
+                    <option value="PASSENGER">Passager, rubrik 51</option>
+                  </Vaelger>
+                )}
+              </Felt>
+
+              <div className="space-y-2.5">
+                <label className="flex items-start gap-2.5 text-xs text-ink">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(flag.amBidragFritaget)}
+                    onChange={(e) =>
+                      setFlag({ ...flag, amBidragFritaget: e.target.checked })
+                    }
+                    className="mt-0.5 h-4 w-4 accent-[oklch(0.21_0.008_75)]"
+                  />
+                  <span>
+                    Fritaget for AM-bidrag
+                    <UsikkerMarkering sikkerhed={sik('job', 'amBidragFritaget')} />
+                  </span>
+                </label>
+                <label className="flex items-start gap-2.5 text-xs text-ink">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(flag.erRubrik17)}
+                    onChange={(e) => setFlag({ ...flag, erRubrik17: e.target.checked })}
+                    className="mt-0.5 h-4 w-4 accent-[oklch(0.21_0.008_75)]"
+                  />
+                  <span>Hører til i rubrik 17 i stedet for rubrik 12</span>
+                </label>
+              </div>
             </div>
+          )}
+
+          {valgtType === 'FRADRAG' && (
+            <div className="space-y-4 border-t border-rule pt-4">
+              <Felt label="Omkostning" paakraevet>
+                {(id) => (
+                  <>
+                    <Tekstfelt
+                      id={id}
+                      value={tekst.beskrivelse ?? ''}
+                      onChange={(e) => setTekst({ ...tekst, beskrivelse: e.target.value })}
+                      className={usikkert(sik('fradrag', 'beskrivelse')) ? 'border-negative' : ''}
+                    />
+                    <UsikkerMarkering sikkerhed={sik('fradrag', 'beskrivelse')} />
+                  </>
+                )}
+              </Felt>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Felt label="Type">
+                  {(id) => (
+                    <Tekstfelt
+                      id={id}
+                      value={tekst.typeKategori ?? ''}
+                      onChange={(e) => setTekst({ ...tekst, typeKategori: e.target.value })}
+                    />
+                  )}
+                </Felt>
+                <Felt label="Fakturadato" paakraevet>
+                  {(id) => (
+                    <>
+                      <Datofelt
+                        id={id}
+                        value={tekst.fakturaDato ?? ''}
+                        onChange={(e) => setTekst({ ...tekst, fakturaDato: e.target.value })}
+                      />
+                      <UsikkerMarkering sikkerhed={sik('fradrag', 'fakturaDato')} />
+                    </>
+                  )}
+                </Felt>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto]">
+                <Felt label="Fakturabeløb" paakraevet>
+                  {(id) => (
+                    <>
+                      <BeloebFelt
+                        id={id}
+                        vaerdi={tekst.fakturaBeloeb ?? ''}
+                        onVaerdi={(v) => setTekst({ ...tekst, fakturaBeloeb: v })}
+                      />
+                      <UsikkerMarkering sikkerhed={sik('fradrag', 'fakturaBeloeb')} />
+                    </>
+                  )}
+                </Felt>
+                <Felt
+                  label="Fradragsprocent"
+                  hjaelp="Forslaget er et skøn. Du hæfter selv for andelen."
+                >
+                  {(id) => (
+                    <BeloebFelt
+                      id={id}
+                      vaerdi={tekst.fradragsProcent ?? '100'}
+                      onVaerdi={(v) => setTekst({ ...tekst, fradragsProcent: v })}
+                      suffiks="%"
+                    />
+                  )}
+                </Felt>
+                <div className="flex flex-col justify-end pb-1">
+                  <span className="text-2xs text-ink-muted">Fradrag</span>
+                  <span className="tal text-lg font-semibold text-ink">
+                    {kr(
+                      (tal('fakturaBeloeb') *
+                        (tekst.fradragsProcent === '' ? 100 : tal('fradragsProcent'))) /
+                        100
+                    )}{' '}
+                    kr.
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {valgtType === 'INVESTERING' && (
+            <div className="space-y-4 border-t border-rule pt-4">
+              <Felt label="Investering" paakraevet>
+                {(id) => (
+                  <Tekstfelt
+                    id={id}
+                    value={tekst.titel ?? ''}
+                    onChange={(e) => setTekst({ ...tekst, titel: e.target.value })}
+                  />
+                )}
+              </Felt>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Felt label="Fakturadato" paakraevet>
+                  {(id) => (
+                    <Datofelt
+                      id={id}
+                      value={tekst.fakturaDato ?? ''}
+                      onChange={(e) => setTekst({ ...tekst, fakturaDato: e.target.value })}
+                    />
+                  )}
+                </Felt>
+                <Felt label="Beløb" paakraevet>
+                  {(id) => (
+                    <BeloebFelt
+                      id={id}
+                      vaerdi={tekst.beloeb ?? ''}
+                      onVaerdi={(v) => setTekst({ ...tekst, beloeb: v })}
+                    />
+                  )}
+                </Felt>
+              </div>
+            </div>
+          )}
+
+          <div className="border-t border-rule pt-4">
+            <Felt label="Note">
+              {(id) => (
+                <Notatfelt
+                  id={id}
+                  vaerdi={tekst.revisorNotat ?? ''}
+                  onVaerdi={(v) => setTekst({ ...tekst, revisorNotat: v })}
+                />
+              )}
+            </Felt>
           </div>
 
-          {/* Loading Indicator */}
-          {isAnalyzing && (
-            <div className="flex items-center justify-center gap-3 p-6 bg-stone-50 border border-stone-200 rounded-xl text-stone-700">
-              <Loader2 className="w-5 h-5 animate-spin text-stone-900" />
-              <span className="text-sm font-medium">
-                Revisor AI analyserer bilag med Gemini 3.8 Flash...
-              </span>
-            </div>
+          {valgtType === 'UKENDT' && (
+            <p className="text-2xs text-ink-muted">
+              Vælg en type foroven, før posten kan oprettes. Bilaget er gemt i arkivet
+              uanset hvad.
+            </p>
           )}
 
-          {/* Error notice */}
-          {errorMessage && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-red-600 mt-0.5" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
-
-          {/* Success notice */}
-          {successNotice && (
-            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center gap-2 font-medium">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span>{successNotice}</span>
-            </div>
-          )}
-
-          {/* Extraction Preview Card */}
-          {analysisResult && !isAnalyzing && (
-            <div className="bg-stone-50 border border-stone-200 rounded-xl p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
-                      analysisResult.classification === 'JOB'
-                        ? 'bg-blue-100 text-blue-800'
-                        : analysisResult.classification === 'FRADRAG'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'bg-purple-100 text-purple-800'
-                    }`}
-                  >
-                    {analysisResult.classification === 'JOB' && 'Honorarjob (Rubrik 12)'}
-                    {analysisResult.classification === 'FRADRAG' && 'Driftsfradrag (Rubrik 29)'}
-                    {analysisResult.classification === 'INVESTERING' && 'Investering'}
-                  </span>
-                  <span className="text-xs text-stone-500">
-                    Sikkerhed: {Math.round(analysisResult.confidence * 100)}%
-                  </span>
-                </div>
-              </div>
-
-              <p className="text-sm font-medium text-stone-900">
-                {analysisResult.summary}
-              </p>
-
-              {/* Data fields for JOB */}
-              {analysisResult.classification === 'JOB' && analysisResult.job && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-white p-3.5 rounded-lg border border-stone-200 text-xs">
-                  <div>
-                    <span className="text-stone-400 block">Hvervgiver</span>
-                    <span className="font-semibold text-stone-800">{analysisResult.job.hvervgiver}</span>
-                  </div>
-                  <div>
-                    <span className="text-stone-400 block">Honorar</span>
-                    <span className="font-bold text-stone-900 text-sm">
-                      {analysisResult.job.honorar?.toLocaleString('da-DK')} DKK
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-stone-400 block">Dato</span>
-                    <span className="font-medium text-stone-800">{analysisResult.job.startDato}</span>
-                  </div>
-                  <div>
-                    <span className="text-stone-400 block">Transportmiddel</span>
-                    <span className="font-medium text-stone-800">
-                      {analysisResult.job.transportmiddel === 'OWN_CAR_MC' ? 'Egen bil/MC' : 'Ingen/Andet'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-stone-400 block">Kørselsfradrag</span>
-                    <span className="font-semibold text-emerald-700">
-                      {analysisResult.job.koerselsFradrag?.toLocaleString('da-DK')} DKK (Rubrik 29)
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-stone-400 block">AM-bidrag</span>
-                    <span className="font-medium text-stone-800">
-                      {analysisResult.job.amBidragFritaget ? 'Fritaget (0%)' : 'Standard 8%'}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Data fields for FRADRAG */}
-              {analysisResult.classification === 'FRADRAG' && analysisResult.fradrag && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-3.5 rounded-lg border border-stone-200 text-xs">
-                  <div>
-                    <span className="text-stone-400 block">Beskrivelse</span>
-                    <span className="font-semibold text-stone-800">{analysisResult.fradrag.beskrivelse}</span>
-                  </div>
-                  <div>
-                    <span className="text-stone-400 block">Fakturabeløb</span>
-                    <span className="font-bold text-stone-900">
-                      {analysisResult.fradrag.fakturaBeloeb?.toLocaleString('da-DK')} DKK
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-stone-400 block">Fradragsprocent</span>
-                    <span className="font-semibold text-stone-800">
-                      {analysisResult.fradrag.forslagFradragsprocent}%
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-stone-400 block">Fradrag i DKK</span>
-                    <span className="font-bold text-emerald-700">
-                      {analysisResult.fradrag.fradragIDKK?.toLocaleString('da-DK')} DKK
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Revisor AI rådgivnings-notat */}
-              <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-lg text-xs text-amber-950">
-                <span className="font-bold block mb-0.5">Revisor AI vurdering:</span>
-                {analysisResult.revisorNotat}
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                {analysisResult.classification === 'JOB' && analysisResult.job && (
-                  <div className="flex items-center gap-2 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const j = analysisResult.job as Job;
-                        window.open(createGoogleCalendarUrl(j), '_blank');
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-stone-300 bg-white hover:bg-stone-100 text-stone-700 font-medium transition"
-                    >
-                      <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                      Google Kalender
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => downloadIcsFile(analysisResult.job as Job)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-stone-300 bg-white hover:bg-stone-100 text-stone-700 font-medium transition"
-                    >
-                      Hent .ics
-                    </button>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleApproveAndSave}
-                  className="ml-auto inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-stone-900 text-white hover:bg-stone-800 font-semibold text-sm transition shadow-xs"
-                >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  Godkend & Opret i regnskabet
-                </button>
-              </div>
-            </div>
-          )}
+          {fejl && <Advarsel titel="Posten blev ikke oprettet">{fejl}</Advarsel>}
         </div>
-      </div>
-    </div>
+      ) : null}
+    </Modal>
   );
-};
+}

@@ -1,12 +1,14 @@
-export type TransportMiddel = 'NONE' | 'OWN_CAR_MC' | 'OWN_BIKE' | 'PASSENGER';
+import type { TransportMiddel } from './lib/tax/koersel';
+
+export type { TransportMiddel };
 
 export interface IndkomstAar {
   id: string;
   aar: number;
   hjemmeadresse: string;
   kommune: string;
-  kommuneSkatteprocent: number; // f.eks. 24.9
-  kirkeskatteprocent: number; // f.eks. 0.75
+  kommuneSkatteprocent: number;
+  kirkeskatteprocent: number;
   forventetAIndkomst: number;
   forventetPensionSUDagpenge: number;
   forventedeFradragAIndkomst: number;
@@ -20,20 +22,25 @@ export interface Job {
   indkomstAarId: string;
   hvervgiver: string;
   honorar: number;
-  startDato: string; // YYYY-MM-DD
-  slutDato: string; // YYYY-MM-DD
-  betalingsDato: string; // YYYY-MM-DD
+  /** YYYY-MM-DD. Afgør hvilket indkomstår jobbet hører til. */
+  startDato: string;
+  slutDato: string;
+  betalingsDato: string;
   transportmiddel: TransportMiddel;
+  /** Strækning for én tur. */
   antalKm: number;
   antalTure: number;
   destinationAdresse?: string;
-  koerselsFradrag: number;
   amBidragFritaget: boolean;
+  /** Rubrik 17 i stedet for rubrik 12: legater, gruppeliv, visse personalegoder. */
+  erRubrik17?: boolean;
   timerJob?: number;
   timerTransportForberedelse?: number;
   type?: string;
-  bilagNavne?: string[];
+  bilagIds: string[];
   noter?: string;
+  /** Sat på poster oprettet af "indlæs eksempeldata", så de kan fjernes samlet. */
+  erEksempel?: boolean;
 }
 
 export interface Fradrag {
@@ -45,8 +52,9 @@ export interface Fradrag {
   fakturaBeloeb: number;
   fradragsProcent: number;
   fradragIDKK: number;
-  bilagNavne?: string[];
+  bilagIds: string[];
   revisorNotat?: string;
+  erEksempel?: boolean;
 }
 
 export interface Investering {
@@ -55,7 +63,9 @@ export interface Investering {
   titel: string;
   beloeb: number;
   fakturaDato: string;
-  bilagNavne?: string[];
+  bilagIds: string[];
+  noter?: string;
+  erEksempel?: boolean;
 }
 
 export interface OpsparingsTracker {
@@ -63,42 +73,83 @@ export interface OpsparingsTracker {
   opsparetPrivat: number;
 }
 
-export interface SkatteBeregningResultat {
-  // Blok 1: Indkomst & Fradrag
-  honorarerAlt: number; // Rubrik 12
-  rubrik17Indkomst: number; // Rubrik 17
-  amPligtigBIndkomst: number;
-  amBidrag: number; // 8%
-  oevrigeFradragRubrik29: number; // Sum af Fradrag + bil/cykelkørsel (Rubrik 29)
-  fradragKatalogSum: number;
-  koerselsFradragRubrik29: number;
-  befordringsFradragRubrik51: number; // Passagerkørsel (Rubrik 51)
-  personligIndkomst: number;
-  skattepligtigIndkomst: number;
-
-  // Blok 2: Skatteberegning
-  bundskat: number;
-  kommuneskat: number;
-  topskat: number;
-  kirkeskat: number;
-  personfradragSkattevaerdi: number;
-  beregnetSkatAlt: number;
-  samletSkatOgAM: number;
-  indtaegtEfterSkat: number;
-  effektivSkatteprocent: number;
-
-  // Valideringer & Sikkerhed
-  rubrik29LoftOverskredet: boolean;
-  maksTilladtFradragRubrik29: number;
-  overskydendeFradrag: number;
+export interface Bilag {
+  id: string;
+  sha256: string;
+  filnavn: string;
+  mimeType: string;
+  stoerrelse: number;
+  uploadet: string;
 }
 
-export interface AiExtractionResult {
-  classification: 'JOB' | 'FRADRAG' | 'INVESTERING' | 'UNKNOWN';
-  confidence: number;
-  summary: string;
-  job?: Partial<Job>;
-  fradrag?: Partial<Fradrag>;
-  investering?: Partial<Investering>;
+/* ---------------------------------------------------------------- AI-laget */
+
+export type Bilagsklassifikation = 'JOB' | 'FRADRAG' | 'INVESTERING' | 'UKENDT';
+
+/**
+ * Et udtrukket felt med modellens egen vurdering af, hvor sikker den er.
+ * Felter under tærsklen markeres i grænsefladen og skal bekræftes aktivt.
+ */
+export interface UdtruktFelt<T> {
+  vaerdi: T | null;
+  sikkerhed: number;
+}
+
+export interface JobUdtraek {
+  hvervgiver: UdtruktFelt<string>;
+  honorar: UdtruktFelt<number>;
+  startDato: UdtruktFelt<string>;
+  slutDato: UdtruktFelt<string>;
+  betalingsDato: UdtruktFelt<string>;
+  destinationAdresse: UdtruktFelt<string>;
+  transportmiddel: UdtruktFelt<TransportMiddel>;
+  antalKm: UdtruktFelt<number>;
+  antalTure: UdtruktFelt<number>;
+  amBidragFritaget: UdtruktFelt<boolean>;
+  erRubrik17: UdtruktFelt<boolean>;
+  type: UdtruktFelt<string>;
+  timerJob: UdtruktFelt<number>;
+  timerTransportForberedelse: UdtruktFelt<number>;
+}
+
+export interface FradragUdtraek {
+  beskrivelse: UdtruktFelt<string>;
+  typeKategori: UdtruktFelt<string>;
+  fakturaDato: UdtruktFelt<string>;
+  fakturaBeloeb: UdtruktFelt<number>;
+  fradragsProcent: UdtruktFelt<number>;
+}
+
+export interface InvesteringUdtraek {
+  titel: UdtruktFelt<string>;
+  beloeb: UdtruktFelt<number>;
+  fakturaDato: UdtruktFelt<string>;
+}
+
+export interface BilagsAnalyse {
+  klassifikation: Bilagsklassifikation;
+  sikkerhed: number;
+  resume: string;
   revisorNotat: string;
+  job?: JobUdtraek;
+  fradrag?: FradragUdtraek;
+  investering?: InvesteringUdtraek;
+}
+
+/** Analysen bliver til en kladde. Intet gemmes, før brugeren godkender. */
+export interface Kladde {
+  id: string;
+  bilag: Bilag;
+  analyse: BilagsAnalyse;
+  /** Sat når et bilag med samme indhold allerede findes. */
+  dublet?: { bilagId: string; filnavn: string; uploadet: string };
+}
+
+/** Felter under denne sikkerhed fremhæves og skal bekræftes aktivt. */
+export const SIKKERHEDSTAERSKEL = 0.75;
+
+export interface ChatBesked {
+  rolle: 'bruger' | 'assistent';
+  indhold: string;
+  kilder?: { titel: string; url: string }[];
 }

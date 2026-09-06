@@ -1,267 +1,103 @@
-import React, { useState } from 'react';
-import {
-  FileCheck2,
-  Copy,
-  Check,
-  ExternalLink,
-  Info,
-  HelpCircle,
-  AlertCircle
-} from 'lucide-react';
-import { SkatteBeregningResultat, IndkomstAar } from '../types';
+import React from 'react';
+import type { IndkomstAar } from '../types';
+import type { SkatteBeregning } from '../lib/tax/beregn';
+import { kr } from '../lib/format';
+import { Advarsel, Knap, Rubrik, Sektion, Tabel, Td, Th } from './ui';
 
 interface Props {
-  skatteBeregning: SkatteBeregningResultat;
   indkomstAar: IndkomstAar;
+  beregning: SkatteBeregning;
 }
 
-export const AarsopgoerelseModule: React.FC<Props> = ({
-  skatteBeregning,
-  indkomstAar,
-}) => {
-  const [copiedRubrik, setCopiedRubrik] = useState<string | null>(null);
-
-  const copyAmount = (rubrik: string, amount: number) => {
-    navigator.clipboard.writeText(amount.toString());
-    setCopiedRubrik(rubrik);
-    setTimeout(() => setCopiedRubrik(null), 1800);
-  };
+export function AarsopgoerelseModule({ indkomstAar, beregning }: Props) {
+  const rubrikker: {
+    nr: 12 | 17 | 29 | 51;
+    navn: string;
+    beloeb: number;
+    forklaring: string;
+  }[] = [
+    {
+      nr: 12,
+      navn: 'Honorarer, vederlag af forskellig art',
+      beloeb: beregning.honorarerRubrik12,
+      forklaring: 'Summen af alle honorarjobs i året.',
+    },
+    {
+      nr: 17,
+      navn: 'Gruppelivsforsikring, uddelinger, personalegoder',
+      beloeb: beregning.rubrik17Indkomst,
+      forklaring: 'Jobs, du har markeret som hørende til rubrik 17.',
+    },
+    {
+      nr: 29,
+      navn: 'Øvrige fradrag i personlig indkomst',
+      beloeb: beregning.anvendtFradragRubrik29,
+      forklaring:
+        'Driftsomkostninger plus kørsel i egen bil eller på egen cykel. Beløbet kan ikke overstige B-indkomsten efter AM-bidrag.',
+    },
+    {
+      nr: 51,
+      navn: 'Befordring',
+      beloeb: beregning.befordringsFradragRubrik51,
+      forklaring: 'Kun kørsel registreret som passager.',
+    },
+  ];
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-white border border-stone-200 rounded-xl p-6 shadow-xs">
-        <div>
-          <h2 className="text-xl font-bold text-stone-900 flex items-center gap-2">
-            <FileCheck2 className="w-5 h-5 text-stone-700" />
-            Skat — Årsopgørelse & Rubrikoversigt for {indkomstAar.aar}
-          </h2>
-          <p className="text-xs text-stone-500 mt-1">
-            Her er de nøjagtige tal og felter, som du skal indtaste eller kontrollere på TastSelv Borger (skat.dk).
-          </p>
-        </div>
+    <Sektion
+      titel={`Årsopgørelse ${beregning.aar}`}
+      beskrivelse="Tallene, som de skal stå på årsopgørelsen på skat.dk. Sammenlign dem med det, der allerede er indberettet."
+      handling={<Knap onClick={() => window.print()}>Udskriv</Knap>}
+    >
+      <Tabel minBredde={620}>
+        <thead>
+          <tr>
+            <Th bredde="4rem">Rubrik</Th>
+            <Th>Tekst på årsopgørelsen</Th>
+            <Th hoejre bredde="10rem">Beløb</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {rubrikker.map((r) => (
+            <tr key={r.nr}>
+              <Td>
+                <Rubrik nr={r.nr} aktiv={r.beloeb !== 0} />
+              </Td>
+              <Td>
+                <span className={r.beloeb !== 0 ? 'font-medium text-ink' : 'text-ink-muted'}>
+                  {r.navn}
+                </span>
+                <span className="block max-w-[64ch] text-2xs text-ink-faint">
+                  {r.forklaring}
+                </span>
+              </Td>
+              <Td hoejre tal className={r.beloeb === 0 ? 'text-ink-faint' : undefined}>
+                {kr(r.beloeb)}
+              </Td>
+            </tr>
+          ))}
+        </tbody>
+      </Tabel>
 
-        <a
-          href="https://skat.dk/tastselv"
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-xs font-semibold transition shadow-xs"
-        >
-          Åbn skat.dk TastSelv
-          <ExternalLink className="w-3.5 h-3.5" />
-        </a>
+      <div className="mt-6 space-y-3">
+        <Advarsel art="neutral" titel="Hvis et beløb ikke står, hvor du forventer">
+          Mangler beløbet i rubrik 12 på den officielle årsopgørelse, skal det i stedet stå i
+          rubrik 15. Mangler rubrik 17, skal det findes i rubrik 20. Hvilken rubrik der bruges,
+          afhænger af, hvordan hvervgiveren har indberettet.
+        </Advarsel>
+
+        <Advarsel art="neutral" titel="Hvis der er indberettet for meget">
+          Står der et højere beløb i rubrik 12 eller 17, end du selv har registreret, kan appen
+          ikke rette det. Indberetningen kommer fra hvervgiveren, så den skal rettes af dem
+          eller af SKAT.
+        </Advarsel>
+
+        {indkomstAar.laast && (
+          <Advarsel art="positiv" titel="Året er låst">
+            Der kan ikke ændres i posterne, før du låser året op igen.
+          </Advarsel>
+        )}
       </div>
-
-      {/* Official Rubrik Boxes Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Rubrik 12 */}
-        <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-xs flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="px-2 py-0.5 rounded font-mono font-bold text-xs bg-stone-100 text-stone-800">
-                Rubrik 12
-              </span>
-              <span className="text-[11px] font-semibold text-stone-500">B-indkomst</span>
-            </div>
-            <h3 className="font-bold text-stone-900 text-sm mt-2">
-              Honorarer, vederlag og anden B-indkomst
-            </h3>
-            <p className="text-xs text-stone-500 mt-1 leading-relaxed">
-              Summen af alle honorarer før AM-bidrag og skat for indkomståret {indkomstAar.aar}.
-            </p>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
-            <span className="text-2xl font-bold font-mono text-stone-950">
-              {skatteBeregning.honorarerAlt.toLocaleString('da-DK')} DKK
-            </span>
-            <button
-              type="button"
-              onClick={() => copyAmount('12', skatteBeregning.honorarerAlt)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-stone-300 hover:bg-stone-100 text-xs font-medium text-stone-700 transition"
-            >
-              {copiedRubrik === '12' ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  Kopieret
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5 text-stone-500" />
-                  Kopiér
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Rubrik 29 */}
-        <div className="bg-white border-2 border-emerald-200/90 rounded-xl p-5 shadow-xs flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="px-2 py-0.5 rounded font-mono font-bold text-xs bg-emerald-100 text-emerald-800">
-                Rubrik 29
-              </span>
-              <span className="text-[11px] font-semibold text-emerald-800">Fradrag i pers. indkomst</span>
-            </div>
-            <h3 className="font-bold text-stone-900 text-sm mt-2">
-              Øvrige lønmodtager- & B-indkomstfradrag
-            </h3>
-            <p className="text-xs text-stone-500 mt-1 leading-relaxed">
-              Driftsomkostninger ({skatteBeregning.fradragKatalogSum.toLocaleString('da-DK')} DKK) samt kørselsfradrag for egen bil/cykel ({skatteBeregning.koerselsFradragRubrik29.toLocaleString('da-DK')} DKK).
-            </p>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
-            <span className="text-2xl font-bold font-mono text-emerald-900">
-              {skatteBeregning.oevrigeFradragRubrik29.toLocaleString('da-DK')} DKK
-            </span>
-            <button
-              type="button"
-              onClick={() => copyAmount('29', skatteBeregning.oevrigeFradragRubrik29)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-stone-300 hover:bg-stone-100 text-xs font-medium text-stone-700 transition"
-            >
-              {copiedRubrik === '29' ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  Kopieret
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5 text-stone-500" />
-                  Kopiér
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Rubrik 17 */}
-        <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-xs flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="px-2 py-0.5 rounded font-mono font-bold text-xs bg-stone-100 text-stone-800">
-                Rubrik 17
-              </span>
-              <span className="text-[11px] font-semibold text-stone-500">Særlig indkomst</span>
-            </div>
-            <h3 className="font-bold text-stone-900 text-sm mt-2">
-              Legater, uddelinger og bestemte personalegoder
-            </h3>
-            <p className="text-xs text-stone-500 mt-1 leading-relaxed">
-              Indtægter der er fritaget for arbejdsmarkedsbidrag.
-            </p>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
-            <span className="text-2xl font-bold font-mono text-stone-950">
-              {skatteBeregning.rubrik17Indkomst.toLocaleString('da-DK')} DKK
-            </span>
-            <button
-              type="button"
-              onClick={() => copyAmount('17', skatteBeregning.rubrik17Indkomst)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-stone-300 hover:bg-stone-100 text-xs font-medium text-stone-700 transition"
-            >
-              {copiedRubrik === '17' ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  Kopieret
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5 text-stone-500" />
-                  Kopiér
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Rubrik 51 */}
-        <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-xs flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="px-2 py-0.5 rounded font-mono font-bold text-xs bg-stone-100 text-stone-800">
-                Rubrik 51
-              </span>
-              <span className="text-[11px] font-semibold text-stone-500">Ligningsmæssigt</span>
-            </div>
-            <h3 className="font-bold text-stone-900 text-sm mt-2">
-              Befordringsfradrag (Passager)
-            </h3>
-            <p className="text-xs text-stone-500 mt-1 leading-relaxed">
-              Kørsel hvor du har været passager i bil/MC og ikke selv afholdt driftsudgiften til køretøjet.
-            </p>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
-            <span className="text-2xl font-bold font-mono text-stone-950">
-              {skatteBeregning.befordringsFradragRubrik51.toLocaleString('da-DK')} DKK
-            </span>
-            <button
-              type="button"
-              onClick={() => copyAmount('51', skatteBeregning.befordringsFradragRubrik51)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-stone-300 hover:bg-stone-100 text-xs font-medium text-stone-700 transition"
-            >
-              {copiedRubrik === '51' ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  Kopieret
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5 text-stone-500" />
-                  Kopiér
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Skat.dk Vejledning & Krydshenvisninger */}
-      <div className="bg-stone-50 border border-stone-200 rounded-xl p-6 space-y-4">
-        <h3 className="font-bold text-stone-900 text-sm flex items-center gap-2">
-          <HelpCircle className="w-4 h-4 text-stone-700" />
-          Vigtige regler og krydshenvisninger ved indberetning
-        </h3>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-stone-700">
-          <div className="p-3 bg-white rounded-lg border border-stone-200">
-            <span className="font-bold text-stone-900 block mb-1">
-              Mangler Rubrik 12 på din årsopgørelse?
-            </span>
-            Hvis feltet er låst eller ikke fremgår på skat.dk, skal B-indkomsten indtastes i{' '}
-            <strong className="text-stone-900">Rubrik 15</strong>. Hvis Rubrik 17 mangler, skal det anføres i{' '}
-            <strong className="text-stone-900">Rubrik 20</strong>.
-          </div>
-
-          <div className="p-3 bg-white rounded-lg border border-stone-200">
-            <span className="font-bold text-stone-900 block mb-1">
-              Hvorfor havner bilkørsel i Rubrik 29?
-            </span>
-            Når du kører i egen bil eller cykel til et B-indkomstjob, er kørslen en direkte driftsomkostning. 
-            Det giver fradrag i din <em>personlige indkomst</em> (Rubrik 29) med væsentlig højere skatteværdi (op til ca. 52%) 
-            end et almindeligt befordringsfradrag (Rubrik 51, ca. 26%).
-          </div>
-
-          <div className="p-3 bg-white rounded-lg border border-stone-200">
-            <span className="font-bold text-stone-900 block mb-1">
-              Har en hvervgiver indberettet for meget?
-            </span>
-            Hvis en arrangør eller kunde har indberettet et forkert beløb til eIndkomst, kan du ikke rette det direkte i TastSelv. 
-            Du skal kontakte hvervgiveren og bede dem indsende en rettelse til Skattestyrelsen.
-          </div>
-
-          <div className="p-3 bg-white rounded-lg border border-stone-200">
-            <span className="font-bold text-stone-900 block mb-1">
-              Dokumentationskrav
-            </span>
-            Gem alle bilag og kørselsnotater for indkomståret i mindst 5 år. 
-            Du kan altid downloade dine bilag og eksportere en samlet rapport fra dette system.
-          </div>
-        </div>
-      </div>
-    </div>
+    </Sektion>
   );
-};
+}

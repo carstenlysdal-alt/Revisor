@@ -1,1 +1,132 @@
 @import "tailwindcss";
+
+/*
+  Revisor AI, designtokens.
+
+  Farvestrategien står i DESIGN.md: grænsefladen er warm graphite på papir og
+  har ingen brandfarve. Rød og grøn er de eneste kulørte flader, og de betyder
+  noget hver gang de optræder. Aktiv tilstand markeres med vægt og en blæklinje.
+*/
+
+@theme {
+  --color-ground: oklch(0.972 0.004 75);
+  --color-surface: oklch(0.993 0.003 75);
+  --color-sunk: oklch(0.955 0.005 75);
+
+  --color-ink: oklch(0.21 0.008 75);
+  --color-ink-muted: oklch(0.5 0.01 75);
+  --color-ink-faint: oklch(0.63 0.008 75);
+
+  --color-rule: oklch(0.895 0.006 75);
+  --color-rule-strong: oklch(0.78 0.008 75);
+
+  --color-negative: oklch(0.505 0.165 27);
+  --color-negative-ground: oklch(0.955 0.03 27);
+  --color-positive: oklch(0.455 0.085 150);
+  --color-positive-ground: oklch(0.955 0.025 150);
+  --color-focus: oklch(0.55 0.14 250);
+
+  --font-display: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --text-2xs: 0.6875rem;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--color-ground);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 0.875rem;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    /* Ingen vandret scroll på siden. Brede tabeller scroller i egen container. */
+    overflow-x: hidden;
+  }
+
+  /* Tal skal stå under hinanden. En beløbskolonne, der hopper, kan ikke læses. */
+  .tal {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* Musen skal ikke have fokusringen. Tastaturet skal. */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  select:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+
+  ::selection {
+    background: var(--color-ink);
+    color: var(--color-surface);
+  }
+}
+
+@layer utilities {
+  /* Bevidst restriktiv overgang. Ease-out, ingen bounce. */
+  .overgang {
+    transition-property: color, background-color, border-color, opacity, transform;
+    transition-duration: 160ms;
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  @page {
+    margin: 16mm;
+  }
+
+  body {
+    background: #fff;
+    font-size: 10pt;
+  }
+
+  .ikke-print {
+    display: none !important;
+  }
+
+  .kun-print {
+    display: block !important;
+  }
+
+  table {
+    break-inside: auto;
+  }
+
+  tr {
+    break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+}

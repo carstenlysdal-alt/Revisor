@@ -1,163 +1,144 @@
 import React from 'react';
-import {
-  Sparkles,
-  TrendingUp,
-  ShieldAlert,
-  HelpCircle,
-  MessageSquare,
-  UploadCloud,
-  ChevronRight,
-  ShieldCheck,
-  Building,
-  CheckCircle2
-} from 'lucide-react';
-import { IndkomstAar, Job, Fradrag, SkatteBeregningResultat, OpsparingsTracker } from '../types';
+import type { IndkomstAar, OpsparingsTracker } from '../types';
+import type { SkatteBeregning } from '../lib/tax/beregn';
+import { kr, pct } from '../lib/format';
+import { Advarsel, Knap } from './ui';
 
 interface Props {
-  activeIndkomstAar: IndkomstAar;
-  allIndkomstAar: IndkomstAar[];
-  allJobs: Job[];
-  allFradrag: Fradrag[];
-  activeSkatteBeregning: SkatteBeregningResultat;
-  activeOpsparing: OpsparingsTracker;
-  onOpenAiScanner: () => void;
-  onOpenRevisorChat: () => void;
-  onSelectTab: (tab: string) => void;
+  indkomstAar: IndkomstAar;
+  beregning: SkatteBeregning;
+  opsparing: OpsparingsTracker;
+  aiKlar: boolean;
+  aiUdbyder: string | null;
+  aiModel: string | null;
+  onAabnScanner: () => void;
+  onAabnChat: () => void;
+  onGaaTil: (fane: string) => void;
 }
 
-export const GlobalSidebar: React.FC<Props> = ({
-  activeIndkomstAar,
-  allJobs,
-  allFradrag,
-  activeSkatteBeregning,
-  activeOpsparing,
-  onOpenAiScanner,
-  onOpenRevisorChat,
-  onSelectTab,
-}) => {
-  // Compute accumulated gains across ALL years
-  const samletFradragAllYears = allFradrag.reduce((sum, f) => sum + (Number(f.fradragIDKK) || 0), 0) +
-    allJobs.reduce((sum, j) => sum + (Number(j.koerselsFradrag) || 0), 0);
-  
-  // Approximate tax saved: ~37% of deductions
-  const sparetEfterSkatAllYears = Math.round(samletFradragAllYears * 0.37);
+function Noegletal({
+  label,
+  vaerdi,
+  note,
+  fremhaev = false,
+}: {
+  label: string;
+  vaerdi: string;
+  note?: string;
+  fremhaev?: boolean;
+}) {
+  return (
+    <div className="border-b border-rule py-2.5 last:border-b-0">
+      <p className="text-2xs uppercase tracking-wide text-ink-faint">{label}</p>
+      <p
+        className={`tal mt-0.5 ${fremhaev ? 'text-xl font-semibold' : 'text-base'} text-ink`}
+      >
+        {vaerdi}
+      </p>
+      {note && <p className="mt-0.5 text-2xs text-ink-muted">{note}</p>}
+    </div>
+  );
+}
 
-  const skatOgAmTotal = activeSkatteBeregning.samletSkatOgAM;
-  const daekketTotal = (activeOpsparing.indbetaltTilSkat || 0) + (activeOpsparing.opsparetPrivat || 0);
-  const manglerOpsparing = Math.max(0, skatOgAmTotal - daekketTotal);
+export function GlobalSidebar({
+  indkomstAar,
+  beregning,
+  opsparing,
+  aiKlar,
+  aiUdbyder,
+  aiModel,
+  onAabnScanner,
+  onAabnChat,
+  onGaaTil,
+}: Props) {
+  const afsat = opsparing.indbetaltTilSkat + opsparing.opsparetPrivat;
+  const mangler = Math.max(0, beregning.samletSkatOgAM - afsat);
 
   return (
-    <aside className="w-full lg:w-72 space-y-4 shrink-0">
-      {/* AI Quick Upload Button */}
-      <div className="bg-stone-900 text-white rounded-xl p-5 shadow-xs">
-        <div className="flex items-center gap-2 text-amber-300 text-xs font-bold uppercase tracking-wider mb-2">
-          <Sparkles className="w-4 h-4" />
-          AI Bilagsscanner
-        </div>
-        <h4 className="font-bold text-sm text-white leading-snug">
-          "Upload, så sker resten"
-        </h4>
-        <p className="text-xs text-stone-300 mt-1 leading-relaxed">
-          Drop en kontrakt, honorarseddel eller kvittering. AI udfylder job/fradrag og kalender.
-        </p>
-        <button
-          type="button"
-          onClick={onOpenAiScanner}
-          className="mt-4 w-full py-2.5 px-4 bg-white text-stone-900 hover:bg-stone-100 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs"
-        >
-          <UploadCloud className="w-4 h-4 text-stone-900" />
-          Scan Bilag Nu
-        </button>
-      </div>
+    <aside className="ikke-print w-full shrink-0 lg:w-72">
+      <div className="lg:sticky lg:top-24">
+        <h2 className="border-b border-rule-strong pb-1.5 font-display text-sm font-bold text-ink">
+          Året {beregning.aar}
+        </h2>
 
-      {/* Accumulated Gain Widget (Gevinst-widget) */}
-      <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-xs">
-        <div className="flex items-center gap-2 text-stone-800 text-xs font-bold uppercase tracking-wider mb-2">
-          <TrendingUp className="w-4 h-4 text-emerald-600" />
-          Akkumuleret Gevinst
-        </div>
-        <div className="space-y-2.5 pt-1">
-          <div>
-            <span className="text-[11px] text-stone-500 block">Opnåede fradrag i alt:</span>
-            <span className="text-lg font-bold font-mono text-stone-900">
-              {samletFradragAllYears.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
-          <div>
-            <span className="text-[11px] text-stone-500 block">Estimeret sparet i skat:</span>
-            <span className="text-lg font-bold font-mono text-emerald-800">
-              ~ {sparetEfterSkatAllYears.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
-        </div>
-        <div className="mt-3 pt-3 border-t border-stone-100 text-[11px] text-stone-400">
-          Opgjort på tværs af alle registrerede år.
-        </div>
-      </div>
+        <Noegletal
+          label="Skat og AM-bidrag"
+          vaerdi={`${kr(beregning.samletSkatOgAM)} kr.`}
+          note={`Effektivt ${pct(beregning.effektivSkatteprocent)} af honorarerne.`}
+          fremhaev
+        />
+        <Noegletal label="Sat til side" vaerdi={`${kr(afsat)} kr.`} />
+        <Noegletal
+          label="Tilbage efter skat"
+          vaerdi={`${kr(beregning.indtaegtEfterSkat)} kr.`}
+        />
+        <Noegletal
+          label="Fradrag i rubrik 29"
+          vaerdi={`${kr(beregning.anvendtFradragRubrik29)} kr.`}
+          note={
+            beregning.rubrik29LoftOverskredet
+              ? `${kr(beregning.overskydendeFradrag)} kr. kan ikke bruges i år.`
+              : undefined
+          }
+        />
 
-      {/* Warning widget if savings are insufficient */}
-      {manglerOpsparing > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 shadow-xs">
-          <div className="flex items-start gap-2.5">
-            <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-            <div className="text-xs">
-              <span className="font-bold text-red-950 block">
-                Utilstrækkelig opsparing!
-              </span>
-              <p className="text-red-800 mt-1 leading-relaxed">
-                Du mangler at afsætte <strong>{manglerOpsparing.toLocaleString('da-DK')} DKK</strong> til B-skat og AM-bidrag for {activeIndkomstAar.aar}.
-              </p>
+        {mangler > 0 && (
+          <div className="mt-4">
+            <Advarsel titel="Der mangler at blive sat penge til side">
+              Du står til at skulle betale {kr(mangler)} kr. mere, end der er dækket ind.
               <button
                 type="button"
-                onClick={() => onSelectTab('opsparing')}
-                className="mt-2.5 text-xs font-semibold text-red-900 hover:text-red-950 underline flex items-center gap-1"
+                onClick={() => onGaaTil('opsparing')}
+                className="mt-1.5 block underline underline-offset-2"
               >
-                Se detaljer i opsparings-trackeren
-                <ChevronRight className="w-3 h-3" />
+                Se hvad der skal til
               </button>
-            </div>
+            </Advarsel>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Ask AI Revisor Chat Card */}
-      <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-xs">
-        <div className="flex items-center gap-2 text-stone-900 font-bold text-xs mb-1.5">
-          <MessageSquare className="w-4 h-4 text-stone-700" />
-          Spørg din Revisor AI
-        </div>
-        <p className="text-xs text-stone-500 leading-relaxed">
-          Er du i tvivl om Rubrik 29, kørselstakster eller momsfritagelse for musikere og freelancere?
-        </p>
-        <button
-          type="button"
-          onClick={onOpenRevisorChat}
-          className="mt-3.5 w-full py-2 px-3 bg-stone-100 hover:bg-stone-200/80 text-stone-900 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 border border-stone-200"
-        >
-          <MessageSquare className="w-3.5 h-3.5" />
-          Åbn Revisor AI Chat
-        </button>
-      </div>
+        {mangler === 0 && beregning.samletSkatOgAM > 0 && (
+          <div className="mt-4">
+            <Advarsel art="positiv" titel="Skatten er dækket ind">
+              Der er sat nok til side til årets skat og AM-bidrag, som det ser ud nu.
+            </Advarsel>
+          </div>
+        )}
 
-      {/* Kommune & Skattesatser Box */}
-      <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 text-xs text-stone-600 space-y-1.5">
-        <div className="flex items-center justify-between">
-          <span className="text-stone-500">Bopælskommune:</span>
-          <span className="font-semibold text-stone-800">{activeIndkomstAar.kommune}</span>
+        <div className="mt-5 space-y-2 border-t border-rule pt-4">
+          <Knap onClick={onAabnScanner} disabled={!aiKlar} className="w-full justify-center">
+            Læs et bilag
+          </Knap>
+          <Knap onClick={onAabnChat} disabled={!aiKlar} className="w-full justify-center">
+            Spørg revisoren
+          </Knap>
+          {!aiKlar && (
+            <p className="text-2xs text-ink-faint">
+              Begge dele kræver en AI-nøgle på serveren. Sæt GEMINI_API_KEY eller
+              DEEPSEEK_API_KEY i .env.
+            </p>
+          )}
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-stone-500">Kommuneskat:</span>
-          <span className="font-mono text-stone-800">{activeIndkomstAar.kommuneSkatteprocent}%</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-stone-500">AM-bidrag:</span>
-          <span className="font-mono text-stone-800">8,00%</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-stone-500">Kørselsfradrag bil:</span>
-          <span className="font-mono text-emerald-800 font-semibold">3,79 kr/km</span>
+
+        <div className="mt-5 border-t border-rule pt-4 text-2xs text-ink-faint">
+          <p>
+            Beregnet med satserne for {beregning.satser.aar} og kommuneskat{' '}
+            {indkomstAar.kommuneSkatteprocent.toString().replace('.', ',')} % i{' '}
+            {indkomstAar.kommune || 'ukendt kommune'}.
+          </p>
+          <p className="mt-1.5">
+            Tallene er et beslutningsgrundlag, ikke en årsopgørelse. Kontrollér dem mod
+            skat.dk, før du indberetter.
+          </p>
+          {aiKlar && aiUdbyder && (
+            <p className="mt-1.5">
+              Bilag læses af {aiUdbyder}
+              {aiModel ? ` (${aiModel})` : ''}. Forslagene skal godkendes, før de
+              bliver til posteringer.
+            </p>
+          )}
         </div>
       </div>
     </aside>
   );
-};
+}

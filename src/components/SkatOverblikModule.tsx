@@ -1,268 +1,209 @@
 import React from 'react';
-import {
-  FileText,
-  Printer,
-  ShieldCheck,
-  Building2,
-  DollarSign,
-  TrendingDown,
-  Info,
-  CheckCircle2,
-  AlertTriangle
-} from 'lucide-react';
-import { IndkomstAar, SkatteBeregningResultat } from '../types';
-import { SKATTESATSER } from '../data/danishTaxData';
+import type { IndkomstAar } from '../types';
+import type { SkatteBeregning } from '../lib/tax/beregn';
+import { kr, pct } from '../lib/format';
+import { Advarsel, Knap, Rubrik, Sektion } from './ui';
 
 interface Props {
   indkomstAar: IndkomstAar;
-  skatteBeregning: SkatteBeregningResultat;
+  beregning: SkatteBeregning;
 }
 
-export const SkatOverblikModule: React.FC<Props> = ({
-  indkomstAar,
-  skatteBeregning,
-}) => {
-  const handlePrint = () => {
-    window.print();
-  };
+function Linje({
+  tekst,
+  beloeb,
+  rubrik,
+  note,
+  negativ = false,
+  daempet = false,
+}: {
+  tekst: string;
+  beloeb: number;
+  rubrik?: 12 | 17 | 29 | 51;
+  note?: string;
+  negativ?: boolean;
+  daempet?: boolean;
+}) {
+  return (
+    <tr className={daempet && beloeb === 0 ? 'text-ink-faint' : undefined}>
+      <td className="w-10 border-b border-rule py-1.5 align-top">
+        {rubrik && <Rubrik nr={rubrik} aktiv={beloeb !== 0} />}
+      </td>
+      <td className="border-b border-rule py-1.5 pr-4 align-top">
+        {tekst}
+        {note && <span className="block max-w-[64ch] text-2xs text-ink-faint">{note}</span>}
+      </td>
+      <td className="tal w-40 border-b border-rule py-1.5 text-right align-top">
+        {negativ && beloeb !== 0 ? `−${kr(beloeb)}` : kr(beloeb)}
+      </td>
+    </tr>
+  );
+}
+
+function Total({ tekst, beloeb, note }: { tekst: string; beloeb: number; note?: string }) {
+  return (
+    <tr className="bg-sunk font-semibold">
+      <td className="border-t-2 border-rule-strong py-2" />
+      <td className="border-t-2 border-rule-strong py-2 pr-4">
+        {tekst}
+        {note && (
+          <span className="block text-2xs font-normal text-ink-muted">{note}</span>
+        )}
+      </td>
+      <td className="tal border-t-2 border-rule-strong py-2 text-right">{kr(beloeb)}</td>
+    </tr>
+  );
+}
+
+export function SkatOverblikModule({ indkomstAar, beregning }: Props) {
+  const { skat, satser } = beregning;
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-white border border-stone-200 rounded-xl p-6 shadow-xs">
-        <div>
-          <h2 className="text-xl font-bold text-stone-900 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-stone-700" />
-            Skat — Overblik & Beregning for {indkomstAar.aar}
-          </h2>
-          <p className="text-xs text-stone-500 mt-1">
-            Fuldt deterministisk skatteopgørelse baseret på gældende satser for {indkomstAar.kommune} Kommune.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={handlePrint}
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-stone-300 bg-white hover:bg-stone-100 text-stone-700 text-xs font-semibold transition"
-        >
-          <Printer className="w-4 h-4" />
-          Udskriv / Gem PDF
-        </button>
-      </div>
-
-      {/* Summary KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-xs">
-          <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider block">
-            Brutto B-Honorarer (Rubrik 12)
-          </span>
-          <div className="text-2xl font-bold font-mono text-stone-900 mt-1">
-            {skatteBeregning.honorarerAlt.toLocaleString('da-DK')} DKK
-          </div>
-          <span className="text-[11px] text-stone-400 mt-1 block">
-            Samlet udbetalt fra alle honorarjobs
-          </span>
-        </div>
-
-        <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-xs">
-          <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider block">
-            Samlet Skat & AM-bidrag
-          </span>
-          <div className="text-2xl font-bold font-mono text-stone-900 mt-1">
-            {skatteBeregning.samletSkatOgAM.toLocaleString('da-DK')} DKK
-          </div>
-          <span className="text-[11px] text-stone-500 mt-1 block">
-            Effektiv skattesats: <strong className="text-stone-800">{skatteBeregning.effektivSkatteprocent}%</strong>
-          </span>
-        </div>
-
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 shadow-xs">
-          <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wider block">
-            Netto Indtægt Efter Skat
-          </span>
-          <div className="text-2xl font-bold font-mono text-emerald-950 mt-1">
-            {skatteBeregning.indtaegtEfterSkat.toLocaleString('da-DK')} DKK
-          </div>
-          <span className="text-[11px] text-emerald-700 mt-1 block">
-            Det reelle overskud udbetalt til dig
-          </span>
-        </div>
-      </div>
-
-      {/* Rubrik 29-loft advarsel */}
-      {skatteBeregning.rubrik29LoftOverskredet && (
-        <div className="p-4 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl text-xs text-amber-950 flex items-start gap-2.5">
-          <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-          <div>
-            <strong>Bemærk: Lovbestemt fradragsloft i Rubrik 29 er nået.</strong>
-            <p className="mt-0.5">
-              Dine fradrag ({skatteBeregning.oevrigeFradragRubrik29.toLocaleString('da-DK')} DKK) overstiger B-indkomsten efter AM-bidrag. 
-              Kun {skatteBeregning.maksTilladtFradragRubrik29.toLocaleString('da-DK')} DKK modregnes i din personlige indkomst i år.
-            </p>
-          </div>
+    <Sektion
+      titel={`Skatteoverblik ${beregning.aar}`}
+      beskrivelse={`Hvad B-indkomsten koster oven i den A-indkomst, du har oplyst. Beregnet med satserne for ${satser.aar} og en kommuneskat på ${indkomstAar.kommuneSkatteprocent.toString().replace('.', ',')} %.`}
+      handling={<Knap onClick={() => window.print()}>Udskriv</Knap>}
+    >
+      {beregning.advarsler.length > 0 && (
+        <div className="mb-5 space-y-2">
+          {beregning.advarsler.map((a) => (
+            <Advarsel
+              key={a.kode}
+              art={a.kode === 'RUBRIK_29_LOFT' ? 'negativ' : 'neutral'}
+            >
+              {a.tekst}
+            </Advarsel>
+          ))}
         </div>
       )}
 
-      {/* Blok 1: B-indkomst, AM-bidrag, fradrag og skattepligtig indkomst */}
-      <div className="bg-white border border-stone-200 rounded-xl shadow-xs overflow-hidden">
-        <div className="px-6 py-4 bg-stone-50 border-b border-stone-200 flex items-center justify-between">
-          <h3 className="font-bold text-stone-900 text-sm">
-            Blok 1 — B-indkomst, Fradrag & Skattepligtig Indkomst
+      <div className="grid gap-8 lg:grid-cols-2">
+        <div>
+          <h3 className="mb-2 font-display text-sm font-bold text-ink">
+            Indkomst og fradrag
           </h3>
-          <span className="text-xs text-stone-500">Grundlag for skatteberegning</span>
+          <table className="w-full">
+            <tbody>
+              <Linje tekst="Honorarer" beloeb={beregning.honorarerRubrik12} rubrik={12} />
+              <Linje
+                tekst="Gruppeliv, uddelinger og personalegoder"
+                beloeb={beregning.rubrik17Indkomst}
+                rubrik={17}
+                daempet
+              />
+              <Linje
+                tekst="Øvrige fradrag i personlig indkomst"
+                beloeb={beregning.anvendtFradragRubrik29}
+                rubrik={29}
+                negativ
+                note={
+                  beregning.rubrik29LoftOverskredet
+                    ? `Der er registreret ${kr(beregning.oevrigeFradragRubrik29)} kr., men kun ${kr(beregning.maksTilladtFradragRubrik29)} kr. kan bruges i år.`
+                    : `Heraf ${kr(beregning.koerselsFradragRubrik29)} kr. kørsel i egen bil eller på egen cykel.`
+                }
+              />
+              <Linje
+                tekst={`AM-bidrag, ${satser.amBidragProcent} %`}
+                beloeb={beregning.amBidrag}
+                negativ
+                note={`Beregnet af ${kr(beregning.amPligtigBIndkomst)} kr. AM-pligtigt honorar.`}
+              />
+              <Total tekst="Personlig indkomst af B-indkomsten" beloeb={beregning.personligIndkomst} />
+
+              <tr>
+                <td colSpan={3} className="pt-6" />
+              </tr>
+
+              <Linje
+                tekst="Befordringsfradrag"
+                beloeb={beregning.befordringsFradragRubrik51}
+                rubrik={51}
+                negativ
+                daempet
+                note="Kun kørsel registreret som passager."
+              />
+              <Linje
+                tekst="Beskæftigelsesfradrag"
+                beloeb={skat.beskaeftigelsesfradrag}
+                negativ
+                daempet
+                note={`${satser.beskaeftigelsesfradrag.procent} % af arbejdsindkomsten, højst ${kr(satser.beskaeftigelsesfradrag.maksimum)} kr.`}
+              />
+              <Linje
+                tekst="Jobfradrag"
+                beloeb={skat.jobfradrag}
+                negativ
+                daempet
+                note={`${satser.jobfradrag.procent} % af indkomsten over ${kr(satser.jobfradrag.bundgraense)} kr., højst ${kr(satser.jobfradrag.maksimum)} kr.`}
+              />
+              <Total tekst="Skattepligtig indkomst af B-indkomsten" beloeb={beregning.skattepligtigIndkomst} />
+            </tbody>
+          </table>
         </div>
 
-        <div className="p-6 divide-y divide-stone-100 text-xs">
-          <div className="flex justify-between py-2.5">
-            <span className="text-stone-700 font-medium">
-              Honorarer mv. (Rubrik 12)
-            </span>
-            <span className="font-mono font-semibold text-stone-900">
-              {skatteBeregning.honorarerAlt.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
+        <div>
+          <h3 className="mb-2 font-display text-sm font-bold text-ink">Skatten af B-indkomsten</h3>
+          <table className="w-full">
+            <tbody>
+              <Linje tekst="AM-bidrag" beloeb={beregning.amBidrag} />
+              <Linje tekst={`Bundskat, ${satser.bundskatProcent} %`} beloeb={skat.bundskat} />
+              <Linje
+                tekst={`Kommuneskat, ${indkomstAar.kommuneSkatteprocent.toString().replace('.', ',')} %`}
+                beloeb={skat.kommuneskat}
+              />
+              {satser.progressiveSkatter.map((lag) => (
+                <Linje
+                  key={lag.id}
+                  tekst={`${lag.navn}, ${lag.procent} %`}
+                  beloeb={
+                    lag.id === 'mellemskat'
+                      ? skat.mellemskat
+                      : lag.id === 'topskat'
+                        ? skat.topskat
+                        : skat.topTopskat
+                  }
+                  daempet
+                  note={`Af personlig indkomst over ${kr(lag.graenseEfterAM)} kr. efter AM-bidrag.`}
+                />
+              ))}
+              <Linje
+                tekst={`Kirkeskat, ${indkomstAar.kirkeskatteprocent.toString().replace('.', ',')} %`}
+                beloeb={skat.kirkeskat}
+                daempet
+              />
+              <Linje
+                tekst="Nedslag for det skrå skatteloft"
+                beloeb={skat.skatteloftNedslag}
+                negativ
+                daempet
+              />
+              <Linje
+                tekst="Skatteværdi af personfradrag"
+                beloeb={skat.personfradragVaerdi}
+                negativ
+                note={
+                  skat.personfradragVaerdi > 0
+                    ? `B-indkomsten bruger den del af personfradraget på ${kr(satser.personfradrag)} kr., som A-indkomsten ikke har brugt.`
+                    : `Personfradraget på ${kr(satser.personfradrag)} kr. er allerede brugt på A-indkomsten.`
+                }
+              />
+              <Total tekst="Beregnet skat i alt" beloeb={beregning.beregnetSkatIAlt} />
 
-          <div className="flex justify-between py-2.5">
-            <span className="text-stone-700">
-              Legater, uddelinger mv. (Rubrik 17)
-            </span>
-            <span className="font-mono text-stone-600">
-              {skatteBeregning.rubrik17Indkomst.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
+              <tr>
+                <td colSpan={3} className="pt-6" />
+              </tr>
 
-          <div className="flex justify-between py-2.5 text-emerald-800">
-            <span className="font-medium">
-              Øvrige fradrag i personlig indkomst (Rubrik 29)
-              <span className="block text-[11px] text-stone-400 font-normal">
-                Driftsomkostninger ({skatteBeregning.fradragKatalogSum.toLocaleString('da-DK')} DKK) + Kørselsfradrag bil/cykel ({skatteBeregning.koerselsFradragRubrik29.toLocaleString('da-DK')} DKK)
-              </span>
-            </span>
-            <span className="font-mono font-bold">
-              - {skatteBeregning.oevrigeFradragRubrik29.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
-
-          <div className="flex justify-between py-2.5 text-stone-700">
-            <span>
-              Arbejdsmarkedsbidrag (AM-bidrag 8% af AM-pligtig del)
-            </span>
-            <span className="font-mono font-medium">
-              - {skatteBeregning.amBidrag.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
-
-          <div className="flex justify-between py-3 font-bold text-stone-900 bg-stone-50/70 px-2 rounded-lg">
-            <span className="text-sm">= Personlig indkomst</span>
-            <span className="font-mono text-sm">
-              {skatteBeregning.personligIndkomst.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
-
-          <div className="flex justify-between py-2.5 text-stone-600">
-            <span>
-              Befordringsfradrag (Rubrik 51 - kun passagerkørsel)
-            </span>
-            <span className="font-mono">
-              - {skatteBeregning.befordringsFradragRubrik51.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
-
-          <div className="flex justify-between py-3 font-bold text-stone-900 bg-stone-100/70 px-2 rounded-lg">
-            <span className="text-sm">= Skattepligtig indkomst</span>
-            <span className="font-mono text-sm">
-              {skatteBeregning.skattepligtigIndkomst.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
+              <Linje tekst="Honorarer i alt" beloeb={beregning.honorarerRubrik12 + beregning.rubrik17Indkomst} />
+              <Linje tekst="Skat og AM-bidrag i alt" beloeb={beregning.samletSkatOgAM} negativ />
+              <Total
+                tekst="Tilbage efter skat"
+                beloeb={beregning.indtaegtEfterSkat}
+                note={`Effektiv skat ${pct(beregning.effektivSkatteprocent)}. Den næste krone honorar beskattes med ${pct(beregning.marginalskatProcent)}.`}
+              />
+            </tbody>
+          </table>
         </div>
       </div>
-
-      {/* Blok 2: Skatteberegning og skatteopgørelse */}
-      <div className="bg-white border border-stone-200 rounded-xl shadow-xs overflow-hidden">
-        <div className="px-6 py-4 bg-stone-50 border-b border-stone-200 flex items-center justify-between">
-          <h3 className="font-bold text-stone-900 text-sm">
-            Blok 2 — Skatteberegning & Skatteopgørelse
-          </h3>
-          <span className="text-xs text-stone-500">
-            Kommune: {indkomstAar.kommune} ({indkomstAar.kommuneSkatteprocent}%)
-          </span>
-        </div>
-
-        <div className="p-6 divide-y divide-stone-100 text-xs">
-          <div className="flex justify-between py-2.5">
-            <span className="text-stone-700">
-              AM-bidrag (8%)
-            </span>
-            <span className="font-mono font-medium text-stone-900">
-              {skatteBeregning.amBidrag.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
-
-          <div className="flex justify-between py-2.5">
-            <span className="text-stone-700">
-              Bundskat ({SKATTESATSER.bundskatProcent}%)
-            </span>
-            <span className="font-mono text-stone-900">
-              {skatteBeregning.bundskat.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
-
-          <div className="flex justify-between py-2.5">
-            <span className="text-stone-700">
-              Kommuneskat ({indkomstAar.kommuneSkatteprocent}%)
-            </span>
-            <span className="font-mono text-stone-900">
-              {skatteBeregning.kommuneskat.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
-
-          <div className="flex justify-between py-2.5">
-            <span className="text-stone-700">
-              Kirkeskat ({indkomstAar.medlemFolkekirken ? `${indkomstAar.kirkeskatteprocent}%` : 'Ikke medlem'})
-            </span>
-            <span className="font-mono text-stone-900">
-              {skatteBeregning.kirkeskat.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
-
-          {skatteBeregning.topskat > 0 && (
-            <div className="flex justify-between py-2.5 text-red-700 font-semibold">
-              <span>Topskat (15% på indkomst over 588.900 kr.)</span>
-              <span className="font-mono">
-                {skatteBeregning.topskat.toLocaleString('da-DK')} DKK
-              </span>
-            </div>
-          )}
-
-          <div className="flex justify-between py-2.5 text-emerald-800">
-            <span className="font-medium">
-              Modregnet skatteværdi af personfradrag
-              <span className="block text-[11px] text-stone-400 font-normal">
-                {indkomstAar.forventetAIndkomst > 0
-                  ? 'A-indkomst bruger primært personfradrag; rest modregnet her'
-                  : 'Fuld personfradrag modregnet i B-indkomsten'}
-              </span>
-            </span>
-            <span className="font-mono font-bold">
-              - {skatteBeregning.personfradragSkattevaerdi.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
-
-          <div className="flex justify-between py-3.5 font-bold text-stone-900 bg-stone-50 px-3 rounded-lg text-sm">
-            <span>= Beregnet skat i alt (inkl. AM-bidrag)</span>
-            <span className="font-mono text-base text-stone-950">
-              {skatteBeregning.samletSkatOgAM.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
-
-          <div className="flex justify-between py-3.5 font-bold text-emerald-900 bg-emerald-50 px-3 rounded-lg text-sm mt-2">
-            <span>= Nettoindtægt efter skat</span>
-            <span className="font-mono text-base text-emerald-950">
-              {skatteBeregning.indtaegtEfterSkat.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
+    </Sektion>
   );
-};
+}
