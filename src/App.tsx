@@ -15,6 +15,7 @@ import { SkatOverblikModule } from './components/SkatOverblikModule';
 import { AarsopgoerelseModule } from './components/AarsopgoerelseModule';
 import { OpsparingTrackerModule } from './components/OpsparingTrackerModule';
 import { StatistikModule } from './components/StatistikModule';
+import { DokumentationModule } from './components/DokumentationModule';
 import { GlobalSidebar } from './components/GlobalSidebar';
 import { AiBilagScannerModal } from './components/AiBilagScannerModal';
 import { RevisorChatModal } from './components/RevisorChatModal';
@@ -82,6 +83,7 @@ const FANER = [
   { id: 'opsparing', navn: 'Sæt til side' },
   { id: 'statistik', navn: 'Statistik' },
   { id: 'investeringer', navn: 'Investeringer' },
+  { id: 'dokumentation', navn: 'Dokumentation' },
   { id: 'aar', navn: 'Indkomstår' },
 ];
 
@@ -430,6 +432,15 @@ export default function App() {
                       onGem={medFejlhaandtering(d.gemInvestering)}
                       onSlet={medFejlhaandtering(d.sletInvestering)}
                       onAabnScanner={() => setScannerAaben(true)}
+                    />
+                  )}
+
+                  {visning.fane === 'dokumentation' && (
+                    <DokumentationModule
+                      indkomstAarListe={aarListe}
+                      jobs={d.data.jobs}
+                      fradrag={d.data.fradrag}
+                      investeringer={d.data.investeringer}
                     />
                   )}
                 </>

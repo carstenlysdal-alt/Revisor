@@ -16,6 +16,15 @@ export interface KoerselsInput {
   antalTure: number;
   /** YYYY-MM-DD. Bruges kun til at afgøre rækkefølgen for 20.000 km-grænsen. */
   startDato: string;
+  /**
+   * Bestyrelses-, udvalgs- eller kommissionshverv uden modtaget skattefri
+   * kørselsgodtgørelse. Denne gruppe er, modsat kunstnere og musikere, IKKE
+   * berettiget til de høje §9B-satser som eget fradrag (Ligningslovens § 9 B,
+   * stk. 4, 2. pkt. og Landsskatterettens praksis, jf. SKM2001.141). Er dette
+   * sat, ruter egen bil/cykel til det almindelige befordringsfradrag (§9C,
+   * rubrik 51) i stedet for rubrik 29, uanset transportmiddel.
+   */
+  erBestyrelseshverv?: boolean;
 }
 
 export interface KoerselsLinje {
@@ -35,8 +44,8 @@ export interface AaretsKoersel {
   erhvervsKmIAlt: number;
 }
 
-const rubrikFor = (t: TransportMiddel): 29 | 51 | null => {
-  if (t === 'OWN_CAR_MC' || t === 'OWN_BIKE') return 29;
+const rubrikFor = (t: TransportMiddel, erBestyrelseshverv: boolean | undefined): 29 | 51 | null => {
+  if (t === 'OWN_CAR_MC' || t === 'OWN_BIKE') return erBestyrelseshverv ? 51 : 29;
   if (t === 'PASSENGER') return 51;
   return null;
 };
@@ -75,13 +84,25 @@ export function beregnAaretsKoersel(jobs: KoerselsInput[], satser: Satser): Aare
   let erhvervsKmBrugt = 0;
 
   const linjer: KoerselsLinje[] = sorteret.map((job) => {
-    const rubrik = rubrikFor(job.transportmiddel);
+    const rubrik = rubrikFor(job.transportmiddel, job.erBestyrelseshverv);
     const km = Math.max(0, Number(job.antalKm) || 0);
     const ture = Math.max(0, Number(job.antalTure) || 0);
     const kmIAlt = km * ture;
 
     if (!rubrik || kmIAlt === 0) {
       return { jobId: job.id, kmIAlt: 0, fradrag: 0, rubrik, kmOverAarsgraense: 0 };
+    }
+
+    // Bestyrelseshverv uden godtgørelse: egen bil/cykel bruger det
+    // almindelige befordringsfradrag, ligesom en passager, ikke §9B-satserne.
+    if (job.erBestyrelseshverv && (job.transportmiddel === 'OWN_CAR_MC' || job.transportmiddel === 'OWN_BIKE')) {
+      return {
+        jobId: job.id,
+        kmIAlt,
+        fradrag: Math.round(beregnBefordringPrDag(km, satser) * ture),
+        rubrik,
+        kmOverAarsgraense: 0,
+      };
     }
 
     if (job.transportmiddel === 'OWN_CAR_MC') {

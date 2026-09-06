@@ -50,7 +50,7 @@ const TRANSPORT: { vaerdi: TransportMiddel; navn: string; hjaelp: string }[] = [
     vaerdi: 'OWN_CAR_MC',
     navn: 'Egen bil eller motorcykel',
     hjaelp:
-      'Fradraget lander i rubrik 29 og ikke i rubrik 51. Skatteværdien er højere i rubrik 29, og det er den rigtige placering for erhvervsmæssig kørsel.',
+      'Fradraget lander i rubrik 29 og ikke i rubrik 51. Skatteværdien er højere i rubrik 29, og det er den rigtige placering for erhvervsmæssig kørsel til et honorarjob. Gælder ikke for bestyrelseshverv, se nedenfor.',
   },
   {
     vaerdi: 'OWN_BIKE',
@@ -138,6 +138,7 @@ export function JobsModule({
           antalKm: talFraFelt(km),
           antalTure: talFraFelt(ture),
           startDato: redigerer.startDato,
+          erBestyrelseshverv: redigerer.erBestyrelseshverv,
         },
         beregning.satser
       );
@@ -512,12 +513,29 @@ export function JobsModule({
                   </Felt>
                   <div className="flex flex-col justify-end pb-1">
                     <span className="text-2xs text-ink-muted">
-                      Fradrag, rubrik {redigerer.transportmiddel === 'PASSENGER' ? 51 : 29}
+                      Fradrag, rubrik{' '}
+                      {redigerer.transportmiddel === 'PASSENGER' || redigerer.erBestyrelseshverv
+                        ? 51
+                        : 29}
                     </span>
                     <span className="tal text-lg font-semibold text-ink">
                       {kr(kladdensKoersel)} kr.
                     </span>
                   </div>
+                </div>
+              )}
+
+              {(redigerer.transportmiddel === 'OWN_CAR_MC' ||
+                redigerer.transportmiddel === 'OWN_BIKE') && (
+                <div className="mt-4">
+                  <Afkrydsning
+                    label="Bestyrelses-, udvalgs- eller kommissionshverv uden modtaget skattefri kørselsgodtgørelse"
+                    hjaelp="Modsat kunstnere og musikere er bestyrelsesmedlemmer henvist til det almindelige befordringsfradrag, hvis de ikke får kørepenge fra virksomheden. Fradraget lander derfor i rubrik 51, ikke rubrik 29, med bundgrænse på 24 km."
+                    checked={Boolean(redigerer.erBestyrelseshverv)}
+                    onChange={(e) =>
+                      setRedigerer({ ...redigerer, erBestyrelseshverv: e.target.checked })
+                    }
+                  />
                 </div>
               )}
 

@@ -333,3 +333,78 @@ describe('bekræftede kommunesatser fra den officielle satsopgørelse', () => {
     expect(erKommuneBekraeftet('Læsø', 2025)).toBe(true);
   });
 });
+
+describe('bestyrelseshverv uden godtgørelse bruger befordringsfradraget, ikke §9B', () => {
+  it('lander i rubrik 51 for egen bil, ligesom en passager ville', () => {
+    const beregning = beregnSkat(
+      aar(),
+      [
+        job({
+          transportmiddel: 'OWN_CAR_MC',
+          antalKm: 100,
+          antalTure: 1,
+          erBestyrelseshverv: true,
+        }),
+      ],
+      []
+    );
+    expect(beregning.koerselsFradragRubrik29).toBe(0);
+    expect(beregning.befordringsFradragRubrik51).toBe(Math.round((100 - 24) * 3.17));
+  });
+
+  it('lander stadig i rubrik 29 for en kunstner uden bestyrelsesflaget', () => {
+    const beregning = beregnSkat(
+      aar(),
+      [job({ transportmiddel: 'OWN_CAR_MC', antalKm: 100, antalTure: 1 })],
+      []
+    );
+    expect(beregning.befordringsFradragRubrik51).toBe(0);
+    expect(beregning.koerselsFradragRubrik29).toBe(Math.round(100 * 3.94));
+  });
+
+  it('gælder også egen cykel', () => {
+    const beregning = beregnSkat(
+      aar(),
+      [
+        job({
+          transportmiddel: 'OWN_BIKE',
+          antalKm: 50,
+          antalTure: 1,
+          erBestyrelseshverv: true,
+        }),
+      ],
+      []
+    );
+    expect(beregning.koerselsFradragRubrik29).toBe(0);
+    expect(beregning.befordringsFradragRubrik51).toBe(Math.round((50 - 24) * 3.17));
+  });
+
+  it('tæller ikke med i den årlige 20.000 km-grænse for erhvervsmæssig kørsel', () => {
+    const satser = getSatser(2026);
+    const resultat = beregnAaretsKoersel(
+      [
+        {
+          id: 'bestyrelse',
+          transportmiddel: 'OWN_CAR_MC',
+          antalKm: 25_000,
+          antalTure: 1,
+          startDato: '2026-01-01',
+          erBestyrelseshverv: true,
+        },
+        {
+          id: 'kunstner',
+          transportmiddel: 'OWN_CAR_MC',
+          antalKm: 5_000,
+          antalTure: 1,
+          startDato: '2026-06-01',
+        },
+      ],
+      satser
+    );
+    // Kunstnerens 5.000 km skal stadig ramme den høje sats, fordi
+    // bestyrelseskørslen ikke bruger af den fælles 20.000 km-pulje.
+    expect(resultat.linjer.find((l) => l.jobId === 'kunstner')!.fradrag).toBe(
+      Math.round(5_000 * 3.94)
+    );
+  });
+});

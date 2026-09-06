@@ -102,12 +102,27 @@
 
 @media print {
   @page {
+    size: A4;
     margin: 16mm;
   }
 
+  html,
   body {
     background: #fff;
     font-size: 10pt;
+    /* Intet indhold må nogensinde tvinge en vandret rulning frem — på papir
+       betyder det bare, at kolonner klippes af uden for kanten. */
+    overflow-x: visible;
+    width: auto;
+  }
+
+  /* Printudsnittet skal fylde papirets bredde, ikke skærmens container. En
+     komponent bygget til en 1280px skrivebordsskærm kan ellers ende bredere
+     end papiret og blive skåret af i højre side. */
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 
   .ikke-print {
@@ -119,6 +134,7 @@
   }
 
   table {
+    width: 100% !important;
     break-inside: auto;
   }
 
@@ -128,5 +144,10 @@
 
   thead {
     display: table-header-group;
+  }
+
+  h2,
+  h3 {
+    break-after: avoid;
   }
 }

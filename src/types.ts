@@ -34,6 +34,21 @@ export interface Job {
   amBidragFritaget: boolean;
   /** Rubrik 17 i stedet for rubrik 12: legater, gruppeliv, visse personalegoder. */
   erRubrik17?: boolean;
+  /**
+   * Bestyrelses-, udvalgs- eller kommissionshverv, hvor der IKKE er modtaget
+   * skattefri kørselsgodtgørelse fra virksomheden.
+   *
+   * Ligningslovens § 9 B, stk. 5 giver netop denne gruppe ret til skattefri
+   * godtgørelse fra hvervgiveren — modsat kunstnere og musikere. Får de den
+   * ikke, er de IKKE henvist til de høje §9B-satser som kunstnere er, men
+   * skal i stedet bruge det almindelige, lave befordringsfradrag (§9C).
+   * Landsskatteretten har afvist lovhjemmel for det modsatte, jf. Østre
+   * Landsrets dom gengivet i SKM2001.141.
+   *
+   * Sat til true routes egen bil/cykel-kørsel til rubrik 51 i stedet for
+   * rubrik 29, uanset transportmiddel.
+   */
+  erBestyrelseshverv?: boolean;
   timerJob?: number;
   timerTransportForberedelse?: number;
   type?: string;
