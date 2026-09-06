@@ -257,7 +257,7 @@ export default function App() {
             className="overgang flex items-baseline gap-2 hover:opacity-70"
           >
             <span className="font-display text-base font-extrabold tracking-tight text-ink">
-              Revisor
+              revis
             </span>
             <span className="tal text-2xs text-ink-faint">B-indkomst</span>
           </button>

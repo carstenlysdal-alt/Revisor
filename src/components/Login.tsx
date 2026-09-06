@@ -33,7 +33,7 @@ export function Login({ onLoggetInd }: { onLoggetInd: () => void }) {
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-16">
       <div className="mb-8">
         <h1 className="font-display text-2xl font-extrabold tracking-tight text-ink">
-          Revisor
+          revis
         </h1>
         <p className="mt-1 text-xs text-ink-muted">
           Regnskab og skat for B-indkomst.
