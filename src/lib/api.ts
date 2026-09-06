@@ -103,6 +103,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ bilagId }),
     }),
+
+  rutestatus: () => kald<{ klar: boolean }>('/ruter/status'),
+
+  beregnAfstand: (fra: string, til: string) =>
+    kald<{ km: number }>(`/ruter/afstand?${new URLSearchParams({ fra, til }).toString()}`),
 };
 
 /** Læser en fil som base64 uden data-URL-præfikset. */

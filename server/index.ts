@@ -9,6 +9,7 @@ import type { BilagsLager } from './storage/lager';
 import { dataRoutes } from './routes/data';
 import { bilagRoutes } from './routes/bilag';
 import { aiRoutes } from './routes/ai';
+import { ruterRoutes } from './routes/ruter';
 import { authRoutes, harKodeord, hastighedsgraense, kraevLogin } from './auth';
 import { udbyderStatus } from './ai/faktor';
 
@@ -77,6 +78,16 @@ async function start() {
       besked: 'Der er sendt mange AI-kald på kort tid.',
     }),
     aiRoutes(repo, arkiv)
+  );
+  app.use(
+    '/api',
+    // Beskytter det gratis kvoteloft hos OpenRouteService (2.500/dag).
+    hastighedsgraense({
+      maks: 20,
+      vinduMs: 60_000,
+      besked: 'Der er sendt mange ruteopslag på kort tid.',
+    }),
+    ruterRoutes()
   );
 
   app.use('/api', (err: Error, _req: Request, res: Response, _next: NextFunction) => {

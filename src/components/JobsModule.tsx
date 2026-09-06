@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { Bilag, IndkomstAar, Job, TransportMiddel } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
 import { betalingKrydserAarsskifte } from '../lib/tax/beregn';
@@ -104,6 +104,33 @@ export function JobsModule({
   const [timerJob, setTimerJob] = useState('');
   const [timerTransport, setTimerTransport] = useState('');
   const [visMere, setVisMere] = useState(false);
+  const [rutestatusKlar, setRutestatusKlar] = useState(false);
+  const [beregnerAfstand, setBeregnerAfstand] = useState(false);
+  const [afstandFejl, setAfstandFejl] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .rutestatus()
+      .then((s) => setRutestatusKlar(s.klar))
+      .catch(() => setRutestatusKlar(false));
+  }, []);
+
+  const beregnAfstand = async () => {
+    if (!redigerer) return;
+    setAfstandFejl(null);
+    setBeregnerAfstand(true);
+    try {
+      const { km: nyKm } = await api.beregnAfstand(
+        indkomstAar.hjemmeadresse,
+        redigerer.destinationAdresse ?? ''
+      );
+      setKm(String(nyKm));
+    } catch (err) {
+      setAfstandFejl(err instanceof Error ? err.message : 'Afstanden kunne ikke beregnes.');
+    } finally {
+      setBeregnerAfstand(false);
+    }
+  };
 
   const bilagIndeks = useMemo(
     () => new Map(bilag.map((b) => [b.id, b])),
@@ -541,18 +568,45 @@ export function JobsModule({
 
               {redigerer.transportmiddel !== 'NONE' && (
                 <div className="mt-4">
-                  <Felt label="Adresse for jobbet">
+                  <Felt
+                    label="Adresse for jobbet"
+                    hjaelp={
+                      !indkomstAar.hjemmeadresse
+                        ? 'Sæt en hjemmeadresse på indkomståret for at kunne beregne afstanden herfra.'
+                        : undefined
+                    }
+                  >
                     {(id) => (
-                      <Tekstfelt
-                        id={id}
-                        value={redigerer.destinationAdresse ?? ''}
-                        placeholder="Spillested eller mødested"
-                        onChange={(e) =>
-                          setRedigerer({ ...redigerer, destinationAdresse: e.target.value })
-                        }
-                      />
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <Tekstfelt
+                            id={id}
+                            value={redigerer.destinationAdresse ?? ''}
+                            placeholder="Spillested eller mødested"
+                            onChange={(e) =>
+                              setRedigerer({ ...redigerer, destinationAdresse: e.target.value })
+                            }
+                          />
+                        </div>
+                        {rutestatusKlar && (
+                          <Knap
+                            onClick={beregnAfstand}
+                            disabled={
+                              beregnerAfstand ||
+                              !indkomstAar.hjemmeadresse ||
+                              !redigerer.destinationAdresse?.trim()
+                            }
+                            title="Foreslår kilometertallet ud fra de to adresser. Du kan altid rette det bagefter."
+                          >
+                            {beregnerAfstand ? 'Beregner…' : 'Beregn afstand'}
+                          </Knap>
+                        )}
+                      </div>
                     )}
                   </Felt>
+                  {afstandFejl && (
+                    <p className="mt-1.5 text-2xs text-negative">{afstandFejl}</p>
+                  )}
                 </div>
               )}
             </div>

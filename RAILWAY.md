@@ -34,6 +34,10 @@ ikke som en kopieret streng. Så følger den med, hvis databasen genskabes.
 `TAVILY_API_KEY` er valgfri. Uden den bruger revisor-chatten DuckDuckGo, når
 den skal slå en regel op på skat.dk.
 
+`OPENROUTESERVICE_API_KEY` er også valgfri — uden den virker "Beregn
+afstand"-knappen ved kørselsfelterne bare ikke, og man taster kilometer
+manuelt som hidtil. Gratis nøgle uden betalingskort på openrouteservice.org.
+
 ## 3. Udrul
 
 Railway læser `railway.json`. Nixpacks' egen installationsfase installerer alle
