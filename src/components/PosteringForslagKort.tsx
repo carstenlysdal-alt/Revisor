@@ -1,11 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import type { Fradrag, Investering, Job, PosteringForslag, TransportMiddel } from '../types';
+import type {
+  Fradrag,
+  IndkomstAar,
+  Investering,
+  Job,
+  PosteringForslag,
+  TransportMiddel,
+} from '../types';
 import { SIKKERHEDSTAERSKEL } from '../types';
 import { kr } from '../lib/format';
 import {
   byggFradragFraKladde,
   byggInvesteringFraKladde,
   byggJobFraKladde,
+  findIndkomstAarTilKladde,
   kanGemmeKladde,
   kladdeFraUdtraek,
   kladdeTal,
@@ -18,6 +26,7 @@ import { Afkrydsning, BeloebFelt, Datofelt, Felt, Knap, Tekstfelt, Vaelger } fro
 interface Props {
   forslag: PosteringForslag;
   indkomstAarId: string;
+  indkomstAarListe: IndkomstAar[];
   onGemJob: (job: Job) => Promise<unknown>;
   onGemFradrag: (fradrag: Fradrag) => Promise<unknown>;
   onGemInvestering: (inv: Investering) => Promise<unknown>;
@@ -61,6 +70,7 @@ function UsikkerMærke({ sikkerhed }: { sikkerhed: number | undefined }) {
 export function PosteringForslagKort({
   forslag,
   indkomstAarId,
+  indkomstAarListe,
   onGemJob,
   onGemFradrag,
   onGemInvestering,
@@ -80,6 +90,14 @@ export function PosteringForslagKort({
 
   const [tekst, setTekst] = useState<KladdeTekst>(forberedt.tekst);
   const [flag, setFlag] = useState<KladdeFlag>(forberedt.flag);
+  const [valgtIndkomstAarId, setValgtIndkomstAarId] = useState(() =>
+    findIndkomstAarTilKladde(
+      forslag.klassifikation,
+      forberedt.tekst,
+      indkomstAarListe,
+      indkomstAarId
+    )
+  );
   const [gemmer, setGemmer] = useState(false);
   const [fejl, setFejl] = useState<string | null>(null);
 
@@ -101,13 +119,13 @@ export function PosteringForslagKort({
     setFejl(null);
     try {
       if (forslag.klassifikation === 'JOB') {
-        const nyt = byggJobFraKladde(tekst, flag, indkomstAarId, []);
+        const nyt = byggJobFraKladde(tekst, flag, valgtIndkomstAarId, []);
         await onGemJob({ id: `job-${Date.now()}`, ...nyt });
       } else if (forslag.klassifikation === 'FRADRAG') {
-        const nyt = byggFradragFraKladde(tekst, indkomstAarId, []);
+        const nyt = byggFradragFraKladde(tekst, valgtIndkomstAarId, []);
         await onGemFradrag({ id: `fradrag-${Date.now()}`, ...nyt });
       } else {
-        const nyt = byggInvesteringFraKladde(tekst, indkomstAarId, []);
+        const nyt = byggInvesteringFraKladde(tekst, valgtIndkomstAarId, []);
         await onGemInvestering({ id: `inv-${Date.now()}`, ...nyt });
       }
       onGemt();
@@ -133,8 +151,28 @@ export function PosteringForslagKort({
         </button>
       </div>
 
+      <Felt
+        label="Indkomstår"
+        hjaelp="Valgt automatisk ud fra datoen; kontrollér før du gemmer."
+        paakraevet
+      >
+        {(id) => (
+          <Vaelger
+            id={id}
+            value={valgtIndkomstAarId}
+            onChange={(e) => setValgtIndkomstAarId(e.target.value)}
+          >
+            {[...indkomstAarListe]
+              .sort((a, b) => b.aar - a.aar)
+              .map((aar) => (
+                <option key={aar.id} value={aar.id}>{aar.aar}</option>
+              ))}
+          </Vaelger>
+        )}
+      </Felt>
+
       {forslag.klassifikation === 'JOB' && (
-        <div className="space-y-3">
+        <div className="mt-3 space-y-3">
           <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
             <Felt label="Hvervgiver" paakraevet>
               {(id) => (

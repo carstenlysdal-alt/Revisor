@@ -41,7 +41,7 @@ export class PostgresRepository implements Repository, BilagsLager {
 
   /** Kører skemaet ved opstart. Alt er IF NOT EXISTS, så det er idempotent. */
   async migrer(): Promise<void> {
-    const sti = path.join(__dirname, 'schema.sql');
+    const sti = path.join(process.cwd(), 'server', 'db', 'schema.sql');
     let skema: string;
     try {
       skema = await fs.readFile(sti, 'utf8');
@@ -77,7 +77,9 @@ export class PostgresRepository implements Repository, BilagsLager {
       this.pool.query('SELECT * FROM fradrag ORDER BY faktura_dato DESC'),
       this.pool.query('SELECT * FROM investering ORDER BY faktura_dato DESC'),
       this.pool.query('SELECT * FROM opsparing'),
-      this.pool.query('SELECT id, sha256, filnavn, mime_type, stoerrelse, uploadet FROM bilag ORDER BY uploadet DESC'),
+      this.pool.query(`SELECT id, sha256, filnavn, mime_type, stoerrelse, uploadet,
+                              drev_backup_tidspunkt, drev_backup_fejl
+                       FROM bilag ORDER BY uploadet DESC`),
     ]);
 
     const [jobBilag, fradragBilag, investeringBilag] = await Promise.all([
@@ -176,6 +178,10 @@ export class PostgresRepository implements Repository, BilagsLager {
         mimeType: r.mime_type,
         stoerrelse: tal(r.stoerrelse),
         uploadet: r.uploadet instanceof Date ? r.uploadet.toISOString() : String(r.uploadet),
+        drevBackupTidspunkt: r.drev_backup_tidspunkt instanceof Date
+          ? r.drev_backup_tidspunkt.toISOString()
+          : r.drev_backup_tidspunkt,
+        drevBackupFejl: r.drev_backup_fejl ?? null,
       })
     );
 
@@ -354,7 +360,9 @@ export class PostgresRepository implements Repository, BilagsLager {
 
   async findBilagVedHash(sha256: string): Promise<Bilag | null> {
     const { rows } = await this.pool.query(
-      'SELECT id, sha256, filnavn, mime_type, stoerrelse, uploadet FROM bilag WHERE sha256 = $1',
+      `SELECT id, sha256, filnavn, mime_type, stoerrelse, uploadet,
+              drev_backup_tidspunkt, drev_backup_fejl
+       FROM bilag WHERE sha256 = $1`,
       [sha256]
     );
     return rows[0] ? this.tilBilag(rows[0]) : null;
@@ -362,7 +370,9 @@ export class PostgresRepository implements Repository, BilagsLager {
 
   async hentBilag(id: string): Promise<Bilag | null> {
     const { rows } = await this.pool.query(
-      'SELECT id, sha256, filnavn, mime_type, stoerrelse, uploadet FROM bilag WHERE id = $1',
+      `SELECT id, sha256, filnavn, mime_type, stoerrelse, uploadet,
+              drev_backup_tidspunkt, drev_backup_fejl
+       FROM bilag WHERE id = $1`,
       [id]
     );
     return rows[0] ? this.tilBilag(rows[0]) : null;
@@ -376,7 +386,25 @@ export class PostgresRepository implements Repository, BilagsLager {
       mimeType: String(r.mime_type),
       stoerrelse: tal(r.stoerrelse),
       uploadet: r.uploadet instanceof Date ? r.uploadet.toISOString() : String(r.uploadet),
+      drevBackupTidspunkt:
+        r.drev_backup_tidspunkt instanceof Date
+          ? r.drev_backup_tidspunkt.toISOString()
+          : (r.drev_backup_tidspunkt as string | null),
+      drevBackupFejl: (r.drev_backup_fejl as string | null) ?? null,
     };
+  }
+
+  async opdaterBilagDriveStatus(
+    id: string,
+    tidspunkt: string | null,
+    fejl: string | null
+  ): Promise<void> {
+    await this.pool.query(
+      `UPDATE bilag
+       SET drev_backup_tidspunkt = $2, drev_backup_fejl = $3
+       WHERE id = $1`,
+      [id, tidspunkt, fejl]
+    );
   }
 
   async sletBilag(id: string): Promise<void> {

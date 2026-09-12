@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { generateAuthUrlMock, getTokenMock, setCredentialsMock, filesListMock, filesCreateMock, driveMock } =
+const { generateAuthUrlMock, getTokenMock, setCredentialsMock, filesListMock, filesCreateMock, filesUpdateMock, driveMock } =
   vi.hoisted(() => ({
     generateAuthUrlMock: vi.fn(),
     getTokenMock: vi.fn(),
     setCredentialsMock: vi.fn(),
     filesListMock: vi.fn(),
     filesCreateMock: vi.fn(),
+    filesUpdateMock: vi.fn(),
     driveMock: vi.fn(),
   }));
 
@@ -29,6 +30,7 @@ import {
   GoogleDriveTokenUdloebetError,
   byggAuthUrl,
   harGoogleDriveKonfiguration,
+  opdaterDatasnapshot,
   opretEllerFindMappe,
   udvekslKodeForToken,
 } from './googleDrive';
@@ -43,7 +45,9 @@ beforeEach(() => {
   process.env.GOOGLE_CLIENT_ID = 'test-id';
   process.env.GOOGLE_CLIENT_SECRET = 'test-hemmelighed';
   process.env.GOOGLE_REDIRECT_URI = 'https://example.dk/api/google/callback';
-  driveMock.mockReturnValue({ files: { list: filesListMock, create: filesCreateMock } });
+  driveMock.mockReturnValue({
+    files: { list: filesListMock, create: filesCreateMock, update: filesUpdateMock },
+  });
 });
 
 afterEach(() => {
@@ -142,5 +146,18 @@ describe('opretEllerFindMappe', () => {
     filesListMock.mockRejectedValue(new Error('invalid_grant'));
 
     await expect(opretEllerFindMappe('r-123')).rejects.toThrow(GoogleDriveTokenUdloebetError);
+  });
+});
+
+describe('opdaterDatasnapshot', () => {
+  it('genbruger den faste snapshotfil', async () => {
+    filesUpdateMock.mockResolvedValue({ data: {} });
+
+    const id = await opdaterDatasnapshot('r-123', 'mappe-1', 'snapshot-1', '{"ok":true}');
+
+    expect(id).toBe('snapshot-1');
+    expect(filesUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ fileId: 'snapshot-1' })
+    );
   });
 });

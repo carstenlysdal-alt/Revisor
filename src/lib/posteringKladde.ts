@@ -1,6 +1,7 @@
 import type {
   Bilagsklassifikation,
   Fradrag,
+  IndkomstAar,
   Investering,
   Job,
   TransportMiddel,
@@ -59,6 +60,18 @@ export function kladdeFraUdtraek(grupper: {
 
 export const kladdeTal = (tekst: KladdeTekst, navn: string): number =>
   talFraFelt(String(tekst[navn] ?? ''));
+
+/** Finder automatisk det eksisterende indkomstår, som postens centrale dato tilhører. */
+export function findIndkomstAarTilKladde(
+  valgtType: Bilagsklassifikation,
+  tekst: KladdeTekst,
+  indkomstAarListe: IndkomstAar[],
+  fallbackId: string
+): string {
+  const dato = valgtType === 'JOB' ? tekst.startDato : tekst.fakturaDato;
+  const aar = /^\d{4}-\d{2}-\d{2}$/.test(dato ?? '') ? Number(dato.slice(0, 4)) : null;
+  return indkomstAarListe.find((kandidat) => kandidat.aar === aar)?.id ?? fallbackId;
+}
 
 export function kanGemmeKladde(
   valgtType: Bilagsklassifikation,

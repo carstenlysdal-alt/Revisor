@@ -16,6 +16,7 @@ import {
   byggFradragFraKladde,
   byggInvesteringFraKladde,
   byggJobFraKladde,
+  findIndkomstAarTilKladde,
   kanGemmeKladde,
   kladdeFraUdtraek,
   kladdeTal,
@@ -38,6 +39,7 @@ interface Props {
   aaben: boolean;
   onLuk: () => void;
   indkomstAar: IndkomstAar;
+  indkomstAarListe: IndkomstAar[];
   aiKlar: boolean;
   onGemJob: (job: Job) => Promise<unknown>;
   onGemFradrag: (fradrag: Fradrag) => Promise<unknown>;
@@ -70,6 +72,7 @@ export function AiBilagScannerModal({
   aaben,
   onLuk,
   indkomstAar,
+  indkomstAarListe,
   aiKlar,
   onGemJob,
   onGemFradrag,
@@ -82,8 +85,14 @@ export function AiBilagScannerModal({
   const [dublet, setDublet] = useState<{ filnavn: string; uploadet: string } | null>(null);
   const [analyse, setAnalyse] = useState<BilagsAnalyse | null>(null);
   const [valgtType, setValgtType] = useState<Bilagsklassifikation>('UKENDT');
+  const [valgtIndkomstAarId, setValgtIndkomstAarId] = useState(indkomstAar.id);
   const [gemmer, setGemmer] = useState(false);
-  const [landede, setLandede] = useState<{ hvor: string; rubrik: string; beloeb: string } | null>(null);
+  const [landede, setLandede] = useState<{
+    hvor: string;
+    rubrik: string;
+    beloeb: string;
+    aar: number;
+  } | null>(null);
 
   // Redigerbare kladdefelter. Alt kan rettes, før noget gemmes.
   const [tekst, setTekst] = useState<Record<string, string>>({});
@@ -96,6 +105,7 @@ export function AiBilagScannerModal({
     setDublet(null);
     setAnalyse(null);
     setValgtType('UKENDT');
+    setValgtIndkomstAarId(indkomstAar.id);
     setTekst({});
     setFlag({});
     setLandede(null);
@@ -138,7 +148,15 @@ export function AiBilagScannerModal({
       const svar = await api.analyserBilag(b.id);
       setAnalyse(svar.analyse);
       setValgtType(svar.analyse.klassifikation);
-      forbered(svar.analyse);
+      const forberedt = forbered(svar.analyse);
+      setValgtIndkomstAarId(
+        findIndkomstAarTilKladde(
+          svar.analyse.klassifikation,
+          forberedt,
+          indkomstAarListe,
+          indkomstAar.id
+        )
+      );
       setTrin('kladde');
     } catch (err) {
       setFejl(
@@ -154,7 +172,7 @@ export function AiBilagScannerModal({
    * Lægger udtrækket ind i redigerbare felter.
    * Et felt uden værdi bliver tomt. Der udfyldes aldrig med et gæt.
    */
-  const forbered = (a: BilagsAnalyse) => {
+  const forbered = (a: BilagsAnalyse): Record<string, string> => {
     const { tekst: t, flag: f } = kladdeFraUdtraek({
       job: a.job as never,
       fradrag: a.fradrag as never,
@@ -163,6 +181,7 @@ export function AiBilagScannerModal({
     });
     setTekst(t);
     setFlag(f);
+    return t;
   };
 
   const sik = (gruppe: 'job' | 'fradrag' | 'investering', navn: string): number | undefined =>
@@ -171,6 +190,8 @@ export function AiBilagScannerModal({
     ]?.sikkerhed;
 
   const tal = (navn: string) => kladdeTal(tekst, navn);
+  const valgtAar =
+    indkomstAarListe.find((aar) => aar.id === valgtIndkomstAarId)?.aar ?? indkomstAar.aar;
 
   const gem = async () => {
     if (!bilag) return;
@@ -179,28 +200,31 @@ export function AiBilagScannerModal({
 
     try {
       if (valgtType === 'JOB') {
-        const nytJob = byggJobFraKladde(tekst, flag, indkomstAar.id, [bilag.id]);
+        const nytJob = byggJobFraKladde(tekst, flag, valgtIndkomstAarId, [bilag.id]);
         await onGemJob({ id: `job-${Date.now()}`, ...nytJob });
         setLandede({
           hvor: 'Jobs og kørsel',
           rubrik: nytJob.erRubrik17 ? 'rubrik 17' : 'rubrik 12',
           beloeb: `${kr(nytJob.honorar)} kr.`,
+          aar: valgtAar,
         });
       } else if (valgtType === 'FRADRAG') {
-        const nytFradrag = byggFradragFraKladde(tekst, indkomstAar.id, [bilag.id]);
+        const nytFradrag = byggFradragFraKladde(tekst, valgtIndkomstAarId, [bilag.id]);
         await onGemFradrag({ id: `fradrag-${Date.now()}`, ...nytFradrag });
         setLandede({
           hvor: 'Fradrag',
           rubrik: 'rubrik 29',
           beloeb: `${kr(nytFradrag.fradragIDKK)} kr.`,
+          aar: valgtAar,
         });
       } else if (valgtType === 'INVESTERING') {
-        const nyInvestering = byggInvesteringFraKladde(tekst, indkomstAar.id, [bilag.id]);
+        const nyInvestering = byggInvesteringFraKladde(tekst, valgtIndkomstAarId, [bilag.id]);
         await onGemInvestering({ id: `inv-${Date.now()}`, ...nyInvestering });
         setLandede({
           hvor: 'Investeringer',
           rubrik: 'arkivet, uden for skatteberegningen',
           beloeb: `${kr(nyInvestering.beloeb)} kr.`,
+          aar: valgtAar,
         });
       }
       setTrin('gemt');
@@ -320,7 +344,8 @@ export function AiBilagScannerModal({
         <div className="py-4">
           <Advarsel art="positiv" titel={`Lagt i ${landede.hvor}`}>
             Posten på {landede.beloeb} er oprettet og tæller nu med i {landede.rubrik}.
-            Bilaget hænger på den, så dokumentationen kan findes frem igen.
+            Den er gemt under indkomstår {landede.aar}, og bilaget hænger på den, så
+            dokumentationen kan findes frem igen.
           </Advarsel>
           <p className="mt-3 text-2xs text-ink-muted">
             Har du flere bilag liggende, er det hurtigere at tage dem nu end at
@@ -366,6 +391,26 @@ export function AiBilagScannerModal({
                 <option value="JOB">Honorarjob, rubrik 12</option>
                 <option value="FRADRAG">Fradrag, rubrik 29</option>
                 <option value="INVESTERING">Investering, arkiv</option>
+              </Vaelger>
+            )}
+          </Felt>
+
+          <Felt
+            label="Indkomstår"
+            hjaelp="Valgt automatisk ud fra arbejds- eller fakturadatoen. Du kan rette det før gemning."
+            paakraevet
+          >
+            {(id) => (
+              <Vaelger
+                id={id}
+                value={valgtIndkomstAarId}
+                onChange={(e) => setValgtIndkomstAarId(e.target.value)}
+              >
+                {[...indkomstAarListe]
+                  .sort((a, b) => b.aar - a.aar)
+                  .map((aar) => (
+                    <option key={aar.id} value={aar.id}>{aar.aar}</option>
+                  ))}
               </Vaelger>
             )}
           </Felt>

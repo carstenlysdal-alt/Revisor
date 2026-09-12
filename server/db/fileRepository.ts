@@ -138,6 +138,15 @@ export class FileRepository implements Repository {
     return s.bilag.find((b) => b.id === id) ?? null;
   }
 
+  opdaterBilagDriveStatus(id: string, tidspunkt: string | null, fejl: string | null) {
+    return this.transaktion<void>((s) => {
+      const bilag = s.bilag.find((b) => b.id === id);
+      if (!bilag) return;
+      bilag.drevBackupTidspunkt = tidspunkt;
+      bilag.drevBackupFejl = fejl;
+    });
+  }
+
   sletBilag(id: string) {
     return this.transaktion<void>((s) => {
       s.bilag = s.bilag.filter((b) => b.id !== id);

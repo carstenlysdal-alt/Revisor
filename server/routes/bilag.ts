@@ -4,7 +4,11 @@ import { beregnHash, MAKS_FILSTOERRELSE, TILLADTE_MIMETYPER } from '../storage/b
 import { BilagFindesIkkeError, type BilagsLager } from '../storage/lager';
 import type { Bilag } from '../../src/types';
 
-export function bilagRoutes(repo: Repository, arkiv: BilagsLager): Router {
+export function bilagRoutes(
+  repo: Repository,
+  arkiv: BilagsLager,
+  onAendring: () => void = () => undefined
+): Router {
   const r = Router();
 
   /**
@@ -48,6 +52,7 @@ export function bilagRoutes(repo: Repository, arkiv: BilagsLager): Router {
         };
 
       if (!eksisterende) await repo.gemBilag(bilag);
+      onAendring();
 
       res.json({
         bilag,
@@ -90,6 +95,7 @@ export function bilagRoutes(repo: Repository, arkiv: BilagsLager): Router {
       if (bilag) {
         await arkiv.slet(bilag.sha256, bilag.mimeType);
         await repo.sletBilag(bilag.id);
+        onAendring();
       }
       res.status(204).end();
     } catch (err) {

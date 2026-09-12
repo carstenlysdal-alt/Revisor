@@ -63,6 +63,11 @@ export interface Repository {
   gemBilag(bilag: Bilag): Promise<Bilag>;
   findBilagVedHash(sha256: string): Promise<Bilag | null>;
   hentBilag(id: string): Promise<Bilag | null>;
+  opdaterBilagDriveStatus(
+    id: string,
+    tidspunkt: string | null,
+    fejl: string | null
+  ): Promise<void>;
   sletBilag(id: string): Promise<void>;
 
   /** Erstatter hele datasættet. Bruges af eksempeldata og nulstilling. */

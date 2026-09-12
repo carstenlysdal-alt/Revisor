@@ -135,9 +135,8 @@ export async function uploadTilDrive(
 }
 
 /**
- * Overskriver det faste datasnapshot. Opretter det første gang og
- * genbruger samme fil-id derefter, så Drevet ikke fyldes op over tid — kun
- * den seneste tilstand er interessant, ikke en historik af øjebliksbilleder.
+ * Opdaterer det faste datasnapshot og genbruger samme fil-id, så den aktuelle
+ * backup er nem at finde, og Drev-mappen ikke fyldes med øjebliksbilleder.
  */
 export async function opdaterDatasnapshot(
   refreshToken: string,

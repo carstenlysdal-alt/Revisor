@@ -95,6 +95,10 @@ export interface Bilag {
   mimeType: string;
   stoerrelse: number;
   uploadet: string;
+  /** Hvornår originalfilen senest blev bekræftet gemt i den tilsluttede Google Drev-mappe. */
+  drevBackupTidspunkt?: string | null;
+  /** Seneste fejl for netop dette bilag. Nulles efter en vellykket backup. */
+  drevBackupFejl?: string | null;
 }
 
 /* ---------------------------------------------------------------- AI-laget */

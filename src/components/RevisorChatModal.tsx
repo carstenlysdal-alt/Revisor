@@ -7,11 +7,14 @@ import { laesEventStroem } from '../lib/sse';
 import { KineticLoader } from './KineticLoader';
 import { PosteringForslagKort } from './PosteringForslagKort';
 import { Advarsel, Knap, Modal } from './ui';
+import { Mic, MicOff } from 'lucide-react';
+import { useDiktering } from '../hooks/useDiktering';
 
 interface Props {
   aaben: boolean;
   onLuk: () => void;
   indkomstAar: IndkomstAar;
+  indkomstAarListe: IndkomstAar[];
   beregning: SkatteBeregning;
   aiKlar: boolean;
   onGemJob: (job: Job) => Promise<unknown>;
@@ -43,6 +46,7 @@ export function RevisorChatModal({
   aaben,
   onLuk,
   indkomstAar,
+  indkomstAarListe,
   beregning,
   aiKlar,
   onGemJob,
@@ -55,6 +59,7 @@ export function RevisorChatModal({
   const [fase, setFase] = useState<string | null>(null);
   const [fejl, setFejl] = useState<string | null>(null);
   const [soegning, setSoegning] = useState(true);
+  const diktering = useDiktering(input, setInput);
   /**
    * Kun det seneste, endnu ikke godkendte udkast er interaktivt. Et ældre
    * udkast, der er blevet erstattet af en rettelse, vises stadig som en
@@ -73,6 +78,13 @@ export function RevisorChatModal({
     // Uden behavior: smooth. Ældre Safari understøtter det ikke.
     bund.current?.scrollIntoView({ block: 'end' });
   }, [beskeder, arbejder]);
+
+  useEffect(() => {
+    if (!aaben) diktering.stop();
+    // Hookens stop-funktion ændrer identitet ved render; modaltilstanden er
+    // den eneste ændring, der skal styre denne oprydning.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aaben]);
 
   /**
    * Beregningen sendes med, så modellen kan gengive tallene i stedet for at
@@ -101,6 +113,7 @@ export function RevisorChatModal({
   const send = async (tekst: string) => {
     const spørgsmål = tekst.trim();
     if (!spørgsmål || arbejder) return;
+    diktering.stop();
 
     const historik: ChatBesked[] = [...beskeder, { rolle: 'bruger', indhold: spørgsmål }];
     setBeskeder(historik);
@@ -261,6 +274,7 @@ export function RevisorChatModal({
                         <PosteringForslagKort
                           forslag={b.forslag}
                           indkomstAarId={indkomstAar.id}
+                          indkomstAarListe={indkomstAarListe}
                           onGemJob={onGemJob}
                           onGemFradrag={onGemFradrag}
                           onGemInvestering={onGemInvestering}
@@ -316,10 +330,24 @@ export function RevisorChatModal({
                 placeholder="Skriv dit spørgsmål"
                 className="min-h-[3rem] flex-1 resize-none rounded-[4px] border border-rule-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint"
               />
+              {diktering.understøttet && (
+                <Knap
+                  type="button"
+                  onClick={diktering.lytter ? diktering.stop : diktering.start}
+                  aria-label={diktering.lytter ? 'Stop diktering' : 'Diktér på dansk'}
+                  aria-pressed={diktering.lytter}
+                  className={diktering.lytter ? 'text-negative' : ''}
+                >
+                  {diktering.lytter ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                  <span className="hidden sm:inline">{diktering.lytter ? 'Stop' : 'Diktér'}</span>
+                </Knap>
+              )}
               <Knap art="primaer" type="submit" disabled={arbejder || !input.trim()}>
                 Send
               </Knap>
             </form>
+
+            {diktering.fejl && <p role="alert" className="mt-2 text-2xs text-negative">{diktering.fejl}</p>}
 
             <label className="mt-2 flex items-center gap-2 text-2xs text-ink-muted">
               <input

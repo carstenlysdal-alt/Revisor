@@ -509,6 +509,7 @@ export default function App() {
           aaben={scannerAaben}
           onLuk={() => setScannerAaben(false)}
           indkomstAar={aktivtAar}
+          indkomstAarListe={aarListe}
           aiKlar={aiKlar}
           onGemJob={medFejlhaandtering(d.gemJob)}
           onGemFradrag={medFejlhaandtering(d.gemFradrag)}
@@ -522,6 +523,7 @@ export default function App() {
           aaben={chatAaben}
           onLuk={() => setChatAaben(false)}
           indkomstAar={aktivtAar}
+          indkomstAarListe={aarListe}
           beregning={beregning}
           aiKlar={aiKlar}
           onGemJob={medFejlhaandtering(d.gemJob)}

@@ -1,6 +1,6 @@
 {
   "name": "revis - B-indkomst & Skat",
   "description": "AI-drevet skatte- og regnskabsassistent til B-indkomst, honorarer, bilagsscanning, kørselsfradrag og årsopgørelses-rubrikker.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

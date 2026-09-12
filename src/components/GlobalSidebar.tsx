@@ -45,6 +45,8 @@ interface GoogleDriveStatus {
   konfigureret: boolean;
   forbundet: boolean;
   sidsteFejl: string | null;
+  sikkerhedskopieredeBilag: number;
+  afventendeBilag: number;
 }
 
 /**
@@ -74,9 +76,11 @@ function GoogleDriveStatusBlok() {
       window.history.replaceState({}, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
     }
     void hentStatus();
+    const interval = window.setInterval(() => void hentStatus(), 15_000);
+    return () => window.clearInterval(interval);
   }, []);
 
-  if (!status || !status.konfigureret) return null;
+  if (!status) return null;
 
   async function afbryd() {
     if (
@@ -99,12 +103,22 @@ function GoogleDriveStatusBlok() {
     <div className="mt-5 border-t border-rule pt-4">
       <p className="text-2xs uppercase tracking-wide text-ink-faint">Google Drev-backup</p>
 
+      {!status.konfigureret && (
+        <p className="mt-1.5 text-2xs text-ink-muted">
+          Alt gemmes løbende i appens database. Ekstern Google Drev-backup er ikke sat op
+          på serveren endnu.
+        </p>
+      )}
+
       {urlBesked && <p className="mt-1.5 text-2xs text-ink-muted">{urlBesked}</p>}
 
-      {status.forbundet && !status.sidsteFejl && (
+      {status.konfigureret && status.forbundet && !status.sidsteFejl && (
         <>
           <p className="mt-1.5 text-2xs text-ink-muted">
-            Forbundet. Bilag og et datasnapshot sikkerhedskopieres automatisk.
+            Forbundet. {status.sikkerhedskopieredeBilag} bilag er sikkerhedskopieret
+            {status.afventendeBilag > 0
+              ? `; ${status.afventendeBilag} afventer.`
+              : '. Datasnapshottet er ajour.'}
           </p>
           <button
             type="button"
@@ -117,19 +131,19 @@ function GoogleDriveStatusBlok() {
         </>
       )}
 
-      {status.forbundet && status.sidsteFejl && (
+      {status.konfigureret && status.forbundet && status.sidsteFejl && (
         <div className="mt-1.5">
-          <Advarsel titel="Forbindelsen skal genoprettes">{status.sidsteFejl}</Advarsel>
+          <Advarsel titel="Backup kræver opmærksomhed">{status.sidsteFejl}</Advarsel>
           <a
             href="/api/google/start"
             className="mt-1.5 inline-block text-2xs text-ink-muted underline underline-offset-2"
           >
-            Genforbind Google Drev
+            Prøv at genforbinde Google Drev
           </a>
         </div>
       )}
 
-      {!status.forbundet && (
+      {status.konfigureret && !status.forbundet && (
         <a
           href="/api/google/start"
           className="mt-1.5 inline-block text-2xs text-ink-muted underline underline-offset-2"

@@ -116,6 +116,8 @@ export const api = {
       forbundetTidspunkt: string | null;
       sidsteFejl: string | null;
       sidsteFejlTidspunkt: string | null;
+      sikkerhedskopieredeBilag: number;
+      afventendeBilag: number;
     }>('/google/status'),
 
   googleDriveAfbryd: () => kald<{ ok: true }>('/google/afbryd', { method: 'POST' }),

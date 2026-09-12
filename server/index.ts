@@ -11,6 +11,7 @@ import { bilagRoutes } from './routes/bilag';
 import { aiRoutes } from './routes/ai';
 import { ruterRoutes } from './routes/ruter';
 import { integrationerRoutes } from './routes/integrationer';
+import { opretAutomatiskDriveBackup } from './integrations/automatiskBackup';
 import { authRoutes, harKodeord, hastighedsgraense, kraevLogin } from './auth';
 import { udbyderStatus } from './ai/faktor';
 
@@ -24,8 +25,15 @@ async function opretLager(): Promise<{
   arkiv: BilagsLager;
   navn: string;
 }> {
-  if (process.env.DATABASE_URL) {
-    const pg = new PostgresRepository(process.env.DATABASE_URL);
+  // Railway's interne hostname virker kun inde i Railway. Ved lokal kørsel
+  // med `railway run` vælges den offentlige, TLS-beskyttede forbindelse.
+  const databaseUrl =
+    process.env.NODE_ENV === 'production'
+      ? process.env.DATABASE_URL
+      : process.env.DATABASE_PUBLIC_URL ?? process.env.DATABASE_URL;
+
+  if (databaseUrl) {
+    const pg = new PostgresRepository(databaseUrl);
     await pg.migrer();
     // Postgres er både datalager og bilagsarkiv. En container får nyt
     // filsystem ved hver udrulning, så bilag på disk ville forsvinde.
@@ -52,12 +60,17 @@ async function start() {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'same-origin');
     res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
     next();
   });
 
   app.use(express.json({ limit: '30mb' }));
 
   const { repo, arkiv, navn: lagernavn } = await opretLager();
+  const driveBackup = opretAutomatiskDriveBackup(repo, arkiv);
+  // Forsøger også igen efter en genstart, hvis en tidligere backup blev
+  // afbrudt af en udrulning eller en kortvarig fejl hos Google.
+  driveBackup.planlaeg();
 
   // Sundhedstjek uden login, så Railway kan se om containeren lever. Den
   // røber ikke andet end at appen kører.
@@ -68,8 +81,8 @@ async function start() {
   // Alt herunder kræver login. Bilagene ligger bag den her linje.
   app.use('/api', kraevLogin);
 
-  app.use('/api', dataRoutes(repo));
-  app.use('/api', bilagRoutes(repo, arkiv));
+  app.use('/api', dataRoutes(repo, driveBackup.planlaeg));
+  app.use('/api', bilagRoutes(repo, arkiv, driveBackup.planlaeg));
   app.use(
     '/api',
     // AI-kald koster penge pr. gang, også for den der er logget ind.
@@ -90,7 +103,7 @@ async function start() {
     }),
     ruterRoutes()
   );
-  app.use('/api', integrationerRoutes(repo));
+  app.use('/api', integrationerRoutes(repo, driveBackup.planlaeg));
 
   app.use('/api', (err: Error, _req: Request, res: Response, _next: NextFunction) => {
     console.error('Serverfejl:', err);

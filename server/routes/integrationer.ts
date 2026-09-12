@@ -13,17 +13,25 @@ import {
  * samtykke, så fejl her sendes videre som en ?drev=-parameter på forsiden
  * i stedet for et JSON-svar, ingen ser.
  */
-export function integrationerRoutes(repo: Repository): Router {
+export function integrationerRoutes(
+  repo: Repository,
+  onForbundet: () => void = () => undefined
+): Router {
   const r = Router();
 
   r.get('/google/status', async (_req, res) => {
-    const forbindelse = await repo.hentGoogleDriveForbindelse();
+    const [forbindelse, snapshot] = await Promise.all([
+      repo.hentGoogleDriveForbindelse(),
+      repo.hentAlt(),
+    ]);
     res.json({
       konfigureret: harGoogleDriveKonfiguration(),
       forbundet: Boolean(forbindelse),
       forbundetTidspunkt: forbindelse?.forbundetTidspunkt ?? null,
       sidsteFejl: forbindelse?.sidsteFejl ?? null,
       sidsteFejlTidspunkt: forbindelse?.sidsteFejlTidspunkt ?? null,
+      sikkerhedskopieredeBilag: snapshot.bilag.filter((b) => b.drevBackupTidspunkt).length,
+      afventendeBilag: snapshot.bilag.filter((b) => !b.drevBackupTidspunkt).length,
     });
   });
 
@@ -54,6 +62,7 @@ export function integrationerRoutes(repo: Repository): Router {
         sidsteFejl: null,
         sidsteFejlTidspunkt: null,
       });
+      onForbundet();
       res.redirect('/?drev=forbundet');
     } catch (err) {
       console.error('Google Drive-forbindelse fejlede:', err);

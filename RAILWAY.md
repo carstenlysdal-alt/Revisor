@@ -89,8 +89,9 @@ Mappen `backup/` er i `.gitignore` og bliver aldrig committet.
 
 Sidepanelet får en "Forbind Google Drev"-knap, når `GOOGLE_CLIENT_ID`,
 `GOOGLE_CLIENT_SECRET` og `GOOGLE_REDIRECT_URI` alle er sat. Herefter
-sikkerhedskopieres hvert uploadet bilag automatisk, plus et periodisk
-datasnapshot af hele regnskabet — som endnu en kopi, ikke et lager appen
+sikkerhedskopieres hvert uploadet bilag automatisk, plus et opdateret
+datasnapshot af hele regnskabet efter hver ændring. Det er endnu en kopi,
+ikke et lager appen
 selv læser fra. Dette er ekstra sikkerhed oven på Postgres, ikke en
 erstatning for den.
 
@@ -115,8 +116,8 @@ enkeltbrugerapp er løsningen at klikke sig igennem den (Avanceret → Gå til
 appen), ikke at gennemgå Googles fulde appverifikationsproces.
 
 Bliver forbindelsen ugyldig (tilbagekaldt manuelt, eller udløbet), viser
-sidepanelet det tydeligt i stedet for at fejle stille — næste upload eller
-snapshot rammer bare no-op, indtil der genforbindes.
+sidepanelet det tydeligt i stedet for at fejle stille. Appen forsøger igen
+ved næste ændring og efter en genstart; genforbind, hvis tokenet er udløbet.
 
 ## Det du selv skal tage stilling til
 
