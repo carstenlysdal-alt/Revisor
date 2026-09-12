@@ -148,7 +148,9 @@ app.use((_, response, next) => {
   response.setHeader('X-Content-Type-Options', 'nosniff');
   response.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.setHeader('Permissions-Policy', 'camera=(), microphone=(self), geolocation=()');
-  response.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+  const scriptPolicy = isProduction ? "script-src 'self'" : "script-src 'self' 'unsafe-inline'";
+  const connectPolicy = isProduction ? "connect-src 'self'" : "connect-src 'self' ws: wss:";
+  response.setHeader('Content-Security-Policy', `default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; ${scriptPolicy}; ${connectPolicy}; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`);
   next();
 });
 app.use('/api', sameOriginOnly, express.json({ limit: '22mb', type: 'application/json' }));
