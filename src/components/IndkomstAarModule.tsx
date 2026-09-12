@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import type { IndkomstAar } from '../types';
-import { KOMMUNENAVNE, GENNEMSNIT, getKommuneSatser } from '../lib/tax/kommuner';
+import {
+  GENNEMSNIT,
+  KOMMUNENAVNE,
+  KOMMUNE_SATS_KILDE,
+  getKommuneSatser,
+} from '../lib/tax/kommuner';
 import { TILGAENGELIGE_AAR } from '../lib/tax/satser';
 import { kr, talFraFelt } from '../lib/format';
 import {
@@ -69,21 +74,44 @@ export function IndkomstAarModule({
   const ledigeAar = TILGAENGELIGE_AAR.filter((a) => !brugteAar.has(a));
 
   const aabn = (aar: IndkomstAar) => {
+    const officielleSatser = aar.kommune ? getKommuneSatser(aar.kommune, aar.aar) : null;
     setFejl(null);
     setRedigerer(aar);
     setAIndkomst(aar.forventetAIndkomst ? String(aar.forventetAIndkomst) : '');
     setPension(aar.forventetPensionSUDagpenge ? String(aar.forventetPensionSUDagpenge) : '');
     setAFradrag(aar.forventedeFradragAIndkomst ? String(aar.forventedeFradragAIndkomst) : '');
-    setKommuneskat(aar.kommuneSkatteprocent ? String(aar.kommuneSkatteprocent) : '');
-    setKirkeskat(aar.kirkeskatteprocent ? String(aar.kirkeskatteprocent) : '');
+    setKommuneskat(
+      officielleSatser?.kommuneskat !== null && officielleSatser?.kommuneskat !== undefined
+        ? String(officielleSatser.kommuneskat)
+        : aar.kommuneSkatteprocent
+          ? String(aar.kommuneSkatteprocent)
+          : '',
+    );
+    setKirkeskat(
+      officielleSatser?.kirkeskat !== null && officielleSatser?.kirkeskat !== undefined
+        ? String(officielleSatser.kirkeskat)
+        : aar.kirkeskatteprocent
+          ? String(aar.kirkeskatteprocent)
+          : '',
+    );
+  };
+
+  const anvendKommuneSatser = (navn: string, aar: number) => {
+    const satser = getKommuneSatser(navn, aar);
+    setKommuneskat(satser.kommuneskat === null ? '' : String(satser.kommuneskat));
+    setKirkeskat(satser.kirkeskat === null ? '' : String(satser.kirkeskat));
   };
 
   const vaelgKommune = (navn: string) => {
     if (!redigerer) return;
-    const satser = getKommuneSatser(navn, redigerer.aar);
     setRedigerer({ ...redigerer, kommune: navn });
-    if (satser.kommuneskat !== null) setKommuneskat(String(satser.kommuneskat));
-    if (satser.kirkeskat !== null) setKirkeskat(String(satser.kirkeskat));
+    anvendKommuneSatser(navn, redigerer.aar);
+  };
+
+  const vaelgAar = (aar: number) => {
+    if (!redigerer) return;
+    setRedigerer({ ...redigerer, aar });
+    anvendKommuneSatser(redigerer.kommune, aar);
   };
 
   const gem = async () => {
@@ -124,6 +152,10 @@ export function IndkomstAarModule({
     redigerer && redigerer.kommune
       ? getKommuneSatser(redigerer.kommune, redigerer.aar)
       : null;
+  const harOfficielleSatser =
+    satserForValgtKommune?.kommuneskat !== null &&
+    satserForValgtKommune?.kommuneskat !== undefined &&
+    satserForValgtKommune.kirkeskat !== null;
 
   return (
     <Sektion
@@ -250,9 +282,7 @@ export function IndkomstAarModule({
                   <Vaelger
                     id={id}
                     value={redigerer.aar}
-                    onChange={(e) =>
-                      setRedigerer({ ...redigerer, aar: Number(e.target.value) })
-                    }
+                    onChange={(e) => vaelgAar(Number(e.target.value))}
                   >
                     {TILGAENGELIGE_AAR.map((a) => (
                       <option key={a} value={a} disabled={brugteAar.has(a) && a !== redigerer.aar}>
@@ -298,7 +328,13 @@ export function IndkomstAarModule({
             <div className="grid gap-4 sm:grid-cols-2">
               <Felt label="Kommuneskat i procent" paakraevet>
                 {(id) => (
-                  <BeloebFelt id={id} vaerdi={kommuneskat} onVaerdi={setKommuneskat} suffiks="%" />
+                  <BeloebFelt
+                    id={id}
+                    vaerdi={kommuneskat}
+                    onVaerdi={setKommuneskat}
+                    suffiks="%"
+                    readOnly={harOfficielleSatser}
+                  />
                 )}
               </Felt>
               <Felt
@@ -312,10 +348,26 @@ export function IndkomstAarModule({
                     onVaerdi={setKirkeskat}
                     suffiks="%"
                     disabled={!redigerer.medlemFolkekirken}
+                    readOnly={harOfficielleSatser}
                   />
                 )}
               </Felt>
             </div>
+
+            {harOfficielleSatser && (
+              <p className="text-2xs text-ink-faint">
+                Satserne er automatisk udfyldt for {redigerer.kommune} i {redigerer.aar} fra{' '}
+                <a
+                  href={KOMMUNE_SATS_KILDE.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline underline-offset-2 hover:text-ink"
+                >
+                  {KOMMUNE_SATS_KILDE.navn}
+                </a>
+                . Kirkeskatten bruges kun, hvis du markerer medlemskab af folkekirken.
+              </p>
+            )}
 
             <Felt
               label="Hjemmeadresse"

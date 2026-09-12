@@ -1,15 +1,10 @@
 /**
- * Danske kommuner og deres skatteprocenter.
+ * Officielle kommunale skatteprocenter for alle 98 kommuner.
  *
- * Skatteministeriet udstiller kun de fulde tabeller gennem et interaktivt
- * værktøj, så listen her indeholder alle 98 kommuner ved navn, men kun de
- * satser der er bekræftet mod en kilde. Resten står som null.
- *
- * Det er med vilje. En kommuneskatteprocent, der er gættet eller lånt fra et
- * andet år, ser rigtig ud i beregningen og er umulig at opdage bagefter. Står
- * satsen som null, beder appen i stedet om at få den indtastet fra
- * forskudsopgørelsen, som under alle omstændigheder er den autoritative kilde
- * for den enkeltes egen sats.
+ * Kilde: Skatte- og Vækstministeriets årsregneark "Kommuneskattesatser" for
+ * 2025 og 2026. Data er gemt lokalt og versionsopdelt, så en beregning aldrig
+ * afhænger af et generativt AI-svar eller af, at myndighedens hjemmeside er
+ * tilgængelig i det øjeblik, brugeren vælger kommune.
  */
 
 export interface KommuneSatser {
@@ -38,70 +33,126 @@ export const KOMMUNENAVNE: string[] = [
   'Viborg', 'Vordingborg', 'Ærø', 'Aabenraa', 'Aalborg', 'Aarhus',
 ];
 
-/**
- * Bekræftede satser pr. år. Kilde: Skatteministeriets 'Statistik i kommunerne',
- * krydstjekket via skatteguiden.dk, skm.dk og en dedikeret gennemgang af
- * ministeriets A-H- og Top 20-delpublikationer for 2026 (september 2026).
- * De resterende ~58 kommuner for 2026 og ~97 for 2025 er ikke bekræftet, fordi
- * den fulde konsoliderede tabel kun findes bag et interaktivt værktøj hos
- * Skatteministeriet uden en downloadbar fuld liste for begge år på
- * research-tidspunktet.
- */
+export const KOMMUNE_SATS_KILDE = {
+  navn: 'Skatte- og Vækstministeriet',
+  url: 'https://svmn.dk/tal-og-metode/satser/statistik-i-kommunerne/kommuneskatteprocenter-siden-1977',
+  hentet: '2026-09-12',
+} as const;
+
+/** [kommuneskat 2025, kirkeskat 2025, kommuneskat 2026, kirkeskat 2026] */
+const OFFICIELLE_SATSRAEKKER: Record<string, readonly [number, number, number, number]> = {
+  'Aabenraa': [25.6, 0.95, 25.6, 0.95],
+  'Aalborg': [25.6, 0.98, 25.6, 0.98],
+  'Aarhus': [24.52, 0.74, 24.52, 0.74],
+  'Albertslund': [25.6, 0.8, 25.6, 0.8],
+  'Allerød': [25.3, 0.58, 25.3, 0.58],
+  'Assens': [26.1, 0.98, 26.1, 0.98],
+  'Ballerup': [25.5, 0.75, 25.5, 0.75],
+  'Billund': [24, 0.89, 24, 0.89],
+  'Bornholm': [26.2, 0.93, 26.2, 0.93],
+  'Brøndby': [24.3, 0.8, 24.3, 0.8],
+  'Brønderslev': [26.3, 1.06, 26.3, 1.06],
+  'Dragør': [24.8, 0.61, 24.8, 0.61],
+  'Egedal': [25.7, 0.76, 25.7, 0.76],
+  'Esbjerg': [26.1, 0.81, 26.1, 0.81],
+  'Faaborg-Midtfyn': [26.1, 1.05, 26.1, 1.05],
+  'Fanø': [26.1, 1.14, 26.1, 1.14],
+  'Favrskov': [25.7, 0.96, 25.7, 0.96],
+  'Faxe': [25.8, 1.08, 25.8, 1.08],
+  'Fredensborg': [25.3, 0.62, 25.3, 0.64],
+  'Fredericia': [25.5, 0.88, 25.5, 0.88],
+  'Frederiksberg': [24.57, 0.5, 24.5, 0.5],
+  'Frederikshavn': [26.2, 1.03, 26.2, 1.03],
+  'Frederikssund': [25.7, 0.96, 25.6, 0.96],
+  'Furesø': [24.88, 0.65, 24.88, 0.7],
+  'Gentofte': [24.24, 0.39, 24.14, 0.38],
+  'Gladsaxe': [23.6, 0.75, 23.6, 0.75],
+  'Glostrup': [24.6, 0.8, 24.6, 0.8],
+  'Greve': [24.59, 0.81, 24.59, 0.81],
+  'Gribskov': [25.4, 0.85, 25.4, 0.85],
+  'Guldborgsund': [25.8, 1.16, 25.8, 1.16],
+  'Haderslev': [26.3, 0.95, 26.3, 0.95],
+  'Halsnæs': [25.7, 0.85, 25.7, 0.85],
+  'Hedensted': [25.52, 0.98, 25.52, 0.98],
+  'Helsingør': [25.82, 0.63, 25.82, 0.63],
+  'Herlev': [23.7, 0.75, 23.7, 0.8],
+  'Herning': [25.4, 0.99, 25.4, 0.99],
+  'Hillerød': [25.6, 0.69, 25.6, 0.69],
+  'Hjørring': [26.21, 1.19, 26.21, 1.19],
+  'Holbæk': [25.3, 0.96, 25.3, 0.96],
+  'Holstebro': [25.5, 1.08, 25.5, 1.08],
+  'Horsens': [25.69, 0.79, 25.69, 0.79],
+  'Hvidovre': [25.4, 0.72, 25.4, 0.72],
+  'Høje-Taastrup': [24.6, 0.8, 24.6, 0.8],
+  'Hørsholm': [23.7, 0.62, 23.7, 0.62],
+  'Ikast-Brande': [25.1, 0.97, 25.1, 0.97],
+  'Ishøj': [25, 0.9, 25, 0.9],
+  'Jammerbugt': [25.7, 1.2, 25.7, 1.2],
+  'Kalundborg': [24.2, 1.01, 24.2, 1.01],
+  'Kerteminde': [26.1, 0.98, 26.1, 0.98],
+  'Kolding': [25.5, 0.92, 25.5, 0.92],
+  'København': [23.5, 0.8, 23.39, 0.8],
+  'Køge': [25.26, 0.87, 25.26, 0.87],
+  'Langeland': [26.3, 1.14, 26.3, 1.14],
+  'Lejre': [25.31, 1.05, 25.31, 1.05],
+  'Lemvig': [25.7, 1.27, 25.7, 1.27],
+  'Lolland': [26.3, 1.23, 26.3, 1.23],
+  'Lyngby-Taarbæk': [24.38, 0.6, 24.38, 0.6],
+  'Læsø': [26.3, 1.3, 26.3, 1.3],
+  'Mariagerfjord': [25.9, 1.15, 25.9, 1.15],
+  'Middelfart': [25.8, 0.9, 25.8, 0.9],
+  'Morsø': [25.8, 1.2, 25.8, 1.2],
+  'Norddjurs': [26, 1, 26, 1],
+  'Nordfyns': [26, 1.04, 26, 1.04],
+  'Nyborg': [26.3, 1, 26.3, 1],
+  'Næstved': [25, 0.98, 25, 0.98],
+  'Odder': [25.1, 0.95, 25.1, 0.95],
+  'Odense': [25.5, 0.68, 25.5, 0.68],
+  'Odsherred': [26.3, 0.98, 26.3, 0.98],
+  'Randers': [26, 0.89, 26, 0.89],
+  'Rebild': [25.83, 1.2, 25.83, 1.2],
+  'Ringkøbing-Skjern': [25, 1.05, 25, 1.05],
+  'Ringsted': [26.1, 0.95, 26.1, 0.95],
+  'Roskilde': [25.2, 0.84, 25.2, 0.84],
+  'Rudersdal': [23.52, 0.57, 23.47, 0.57],
+  'Rødovre': [25.7, 0.72, 25.7, 0.72],
+  'Samsø': [25.9, 1.2, 25.9, 1.2],
+  'Silkeborg': [25.5, 0.95, 25.5, 0.94],
+  'Skanderborg': [26, 0.86, 26, 0.86],
+  'Skive': [25.5, 1.09, 25.5, 1.09],
+  'Slagelse': [26.1, 0.96, 26.1, 0.96],
+  'Solrød': [24.99, 0.89, 24.99, 0.84],
+  'Sorø': [26.3, 0.95, 26.3, 0.95],
+  'Stevns': [26, 1.1, 26, 1.1],
+  'Struer': [25.3, 1.2, 25.3, 1.2],
+  'Svendborg': [26.3, 1.02, 26.3, 1.02],
+  'Syddjurs': [25.9, 0.98, 25.9, 0.98],
+  'Sønderborg': [25.7, 0.91, 25.7, 0.91],
+  'Thisted': [25.5, 1.27, 25.5, 1.27],
+  'Tårnby': [24.1, 0.61, 24.1, 0.61],
+  'Tønder': [25.3, 1.16, 25.3, 1.16],
+  'Vallensbæk': [25.6, 0.8, 25.6, 0.8],
+  'Varde': [25.1, 0.95, 25.1, 0.95],
+  'Vejen': [25.8, 1.06, 25.8, 1.06],
+  'Vejle': [23.4, 0.89, 23.4, 0.89],
+  'Vesthimmerland': [26.3, 1.18, 26.3, 1.18],
+  'Viborg': [25.5, 0.93, 25.5, 0.93],
+  'Vordingborg': [26.3, 1.02, 26.3, 1.02],
+  'Ærø': [26.1, 1.05, 26.1, 1.07],
+};
+
 const BEKRAEFTEDE_SATSER: Record<number, Record<string, KommuneSatser>> = {
-  2025: {
-    'Læsø': { kommuneskat: 26.30, kirkeskat: 1.30 },
-  },
-  2026: {
-    'København': { kommuneskat: 23.39, kirkeskat: null },
-    'Vejle': { kommuneskat: 23.4, kirkeskat: null },
-    'Rudersdal': { kommuneskat: 23.47, kirkeskat: null },
-    'Lolland': { kommuneskat: 26.3, kirkeskat: null },
-    'Læsø': { kommuneskat: 26.3, kirkeskat: null },
-    'Odsherred': { kommuneskat: 26.3, kirkeskat: null },
-    'Sorø': { kommuneskat: 26.3, kirkeskat: null },
-    // Nedenstående ~40 kommuner er tilføjet fra Skatteministeriets
-    // A-H-oversigt for 2026 (deep research, september 2026).
-    'Albertslund': { kommuneskat: 25.60, kirkeskat: 0.80 },
-    'Allerød': { kommuneskat: 25.30, kirkeskat: 0.58 },
-    'Assens': { kommuneskat: 26.10, kirkeskat: 0.98 },
-    'Ballerup': { kommuneskat: 25.50, kirkeskat: 0.75 },
-    'Billund': { kommuneskat: 24.00, kirkeskat: 0.89 },
-    'Bornholm': { kommuneskat: 26.20, kirkeskat: 0.93 },
-    'Brøndby': { kommuneskat: 24.30, kirkeskat: 0.80 },
-    'Brønderslev': { kommuneskat: 26.30, kirkeskat: 1.06 },
-    'Dragør': { kommuneskat: 24.80, kirkeskat: 0.61 },
-    'Egedal': { kommuneskat: 25.70, kirkeskat: 0.76 },
-    'Esbjerg': { kommuneskat: 26.10, kirkeskat: 0.81 },
-    'Faaborg-Midtfyn': { kommuneskat: 26.10, kirkeskat: 1.05 },
-    'Fanø': { kommuneskat: 26.10, kirkeskat: 1.14 },
-    'Favrskov': { kommuneskat: 25.70, kirkeskat: 0.96 },
-    'Faxe': { kommuneskat: 25.80, kirkeskat: 1.08 },
-    'Fredensborg': { kommuneskat: 25.30, kirkeskat: 0.64 },
-    'Fredericia': { kommuneskat: 25.50, kirkeskat: 0.88 },
-    'Frederiksberg': { kommuneskat: 24.50, kirkeskat: 0.50 },
-    'Frederikshavn': { kommuneskat: 26.20, kirkeskat: 1.03 },
-    'Frederikssund': { kommuneskat: 25.60, kirkeskat: 0.96 },
-    'Furesø': { kommuneskat: 24.88, kirkeskat: 0.70 },
-    'Gentofte': { kommuneskat: 24.14, kirkeskat: 0.38 },
-    'Gladsaxe': { kommuneskat: 23.60, kirkeskat: 0.75 },
-    'Glostrup': { kommuneskat: 24.60, kirkeskat: 0.80 },
-    'Greve': { kommuneskat: 24.59, kirkeskat: 0.81 },
-    'Gribskov': { kommuneskat: 25.40, kirkeskat: 0.85 },
-    'Guldborgsund': { kommuneskat: 25.80, kirkeskat: 1.16 },
-    'Haderslev': { kommuneskat: 26.30, kirkeskat: 0.95 },
-    'Halsnæs': { kommuneskat: 25.70, kirkeskat: 0.85 },
-    'Hedensted': { kommuneskat: 25.52, kirkeskat: 0.98 },
-    'Helsingør': { kommuneskat: 25.82, kirkeskat: 0.63 },
-    'Herlev': { kommuneskat: 23.70, kirkeskat: 0.80 },
-    'Herning': { kommuneskat: 25.40, kirkeskat: 0.99 },
-    'Hillerød': { kommuneskat: 25.60, kirkeskat: 0.69 },
-    'Hjørring': { kommuneskat: 26.21, kirkeskat: 1.19 },
-    'Holbæk': { kommuneskat: 25.30, kirkeskat: 0.96 },
-    'Holstebro': { kommuneskat: 25.50, kirkeskat: 1.08 },
-    'Horsens': { kommuneskat: 25.69, kirkeskat: 0.79 },
-    'Hvidovre': { kommuneskat: 25.40, kirkeskat: 0.72 },
-    'Høje-Taastrup': { kommuneskat: 24.60, kirkeskat: 0.80 },
-  },
+  2025: Object.fromEntries(
+    Object.entries(OFFICIELLE_SATSRAEKKER).map(([kommune, [kommuneskat, kirkeskat]]) => [
+      kommune,
+      { kommuneskat, kirkeskat },
+    ]),
+  ),
+  2026: Object.fromEntries(
+    Object.entries(OFFICIELLE_SATSRAEKKER).map(
+      ([kommune, [, , kommuneskat, kirkeskat]]) => [kommune, { kommuneskat, kirkeskat }],
+    ),
+  ),
 };
 
 /** Landsgennemsnit, kun til at vise en størrelsesorden. Aldrig til beregning. */
