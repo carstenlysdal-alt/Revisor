@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Briefcase,
   Receipt,
@@ -12,16 +12,11 @@ import {
   PiggyBank,
   BarChart3,
   Layers,
-  MapPin,
-  Sparkles,
+  Inbox,
   MessageSquare,
-  ChevronDown,
-  Plus,
-  Compass,
   CheckCircle2,
   Calendar,
-  Building,
-  ShieldCheck
+  Settings
 } from 'lucide-react';
 import {
   IndkomstAar,
@@ -29,8 +24,7 @@ import {
   Fradrag,
   Investering,
   OpsparingsTracker,
-  AiExtractionResult,
-  TransportMiddel
+  AiExtractionResult
 } from './types';
 import {
   INITIAL_INDKOMSTAAR,
@@ -47,66 +41,145 @@ import { SkatOverblikModule } from './components/SkatOverblikModule';
 import { AarsopgoerelseModule } from './components/AarsopgoerelseModule';
 import { OpsparingTrackerModule } from './components/OpsparingTrackerModule';
 import { StatistikModule } from './components/StatistikModule';
-import { PlanningRoadmapView } from './components/PlanningRoadmapView';
 import { AiBilagScannerModal } from './components/AiBilagScannerModal';
 import { RevisorChatModal } from './components/RevisorChatModal';
 import { GlobalSidebar } from './components/GlobalSidebar';
+import { AarIndstillingerModule } from './components/AarIndstillingerModule';
+import { createId, loadStoredValue, saveStoredValue } from './utils/storage';
+import { calculateJobKoerselsfradrag } from './utils/mileageCalculator';
+import { saveDocument } from './utils/documentStore';
+import { isAppData, loadAppData, saveAppData, type AppData } from './utils/appDatabase';
+import { DataBackupControls } from './components/DataBackupControls';
+import { isCompleteAiSuggestion } from './utils/aiValidation';
+import { YearArchiveControls } from './components/YearArchiveControls';
+
+const DEFAULT_APP_DATA: AppData = {
+  activeAarId: INITIAL_INDKOMSTAAR[0]!.id,
+  indkomstAarList: INITIAL_INDKOMSTAAR,
+  jobs: INITIAL_JOBS,
+  fradragList: INITIAL_FRADRAG,
+  investeringer: INITIAL_INVESTERINGER,
+  opsparinger: INITIAL_OPSPARING,
+};
+
+function loadLegacyAppData(): { data: AppData; isValid: boolean } {
+  const indkomstAarList = loadStoredValue<IndkomstAar[]>('revisor_aar_list', INITIAL_INDKOMSTAAR);
+  const storedActiveAarId = loadStoredValue('revisor_active_aar', indkomstAarList[0]?.id ?? DEFAULT_APP_DATA.activeAarId);
+  const candidate: AppData = {
+    activeAarId: indkomstAarList.some((year) => year.id === storedActiveAarId)
+      ? storedActiveAarId
+      : indkomstAarList[0]?.id ?? DEFAULT_APP_DATA.activeAarId,
+    indkomstAarList,
+    jobs: loadStoredValue<Job[]>('revisor_jobs', INITIAL_JOBS),
+    fradragList: loadStoredValue<Fradrag[]>('revisor_fradrag', INITIAL_FRADRAG),
+    investeringer: loadStoredValue<Investering[]>('revisor_investeringer', INITIAL_INVESTERINGER),
+    opsparinger: loadStoredValue<Record<string, OpsparingsTracker>>('revisor_opsparing', INITIAL_OPSPARING),
+  };
+  return isAppData(candidate) ? { data: candidate, isValid: true } : { data: DEFAULT_APP_DATA, isValid: false };
+}
+
+const LEGACY_APP_DATA = loadLegacyAppData();
 
 export default function App() {
   // Persistence state
   const [indkomstAarList, setIndkomstAarList] = useState<IndkomstAar[]>(() => {
-    const saved = localStorage.getItem('revisor_aar_list');
-    return saved ? JSON.parse(saved) : INITIAL_INDKOMSTAAR;
+    return LEGACY_APP_DATA.data.indkomstAarList;
   });
 
-  const [activeAarId, setActiveAarId] = useState<string>('aar-2026');
+  const [activeAarId, setActiveAarId] = useState<string>(() =>
+    LEGACY_APP_DATA.data.activeAarId,
+  );
 
   const [jobs, setJobs] = useState<Job[]>(() => {
-    const saved = localStorage.getItem('revisor_jobs');
-    return saved ? JSON.parse(saved) : INITIAL_JOBS;
+    return LEGACY_APP_DATA.data.jobs;
   });
 
   const [fradragList, setFradragList] = useState<Fradrag[]>(() => {
-    const saved = localStorage.getItem('revisor_fradrag');
-    return saved ? JSON.parse(saved) : INITIAL_FRADRAG;
+    return LEGACY_APP_DATA.data.fradragList;
   });
 
   const [investeringer, setInvesteringer] = useState<Investering[]>(() => {
-    const saved = localStorage.getItem('revisor_investeringer');
-    return saved ? JSON.parse(saved) : INITIAL_INVESTERINGER;
+    return LEGACY_APP_DATA.data.investeringer;
   });
 
   const [opsparinger, setOpsparinger] = useState<Record<string, OpsparingsTracker>>(() => {
-    const saved = localStorage.getItem('revisor_opsparing');
-    return saved ? JSON.parse(saved) : INITIAL_OPSPARING;
+    return LEGACY_APP_DATA.data.opsparinger;
   });
 
   // UI state
-  const [activeTab, setActiveTab] = useState<string>('jobs');
+  const [activeTab, setActiveTab] = useState<string>(() =>
+    LEGACY_APP_DATA.isValid ? 'jobs' : 'indstillinger',
+  );
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
   const [isChatOpen, setIsChatOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [databaseStatus, setDatabaseStatus] = useState<'loading' | 'ready' | 'fallback'>('loading');
 
   // Sync state to LocalStorage
   useEffect(() => {
-    localStorage.setItem('revisor_aar_list', JSON.stringify(indkomstAarList));
+    if (!saveStoredValue('revisor_aar_list', indkomstAarList)) showToast('Kunne ikke gemme indkomståret lokalt.');
   }, [indkomstAarList]);
 
   useEffect(() => {
-    localStorage.setItem('revisor_jobs', JSON.stringify(jobs));
+    if (!saveStoredValue('revisor_jobs', jobs)) showToast('Kunne ikke gemme jobs lokalt.');
   }, [jobs]);
 
   useEffect(() => {
-    localStorage.setItem('revisor_fradrag', JSON.stringify(fradragList));
+    if (!saveStoredValue('revisor_fradrag', fradragList)) showToast('Kunne ikke gemme fradrag lokalt.');
   }, [fradragList]);
 
   useEffect(() => {
-    localStorage.setItem('revisor_investeringer', JSON.stringify(investeringer));
+    if (!saveStoredValue('revisor_investeringer', investeringer)) showToast('Kunne ikke gemme investeringer lokalt.');
   }, [investeringer]);
 
   useEffect(() => {
-    localStorage.setItem('revisor_opsparing', JSON.stringify(opsparinger));
+    if (!saveStoredValue('revisor_opsparing', opsparinger)) showToast('Kunne ikke gemme opsparing lokalt.');
   }, [opsparinger]);
+
+  useEffect(() => {
+    saveStoredValue('revisor_active_aar', activeAarId);
+  }, [activeAarId]);
+
+  const appData = useMemo<AppData>(() => ({
+    activeAarId,
+    indkomstAarList,
+    jobs,
+    fradragList,
+    investeringer,
+    opsparinger,
+  }), [activeAarId, indkomstAarList, jobs, fradragList, investeringer, opsparinger]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    loadAppData()
+      .then((storedData) => {
+        if (isCancelled) return;
+        if (storedData) {
+          setIndkomstAarList(storedData.indkomstAarList);
+          setJobs(storedData.jobs);
+          setFradragList(storedData.fradragList);
+          setInvesteringer(storedData.investeringer);
+          setOpsparinger(storedData.opsparinger);
+          setActiveAarId(storedData.activeAarId);
+        }
+        setDatabaseStatus('ready');
+      })
+      .catch(() => {
+        if (!isCancelled) setDatabaseStatus('fallback');
+      });
+    return () => { isCancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (databaseStatus !== 'ready') return;
+    const timer = window.setTimeout(() => {
+      saveAppData(appData).catch(() => {
+        setDatabaseStatus('fallback');
+        showToast('Databasen kunne ikke gemme. Data spejles fortsat i browserlageret.');
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [appData, databaseStatus]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -115,7 +188,7 @@ export default function App() {
 
   // Find active year
   const activeIndkomstAar =
-    indkomstAarList.find((a) => a.id === activeAarId) || indkomstAarList[0];
+    indkomstAarList.find((a) => a.id === activeAarId) ?? indkomstAarList[0] ?? INITIAL_INDKOMSTAAR[0]!;
 
   // Filter items for current year
   const yearJobs = jobs.filter((j) => j.indkomstAarId === activeIndkomstAar.id);
@@ -127,69 +200,89 @@ export default function App() {
   };
 
   // Run deterministic Danish Tax Engine
-  const skatteBeregning = calculateSkatOgFradrag(
-    activeIndkomstAar,
-    yearJobs,
-    yearFradrag
+  const skatteBeregning = useMemo(
+    () => calculateSkatOgFradrag(activeIndkomstAar, yearJobs, yearFradrag),
+    [activeIndkomstAar, yearJobs, yearFradrag],
   );
+
+  const canEditActiveYear = () => {
+    if (!activeIndkomstAar.laast) return true;
+    showToast(`Indkomståret ${activeIndkomstAar.aar} er låst.`);
+    return false;
+  };
 
   // Handlers for Jobs
   const handleAddJob = (jobData: Omit<Job, 'id'>) => {
+    if (!canEditActiveYear()) return;
     const newJob: Job = {
       ...jobData,
-      id: `job-${Date.now()}`,
+      id: createId('job'),
     };
     setJobs((prev) => [newJob, ...prev]);
     showToast(`Job "${newJob.hvervgiver}" tilføjet!`);
   };
 
   const handleUpdateJob = (id: string, updates: Partial<Job>) => {
+    if (!canEditActiveYear()) return;
     setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...updates } : j)));
     showToast('Job opdateret!');
   };
 
   const handleDeleteJob = (id: string) => {
+    if (!canEditActiveYear()) return;
+    const job = jobs.find((item) => item.id === id);
+    if (!window.confirm(`Vil du slette ${job?.hvervgiver || 'dette job'}?`)) return;
     setJobs((prev) => prev.filter((j) => j.id !== id));
     showToast('Job slettet');
   };
 
   // Handlers for Fradrag
   const handleAddFradrag = (fradragData: Omit<Fradrag, 'id'>) => {
+    if (!canEditActiveYear()) return;
     const newF: Fradrag = {
       ...fradragData,
-      id: `fradrag-${Date.now()}`,
+      id: createId('fradrag'),
     };
     setFradragList((prev) => [newF, ...prev]);
     showToast(`Fradrag "${newF.beskrivelse}" tilføjet!`);
   };
 
   const handleUpdateFradrag = (id: string, updates: Partial<Fradrag>) => {
+    if (!canEditActiveYear()) return;
     setFradragList((prev) => prev.map((f) => (f.id === id ? { ...f, ...updates } : f)));
     showToast('Fradrag opdateret!');
   };
 
   const handleDeleteFradrag = (id: string) => {
+    if (!canEditActiveYear()) return;
+    const fradrag = fradragList.find((item) => item.id === id);
+    if (!window.confirm(`Vil du slette ${fradrag?.beskrivelse || 'dette fradrag'}?`)) return;
     setFradragList((prev) => prev.filter((f) => f.id !== id));
     showToast('Fradrag slettet');
   };
 
   // Handlers for Investeringer
   const handleAddInvestering = (invData: Omit<Investering, 'id'>) => {
+    if (!canEditActiveYear()) return;
     const newInv: Investering = {
       ...invData,
-      id: `inv-${Date.now()}`,
+      id: createId('inv'),
     };
     setInvesteringer((prev) => [newInv, ...prev]);
     showToast(`Investering "${newInv.titel}" registreret!`);
   };
 
   const handleDeleteInvestering = (id: string) => {
+    if (!canEditActiveYear()) return;
+    const investering = investeringer.find((item) => item.id === id);
+    if (!window.confirm(`Vil du slette ${investering?.titel || 'denne investering'}?`)) return;
     setInvesteringer((prev) => prev.filter((i) => i.id !== id));
     showToast('Investering slettet');
   };
 
   // Handler for Opsparing
   const handleUpdateOpsparing = (updatedData: OpsparingsTracker) => {
+    if (!canEditActiveYear()) return;
     setOpsparinger((prev) => ({
       ...prev,
       [activeIndkomstAar.id]: updatedData,
@@ -197,58 +290,125 @@ export default function App() {
     showToast('Opsparingstal opdateret!');
   };
 
+  const handleUpdateIndkomstAar = (updates: Partial<IndkomstAar>) => {
+    setIndkomstAarList((current) => current.map((aar) =>
+      aar.id === activeIndkomstAar.id ? { ...aar, ...updates } : aar,
+    ));
+    showToast('Indkomståret er opdateret.');
+  };
+
+  const handleAddIndkomstAar = (aar: number) => {
+    if (indkomstAarList.some((item) => item.aar === aar)) return;
+    const id = createId(`aar-${aar}`);
+    const newYear: IndkomstAar = {
+      ...activeIndkomstAar,
+      id,
+      aar,
+      laast: false,
+      forventetAIndkomst: 0,
+      forventetPensionSUDagpenge: 0,
+      forventedeFradragAIndkomst: 0,
+    };
+    setIndkomstAarList((current) => [...current, newYear].sort((a, b) => b.aar - a.aar));
+    setActiveAarId(id);
+  };
+
+  const handleImportData = (data: AppData) => {
+    setIndkomstAarList(data.indkomstAarList);
+    setJobs(data.jobs);
+    setFradragList(data.fradragList);
+    setInvesteringer(data.investeringer);
+    setOpsparinger(data.opsparinger);
+    setActiveAarId(data.activeAarId);
+    setActiveTab('jobs');
+  };
+
   // Handle AI Scanner Extraction
-  const handleApplyAiResult = (res: AiExtractionResult, rawFile?: File) => {
+  const handleApplyAiResult = async (
+    res: AiExtractionResult,
+    rawFile: File | undefined,
+    targetYearId: string,
+    sourceText: string | undefined,
+  ) => {
+    if (!isCompleteAiSuggestion(res)) throw new Error('Agentforslaget mangler nødvendige eller gyldige oplysninger.');
+    const targetYear = indkomstAarList.find((year) => year.id === targetYearId);
+    if (!targetYear) throw new Error('Det valgte indkomstår findes ikke.');
+    if (targetYear.laast) throw new Error(`Indkomståret ${targetYear.aar} er låst.`);
+    let bilagId: string | undefined;
+    if (rawFile) {
+      try { bilagId = await saveDocument(rawFile); }
+      catch { showToast('Posten gemmes, men originalbilaget kunne ikke lagres i browseren.'); }
+    }
     if (res.classification === 'JOB') {
       const data = res.job;
       if (data) {
-        handleAddJob({
-          indkomstAarId: activeIndkomstAar.id,
+        const job: Job = {
+          id: createId('job'),
+          indkomstAarId: targetYear.id,
           hvervgiver: data.hvervgiver || 'Ubekendt kunde',
           honorar: Number(data.honorar) || 0,
-          startDato: data.startDato || new Date().toISOString().split('T')[0],
-          slutDato: data.slutDato || data.startDato || new Date().toISOString().split('T')[0],
-          betalingsDato: data.betalingsDato || data.startDato || new Date().toISOString().split('T')[0],
-          transportmiddel: (data.transportmiddel as TransportMiddel) || 'NONE',
+          startDato: data.startDato || new Date().toISOString().slice(0, 10),
+          slutDato: data.slutDato || data.startDato || new Date().toISOString().slice(0, 10),
+          betalingsDato: data.betalingsDato || data.startDato || new Date().toISOString().slice(0, 10),
+          transportmiddel: data.transportmiddel || 'NONE',
           antalKm: Number(data.antalKm) || 0,
-          antalTure: 1,
+          antalTure: Number(data.antalTure) || 1,
           destinationAdresse: data.destinationAdresse || '',
-          koerselsFradrag: Number(data.koerselsFradrag) || 0,
+          koerselsFradrag: calculateJobKoerselsfradrag(targetYear.aar, data.transportmiddel || 'NONE', Number(data.antalKm) || 0, Number(data.antalTure) || 0),
           amBidragFritaget: Boolean(data.amBidragFritaget),
-          timerJob: Number(data.timerJob) || 4,
-          timerTransportForberedelse: Number(data.timerTransportForberedelse) || 2,
-          type: data.type || 'Musik & Scene',
-          bilagNavne: rawFile ? [rawFile.name] : ['Scannet_bilag.pdf'],
+          timerJob: data.timerJob === undefined ? undefined : Number(data.timerJob),
+          timerTransportForberedelse: data.timerTransportForberedelse === undefined ? undefined : Number(data.timerTransportForberedelse),
+          type: data.type,
+          bilagNavne: rawFile ? [rawFile.name] : undefined,
+          bilagIds: bilagId ? [bilagId] : undefined,
+          kildeTekst: sourceText,
           noter: res.revisorNotat || res.summary || 'Automatisk scannet med Revisor AI.',
-        });
+          rubrik: data.rubrik || 12,
+          status: 'PLANLAGT',
+        };
+        setJobs((current) => [job, ...current]);
+        showToast(`Job "${job.hvervgiver}" tilføjet til ${targetYear.aar}.`);
+        setActiveAarId(targetYear.id);
         setActiveTab('jobs');
       }
     } else if (res.classification === 'INVESTERING') {
       const data = res.investering;
       if (data) {
-        handleAddInvestering({
-          indkomstAarId: activeIndkomstAar.id,
+        const investering: Investering = {
+          id: createId('inv'),
+          indkomstAarId: targetYear.id,
           titel: data.titel || 'Nyt anlægsaktiv',
           beloeb: Number(data.beloeb) || 0,
-          fakturaDato: data.fakturaDato || new Date().toISOString().split('T')[0],
-          bilagNavne: rawFile ? [rawFile.name] : ['Scannet_investering.pdf'],
-        });
+          fakturaDato: data.fakturaDato || new Date().toISOString().slice(0, 10),
+          bilagNavne: rawFile ? [rawFile.name] : undefined,
+          bilagIds: bilagId ? [bilagId] : undefined,
+          kildeTekst: sourceText,
+        };
+        setInvesteringer((current) => [investering, ...current]);
+        showToast(`Investering "${investering.titel}" registreret i ${targetYear.aar}.`);
+        setActiveAarId(targetYear.id);
         setActiveTab('investeringer');
       }
-    } else {
+    } else if (res.classification === 'FRADRAG') {
       const data = res.fradrag;
       if (data) {
-        handleAddFradrag({
-          indkomstAarId: activeIndkomstAar.id,
+        const fradrag: Fradrag = {
+          id: createId('fradrag'),
+          indkomstAarId: targetYear.id,
           beskrivelse: data.beskrivelse || 'Kvittering',
           typeKategori: data.typeKategori || 'Udstyr',
-          fakturaDato: data.fakturaDato || new Date().toISOString().split('T')[0],
+          fakturaDato: data.fakturaDato || new Date().toISOString().slice(0, 10),
           fakturaBeloeb: Number(data.fakturaBeloeb) || 0,
-          fradragsProcent: Number(data.fradragsProcent) || 100,
-          fradragIDKK: Number(data.fradragIDKK) || Number(data.fakturaBeloeb) || 0,
-          bilagNavne: rawFile ? [rawFile.name] : ['Scannet_kvittering.pdf'],
+          fradragsProcent: Number(data.fradragsProcent) || 0,
+          fradragIDKK: Math.round((Number(data.fakturaBeloeb) || 0) * (Number(data.fradragsProcent) || 0) / 100),
+          bilagNavne: rawFile ? [rawFile.name] : undefined,
+          bilagIds: bilagId ? [bilagId] : undefined,
+          kildeTekst: sourceText,
           revisorNotat: res.revisorNotat || res.summary || 'Godkendt via AI scanning i Rubrik 29.',
-        });
+        };
+        setFradragList((current) => [fradrag, ...current]);
+        showToast(`Fradrag "${fradrag.beskrivelse}" tilføjet til ${targetYear.aar}.`);
+        setActiveAarId(targetYear.id);
         setActiveTab('fradrag');
       }
     }
@@ -262,7 +422,7 @@ export default function App() {
     { id: 'opsparing', label: 'Sæt til side', icon: PiggyBank },
     { id: 'statistik', label: 'Statistik & Timer', icon: BarChart3 },
     { id: 'investeringer', label: 'Investeringer', icon: Layers, count: yearInvesteringer.length },
-    { id: 'roadmap', label: 'Plan & Roadmap', icon: Compass },
+    { id: 'indstillinger', label: 'Indkomstår', icon: Settings },
   ];
 
   return (
@@ -277,9 +437,9 @@ export default function App() {
 
       {/* Top Header */}
       <header className="sticky top-0 z-30 bg-white border-b border-stone-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center justify-between h-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-wrap items-center justify-between gap-2 py-3 sm:min-h-16 sm:flex-nowrap sm:py-0">
           {/* Logo & Title */}
-          <div className="flex items-center gap-3">
+          <button type="button" onClick={() => setActiveTab('jobs')} className="flex items-center gap-3 text-left" aria-label="Gå til forsiden">
             <div className="w-9 h-9 rounded-xl bg-stone-950 text-white flex items-center justify-center font-bold font-mono shadow-xs">
               <span className="text-amber-300 text-sm">RAI</span>
             </div>
@@ -288,7 +448,7 @@ export default function App() {
                 <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-stone-900">
                   Revisor AI
                 </h1>
-                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-900">
+                <span className="hidden text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 md:inline">
                   B-indkomst & Fradrag
                 </span>
               </div>
@@ -296,10 +456,18 @@ export default function App() {
                 Fra bilag til skat, årsopgørelse og kørsel
               </p>
             </div>
-          </div>
+          </button>
 
           {/* Right Header Actions */}
-          <div className="flex items-center gap-3">
+          <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 sm:w-auto sm:gap-3 sm:overflow-visible sm:pb-0">
+            <span
+              className={`hidden xl:inline-flex items-center gap-1.5 text-[10px] font-semibold ${databaseStatus === 'fallback' ? 'text-amber-700' : 'text-stone-500'}`}
+              title={databaseStatus === 'ready' ? 'Data gemmes i lokal IndexedDB' : 'Database ikke tilgængelig; bruger browserlager'}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${databaseStatus === 'ready' ? 'bg-emerald-500' : databaseStatus === 'fallback' ? 'bg-amber-500' : 'bg-stone-300'}`} />
+              {databaseStatus === 'ready' ? 'Lokal database' : databaseStatus === 'fallback' ? 'Browserlager' : 'Åbner database'}
+            </span>
+            <DataBackupControls appData={appData} onImport={handleImportData} onMessage={showToast} />
             {/* Year Selector */}
             <div className="flex items-center gap-1.5 bg-stone-50 border border-stone-200 px-2.5 py-1.5 rounded-lg text-xs">
               <Calendar className="w-3.5 h-3.5 text-stone-500" />
@@ -323,8 +491,8 @@ export default function App() {
               onClick={() => setIsScannerOpen(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-stone-900 hover:bg-stone-800 text-white rounded-lg text-xs font-semibold transition shadow-xs"
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span className="hidden sm:inline">Scan Bilag</span>
+              <Inbox className="w-3.5 h-3.5 text-amber-300" />
+              <span className="hidden sm:inline">Agentindbakke</span>
             </button>
 
             {/* Revisor Chat Button */}
@@ -443,14 +611,31 @@ export default function App() {
               />
             )}
 
-            {activeTab === 'roadmap' && (
-              <PlanningRoadmapView />
+            {activeTab === 'indstillinger' && (
+              <div className="space-y-6">
+                <AarIndstillingerModule
+                  indkomstAar={activeIndkomstAar}
+                  existingYears={indkomstAarList.map((item) => item.aar)}
+                  onUpdate={handleUpdateIndkomstAar}
+                  onAddYear={handleAddIndkomstAar}
+                />
+                <YearArchiveControls
+                  appData={appData}
+                  yearId={activeIndkomstAar.id}
+                  year={activeIndkomstAar.aar}
+                  onRestore={(data) => {
+                    handleImportData(data);
+                    setActiveTab('indstillinger');
+                  }}
+                  onMessage={showToast}
+                />
+              </div>
             )}
+
           </div>
 
           {/* Right Global Sidebar (only when not in roadmap view) */}
-          {activeTab !== 'roadmap' && (
-            <GlobalSidebar
+          <GlobalSidebar
               activeIndkomstAar={activeIndkomstAar}
               allIndkomstAar={indkomstAarList}
               allJobs={jobs}
@@ -460,8 +645,7 @@ export default function App() {
               onOpenAiScanner={() => setIsScannerOpen(true)}
               onOpenRevisorChat={() => setIsChatOpen(true)}
               onSelectTab={(tab) => setActiveTab(tab)}
-            />
-          )}
+          />
         </div>
       </main>
 
@@ -470,6 +654,8 @@ export default function App() {
         isOpen={isScannerOpen}
         onClose={() => setIsScannerOpen(false)}
         onApplyResult={handleApplyAiResult}
+        activeIndkomstAar={activeIndkomstAar}
+        indkomstAarList={indkomstAarList}
       />
 
       {/* Revisor AI Chat Modal */}
@@ -478,10 +664,8 @@ export default function App() {
         onClose={() => setIsChatOpen(false)}
         indkomstAar={activeIndkomstAar}
         jobs={yearJobs}
-        fradragList={yearFradrag}
         skatteBeregning={skatteBeregning}
       />
     </div>
   );
 }
-

@@ -1,14 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ShieldAlert,
   ShieldCheck,
   PiggyBank,
-  ArrowRight,
   Sparkles,
-  AlertTriangle,
-  CheckCircle2,
-  TrendingUp,
-  CreditCard
+  CheckCircle2
 } from 'lucide-react';
 import { IndkomstAar, OpsparingsTracker, SkatteBeregningResultat } from '../types';
 
@@ -28,6 +24,12 @@ export const OpsparingTrackerModule: React.FC<Props> = ({
   const [indbetalt, setIndbetalt] = useState<number>(opsparing.indbetaltTilSkat);
   const [opsparet, setOpsparet] = useState<number>(opsparing.opsparetPrivat);
   const [isSaved, setIsSaved] = useState(false);
+
+  useEffect(() => {
+    setIndbetalt(opsparing.indbetaltTilSkat);
+    setOpsparet(opsparing.opsparetPrivat);
+    setIsSaved(false);
+  }, [indkomstAar.id, opsparing.indbetaltTilSkat, opsparing.opsparetPrivat]);
 
   const skatOgAmTotal = skatteBeregning.samletSkatOgAM;
   const daekketTotal = (Number(indbetalt) || 0) + (Number(opsparet) || 0);

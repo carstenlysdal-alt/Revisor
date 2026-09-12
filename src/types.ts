@@ -1,4 +1,6 @@
 export type TransportMiddel = 'NONE' | 'OWN_CAR_MC' | 'OWN_BIKE' | 'PASSENGER';
+export type IndkomstRubrik = 12 | 17;
+export type JobStatus = 'PLANLAGT' | 'BETALT' | 'AFLYST';
 
 export interface IndkomstAar {
   id: string;
@@ -33,7 +35,11 @@ export interface Job {
   timerTransportForberedelse?: number;
   type?: string;
   bilagNavne?: string[];
+  bilagIds?: string[];
+  kildeTekst?: string;
   noter?: string;
+  rubrik?: IndkomstRubrik;
+  status?: JobStatus;
 }
 
 export interface Fradrag {
@@ -46,6 +52,8 @@ export interface Fradrag {
   fradragsProcent: number;
   fradragIDKK: number;
   bilagNavne?: string[];
+  bilagIds?: string[];
+  kildeTekst?: string;
   revisorNotat?: string;
 }
 
@@ -56,6 +64,8 @@ export interface Investering {
   beloeb: number;
   fakturaDato: string;
   bilagNavne?: string[];
+  bilagIds?: string[];
+  kildeTekst?: string;
 }
 
 export interface OpsparingsTracker {
@@ -80,6 +90,8 @@ export interface SkatteBeregningResultat {
   bundskat: number;
   kommuneskat: number;
   topskat: number;
+  mellemskat: number;
+  toptopskat: number;
   kirkeskat: number;
   personfradragSkattevaerdi: number;
   beregnetSkatAlt: number;
@@ -91,14 +103,49 @@ export interface SkatteBeregningResultat {
   rubrik29LoftOverskredet: boolean;
   maksTilladtFradragRubrik29: number;
   overskydendeFradrag: number;
+  anvendtFradragRubrik29: number;
+  regelAar: number;
+  erEstimat: true;
+}
+
+export interface AiJobSuggestion {
+  hvervgiver?: string;
+  honorar?: number;
+  startDato?: string;
+  slutDato?: string;
+  betalingsDato?: string;
+  destinationAdresse?: string;
+  transportmiddel?: TransportMiddel;
+  antalKm?: number;
+  antalTure?: number;
+  amBidragFritaget?: boolean;
+  rubrik?: IndkomstRubrik;
+  type?: string;
+  timerJob?: number;
+  timerTransportForberedelse?: number;
+}
+
+export interface AiFradragSuggestion {
+  beskrivelse?: string;
+  typeKategori?: string;
+  fakturaDato?: string;
+  fakturaBeloeb?: number;
+  fradragsProcent?: number;
+  begrundelse?: string;
+}
+
+export interface AiInvesteringSuggestion {
+  titel?: string;
+  beloeb?: number;
+  fakturaDato?: string;
 }
 
 export interface AiExtractionResult {
   classification: 'JOB' | 'FRADRAG' | 'INVESTERING' | 'UNKNOWN';
   confidence: number;
   summary: string;
-  job?: Partial<Job>;
-  fradrag?: Partial<Fradrag>;
-  investering?: Partial<Investering>;
+  job?: AiJobSuggestion;
+  fradrag?: AiFradragSuggestion;
+  investering?: AiInvesteringSuggestion;
   revisorNotat: string;
 }

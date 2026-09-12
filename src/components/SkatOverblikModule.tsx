@@ -2,12 +2,6 @@ import React from 'react';
 import {
   FileText,
   Printer,
-  ShieldCheck,
-  Building2,
-  DollarSign,
-  TrendingDown,
-  Info,
-  CheckCircle2,
   AlertTriangle
 } from 'lucide-react';
 import { IndkomstAar, SkatteBeregningResultat } from '../types';
@@ -36,7 +30,7 @@ export const SkatOverblikModule: React.FC<Props> = ({
             Skat — Overblik & Beregning for {indkomstAar.aar}
           </h2>
           <p className="text-xs text-stone-500 mt-1">
-            Fuldt deterministisk skatteopgørelse baseret på gældende satser for {indkomstAar.kommune} Kommune.
+            Vejledende, deterministisk estimat med de gemte forudsætninger og årsregler for {skatteBeregning.regelAar}.
           </p>
         </div>
 
@@ -78,13 +72,13 @@ export const SkatOverblikModule: React.FC<Props> = ({
 
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 shadow-xs">
           <span className="text-xs font-semibold text-emerald-800 uppercase tracking-wider block">
-            Netto Indtægt Efter Skat
+            Honorarer Efter Estimeret Skat
           </span>
           <div className="text-2xl font-bold font-mono text-emerald-950 mt-1">
             {skatteBeregning.indtaegtEfterSkat.toLocaleString('da-DK')} DKK
           </div>
           <span className="text-[11px] text-emerald-700 mt-1 block">
-            Det reelle overskud udbetalt til dig
+            Før faktiske udgifter og investeringer
           </span>
         </div>
       </div>
@@ -94,10 +88,10 @@ export const SkatOverblikModule: React.FC<Props> = ({
         <div className="p-4 bg-amber-50 border-l-4 border-amber-500 rounded-r-xl text-xs text-amber-950 flex items-start gap-2.5">
           <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
           <div>
-            <strong>Bemærk: Lovbestemt fradragsloft i Rubrik 29 er nået.</strong>
+            <strong>Bemærk: Appens nettoindkomstgrænse for honorarfradrag er nået.</strong>
             <p className="mt-0.5">
               Dine fradrag ({skatteBeregning.oevrigeFradragRubrik29.toLocaleString('da-DK')} DKK) overstiger B-indkomsten efter AM-bidrag. 
-              Kun {skatteBeregning.maksTilladtFradragRubrik29.toLocaleString('da-DK')} DKK modregnes i din personlige indkomst i år.
+              Estimatet anvender {skatteBeregning.maksTilladtFradragRubrik29.toLocaleString('da-DK')} DKK. Flere aktiviteter kan kræve særskilt faglig afgrænsning.
             </p>
           </div>
         </div>
@@ -139,7 +133,7 @@ export const SkatOverblikModule: React.FC<Props> = ({
               </span>
             </span>
             <span className="font-mono font-bold">
-              - {skatteBeregning.oevrigeFradragRubrik29.toLocaleString('da-DK')} DKK
+              - {skatteBeregning.anvendtFradragRubrik29.toLocaleString('da-DK')} DKK
             </span>
           </div>
 
@@ -225,28 +219,13 @@ export const SkatOverblikModule: React.FC<Props> = ({
             </span>
           </div>
 
-          {skatteBeregning.topskat > 0 && (
+          {skatteBeregning.mellemskat > 0 && (
             <div className="flex justify-between py-2.5 text-red-700 font-semibold">
-              <span>Topskat (15% på indkomst over 588.900 kr.)</span>
-              <span className="font-mono">
-                {skatteBeregning.topskat.toLocaleString('da-DK')} DKK
-              </span>
+              <span>Mellemskat</span><span className="font-mono">{skatteBeregning.mellemskat.toLocaleString('da-DK')} DKK</span>
             </div>
           )}
-
-          <div className="flex justify-between py-2.5 text-emerald-800">
-            <span className="font-medium">
-              Modregnet skatteværdi af personfradrag
-              <span className="block text-[11px] text-stone-400 font-normal">
-                {indkomstAar.forventetAIndkomst > 0
-                  ? 'A-indkomst bruger primært personfradrag; rest modregnet her'
-                  : 'Fuld personfradrag modregnet i B-indkomsten'}
-              </span>
-            </span>
-            <span className="font-mono font-bold">
-              - {skatteBeregning.personfradragSkattevaerdi.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
+          {skatteBeregning.topskat > 0 && <div className="flex justify-between py-2.5 text-red-700 font-semibold"><span>Topskat</span><span className="font-mono">{skatteBeregning.topskat.toLocaleString('da-DK')} DKK</span></div>}
+          {skatteBeregning.toptopskat > 0 && <div className="flex justify-between py-2.5 text-red-700 font-semibold"><span>Toptopskat</span><span className="font-mono">{skatteBeregning.toptopskat.toLocaleString('da-DK')} DKK</span></div>}
 
           <div className="flex justify-between py-3.5 font-bold text-stone-900 bg-stone-50 px-3 rounded-lg text-sm">
             <span>= Beregnet skat i alt (inkl. AM-bidrag)</span>

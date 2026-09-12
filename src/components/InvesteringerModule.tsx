@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { Layers, Plus, Trash2, Calendar, FileText, Info } from 'lucide-react';
+import { Layers, Plus, Trash2, Info } from 'lucide-react';
 import { Investering, IndkomstAar } from '../types';
+import { BilagButton } from './BilagButton';
+import { KildeTekst } from './KildeTekst';
+import { useModal } from '../hooks/useModal';
 
 interface Props {
   investeringer: Investering[];
@@ -16,9 +19,10 @@ export const InvesteringerModule: React.FC<Props> = ({
   onDeleteInvestering,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  useModal(isModalOpen, () => setIsModalOpen(false));
   const [titel, setTitel] = useState('');
   const [beloeb, setBeloeb] = useState<number>(0);
-  const [fakturaDato, setFakturaDato] = useState(new Date().toISOString().split('T')[0]);
+  const [fakturaDato, setFakturaDato] = useState(new Date().toISOString().slice(0, 10));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +33,6 @@ export const InvesteringerModule: React.FC<Props> = ({
       titel: titel.trim(),
       beloeb: Number(beloeb),
       fakturaDato,
-      bilagNavne: ['faktura_investering.pdf'],
     });
 
     setTitel('');
@@ -94,7 +97,7 @@ export const InvesteringerModule: React.FC<Props> = ({
               ) : (
                 investeringer.map((inv) => (
                   <tr key={inv.id} className="hover:bg-stone-50/50 transition">
-                    <td className="py-3.5 px-4 font-semibold text-stone-900">{inv.titel}</td>
+                    <td className="py-3.5 px-4 font-semibold text-stone-900">{inv.titel}<BilagButton ids={inv.bilagIds} names={inv.bilagNavne} /><KildeTekst text={inv.kildeTekst} /></td>
                     <td className="py-3.5 px-4 text-stone-600">{inv.fakturaDato}</td>
                     <td className="py-3.5 px-4 text-right font-mono font-bold text-stone-900">
                       {inv.beloeb.toLocaleString('da-DK')} DKK
@@ -102,6 +105,7 @@ export const InvesteringerModule: React.FC<Props> = ({
                     <td className="py-3.5 px-4 text-right">
                       <button
                         type="button"
+                        aria-label={`Slet ${inv.titel}`}
                         onClick={() => onDeleteInvestering(inv.id)}
                         className="p-1 rounded text-stone-400 hover:text-red-600 hover:bg-stone-100"
                       >
@@ -129,7 +133,7 @@ export const InvesteringerModule: React.FC<Props> = ({
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-xs p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-xs p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-label="Registrer investering">
           <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-md shadow-xl overflow-hidden my-6">
             <form onSubmit={handleSubmit}>
               <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 bg-stone-50">
@@ -137,6 +141,7 @@ export const InvesteringerModule: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
+                  aria-label="Luk investeringsformular"
                   className="text-stone-400 hover:text-stone-700 p-1"
                 >
                   ✕

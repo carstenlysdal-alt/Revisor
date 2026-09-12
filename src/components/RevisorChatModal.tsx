@@ -2,16 +2,18 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   X,
   Send,
-  Sparkles,
   Bot,
   User,
   Loader2,
-  HelpCircle,
-  ShieldCheck
+  Mic,
+  MicOff
 } from 'lucide-react';
-import { IndkomstAar, Job, Fradrag, SkatteBeregningResultat } from '../types';
+import { IndkomstAar, Job, SkatteBeregningResultat } from '../types';
+import { useDictation } from '../hooks/useDictation';
+import { useModal } from '../hooks/useModal';
 
 interface Message {
+  id: string;
   role: 'user' | 'model';
   content: string;
 }
@@ -21,8 +23,19 @@ interface Props {
   onClose: () => void;
   indkomstAar: IndkomstAar;
   jobs: Job[];
-  fradragList: Fradrag[];
   skatteBeregning: SkatteBeregningResultat;
+}
+
+function createWelcomeMessage(
+  indkomstAar: IndkomstAar,
+  jobs: Job[],
+  skatteBeregning: SkatteBeregningResultat,
+): Message {
+  return {
+    id: crypto.randomUUID(),
+    role: 'model',
+    content: `Hej! Jeg kan forklare appens vejledende estimat for ${indkomstAar.aar}: ${jobs.length} poster, ${skatteBeregning.honorarerAlt.toLocaleString('da-DK')} DKK i rubrik 12 og ${skatteBeregning.anvendtFradragRubrik29.toLocaleString('da-DK')} DKK anvendt som rubrik 29-fradrag. Hvad vil du undersøge?`,
+  };
 }
 
 export const RevisorChatModal: React.FC<Props> = ({
@@ -30,33 +43,45 @@ export const RevisorChatModal: React.FC<Props> = ({
   onClose,
   indkomstAar,
   jobs,
-  fradragList,
   skatteBeregning,
 }) => {
   const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'model',
-      content: `Hej! Jeg er din personlige Revisor AI. Jeg kender dine aktuelle tal for indkomstår ${indkomstAar.aar} (${jobs.length} jobs, ${skatteBeregning.honorarerAlt.toLocaleString('da-DK')} DKK i honorar, og ${skatteBeregning.oevrigeFradragRubrik29.toLocaleString('da-DK')} DKK i Rubrik 29-fradrag). Hvad kan jeg hjælpe dig med angående skat, fradrag eller kørselsgodtgørelse?`,
-    },
+    createWelcomeMessage(indkomstAar, jobs, skatteBeregning),
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const dictation = useDictation(input, setInput);
+  const closeModal = () => {
+    dictation.stopDictation();
+    onClose();
+  };
+  useModal(isOpen, closeModal);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ block: 'end' });
   }, [messages]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setMessages([createWelcomeMessage(indkomstAar, jobs, skatteBeregning)]);
+    setInput('');
+    setErrorMessage(null);
+  }, [isOpen, indkomstAar.id]);
 
   if (!isOpen) return null;
 
   const handleSend = async (textToSend?: string) => {
     const q = textToSend || input;
     if (!q.trim() || isLoading) return;
+    dictation.stopDictation();
 
-    const newMsgs: Message[] = [...messages, { role: 'user', content: q }];
+    const newMsgs: Message[] = [...messages, { id: crypto.randomUUID(), role: 'user', content: q }];
     setMessages(newMsgs);
     setInput('');
     setIsLoading(true);
+    setErrorMessage(null);
 
     try {
       const response = await fetch('/api/gemini/revisor-chat', {
@@ -79,35 +104,21 @@ export const RevisorChatModal: React.FC<Props> = ({
       });
 
       if (!response.ok) {
-        throw new Error('Fejl fra revisor-serveren');
+        const details = await response.json().catch(() => ({}));
+        throw new Error(details.error || 'AI-chatten kunne ikke svare.');
       }
 
-      const data = await response.json();
-      setMessages([...newMsgs, { role: 'model', content: data.reply }]);
-    } catch (err: any) {
-      // Local fallback answer in case no key is configured
-      const fallbackReply = generateFallbackRevisorReply(q, skatteBeregning);
-      setMessages([...newMsgs, { role: 'model', content: fallbackReply }]);
+      const data: unknown = await response.json();
+      const reply = data && typeof data === 'object' && 'reply' in data && typeof data.reply === 'string'
+        ? data.reply
+        : undefined;
+      if (!reply) throw new Error('AI-chatten returnerede et ugyldigt svar.');
+      setMessages([...newMsgs, { id: crypto.randomUUID(), role: 'model', content: reply }]);
+    } catch (error: unknown) {
+      setErrorMessage(error instanceof Error ? error.message : 'AI-chatten kunne ikke svare.');
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const generateFallbackRevisorReply = (
-    q: string,
-    beregning: SkatteBeregningResultat
-  ): string => {
-    const lower = q.toLowerCase();
-    if (lower.includes('hvor meget') && lower.includes('side')) {
-      return `For dine samlede honorarer på ${beregning.honorarerAlt.toLocaleString('da-DK')} DKK i år er din beregnede skat og AM-bidrag ${beregning.samletSkatOgAM.toLocaleString('da-DK')} DKK (svarende til en effektiv skat på ca. ${beregning.effektivSkatteprocent}%). Vores klare anbefaling er at sætte ca. 38% af hvert udbetalt B-honorar til side på din skattekonto for at undgå restskat.`;
-    }
-    if (lower.includes('kørsel') || lower.includes('bil')) {
-      return `Når du kører i egen bil eller motorcykel til et honorarjob, anvender du statens takst på 3,79 kr./km (i 2026). Det geniale ved B-indkomst er, at dette fradrag havner i Rubrik 29 (øvrige fradrag i personlig indkomst), hvilket giver fuld skatteværdi (op til ca. 52%) i stedet for det lavere ligningsmæssige befordringsfradrag i Rubrik 51.`;
-    }
-    if (lower.includes('rubrik 29') || lower.includes('loft') || lower.includes('underskud')) {
-      return `Vigtig forretningsregel: Ifølge dansk skatteret må summen af dine fradrag i Rubrik 29 (driftsomkostninger + kørsel i egen bil) ALDRIG overstige din B-indkomst efter AM-bidrag. Du kan altså ikke skabe underskud i din personlige indkomst udelukkende via B-indkomstfradrag. Systemet holder øje med dette loft automatisk for dig.`;
-    }
-    return `Som din Revisor AI kan jeg bekræfte, at du altid bør gemme kvitteringer og kontrakter i 5 år. I ${indkomstAar.aar} har du i øjeblikket ${beregning.honorarerAlt.toLocaleString('da-DK')} DKK i B-honorarer (Rubrik 12) og ${beregning.oevrigeFradragRubrik29.toLocaleString('da-DK')} DKK i godkendte fradrag (Rubrik 29). Stil mig gerne specifikke spørgsmål om dit næste job eller udstyrskøb!`;
   };
 
   const sampleQuestions = [
@@ -118,7 +129,7 @@ export const RevisorChatModal: React.FC<Props> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-xs p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-xs p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="revisor-chat-title">
       <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-2xl shadow-xl overflow-hidden my-6 flex flex-col h-[640px] max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 bg-stone-50">
@@ -127,16 +138,18 @@ export const RevisorChatModal: React.FC<Props> = ({
               <Bot className="w-4 h-4 text-amber-300" />
             </div>
             <div>
-              <h3 className="font-bold text-stone-900 text-sm">
+              <h3 id="revisor-chat-title" className="font-bold text-stone-900 text-sm">
                 Revisor AI Rådgiver — {indkomstAar.aar}
               </h3>
               <p className="text-[11px] text-stone-500">
-                Kender dine reelle tal og dansk skattelovgivning
+                Forklarer appens estimat — kontrollér altid i TastSelv
               </p>
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={closeModal}
+            type="button"
+            aria-label="Luk AI-chat"
             className="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-200/60"
           >
             <X className="w-5 h-5" />
@@ -145,16 +158,16 @@ export const RevisorChatModal: React.FC<Props> = ({
 
         {/* Message Thread */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {messages.map((m, idx) => (
+          {messages.map((m) => (
             <div
-              key={idx}
+              key={m.id}
               className={`flex gap-3 text-xs leading-relaxed ${
                 m.role === 'user' ? 'justify-end' : 'justify-start'
               }`}
             >
               {m.role === 'model' && (
                 <div className="w-6 h-6 rounded-full bg-stone-900 text-white flex items-center justify-center shrink-0 mt-0.5">
-                  <Sparkles className="w-3 h-3 text-amber-300" />
+                  <Bot className="w-3 h-3 text-amber-300" />
                 </div>
               )}
               <div
@@ -186,9 +199,9 @@ export const RevisorChatModal: React.FC<Props> = ({
 
         {/* Quick prompt chips */}
         <div className="px-6 py-2 border-t border-stone-100 bg-stone-50/50 flex gap-2 overflow-x-auto">
-          {sampleQuestions.map((sq, i) => (
+          {sampleQuestions.map((sq) => (
             <button
-              key={i}
+              key={sq}
               type="button"
               onClick={() => handleSend(sq)}
               className="text-[11px] px-2.5 py-1 rounded-full border border-stone-200 bg-white hover:bg-stone-100 text-stone-600 whitespace-nowrap transition shrink-0"
@@ -197,6 +210,8 @@ export const RevisorChatModal: React.FC<Props> = ({
             </button>
           ))}
         </div>
+
+        {errorMessage && <div role="alert" className="mx-4 mb-2 p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-800">{errorMessage} Du kan fortsat bruge appens manuelle registrering og beregning.</div>}
 
         {/* Input bar */}
         <div className="p-4 border-t border-stone-200 bg-white">
@@ -207,7 +222,19 @@ export const RevisorChatModal: React.FC<Props> = ({
             }}
             className="flex items-center gap-2"
           >
+            {dictation.isSupported && (
+              <button
+                type="button"
+                onClick={dictation.isListening ? dictation.stopDictation : dictation.startDictation}
+                aria-label={dictation.isListening ? 'Stop diktering' : 'Diktér besked på dansk'}
+                aria-pressed={dictation.isListening}
+                className={`p-2.5 rounded-xl border transition ${dictation.isListening ? 'border-red-300 bg-red-50 text-red-700' : 'border-stone-300 text-stone-600 hover:bg-stone-100'}`}
+              >
+                {dictation.isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </button>
+            )}
             <input
+              aria-label="Besked til AI-chat"
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -216,12 +243,14 @@ export const RevisorChatModal: React.FC<Props> = ({
             />
             <button
               type="submit"
+              aria-label="Send besked"
               disabled={!input.trim() || isLoading}
               className="p-2.5 rounded-xl bg-stone-900 text-white hover:bg-stone-800 disabled:opacity-50 transition"
             >
               <Send className="w-4 h-4" />
             </button>
           </form>
+          {dictation.dictationError && <p role="alert" className="mt-2 text-xs text-red-700">{dictation.dictationError}</p>}
         </div>
       </div>
     </div>

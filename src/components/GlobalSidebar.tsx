@@ -1,17 +1,15 @@
 import React from 'react';
 import {
-  Sparkles,
+  Inbox,
   TrendingUp,
   ShieldAlert,
-  HelpCircle,
   MessageSquare,
   UploadCloud,
-  ChevronRight,
-  ShieldCheck,
-  Building,
-  CheckCircle2
+  ChevronRight
 } from 'lucide-react';
 import { IndkomstAar, Job, Fradrag, SkatteBeregningResultat, OpsparingsTracker } from '../types';
+import { getSkatteRegler } from '../data/danishTaxData';
+import { calculateAaretsKoerselsfradrag } from '../utils/mileageCalculator';
 
 interface Props {
   activeIndkomstAar: IndkomstAar;
@@ -27,6 +25,7 @@ interface Props {
 
 export const GlobalSidebar: React.FC<Props> = ({
   activeIndkomstAar,
+  allIndkomstAar,
   allJobs,
   allFradrag,
   activeSkatteBeregning,
@@ -35,13 +34,16 @@ export const GlobalSidebar: React.FC<Props> = ({
   onOpenRevisorChat,
   onSelectTab,
 }) => {
+  const regler = getSkatteRegler(activeIndkomstAar.aar);
   // Compute accumulated gains across ALL years
-  const samletFradragAllYears = allFradrag.reduce((sum, f) => sum + (Number(f.fradragIDKK) || 0), 0) +
-    allJobs.reduce((sum, j) => sum + (Number(j.koerselsFradrag) || 0), 0);
+  const koerselsfradragAllYears = allIndkomstAar.reduce((sum, indkomstAar) => {
+    const aaretsJobs = allJobs.filter((job) => job.indkomstAarId === indkomstAar.id);
+    const resultat = calculateAaretsKoerselsfradrag(indkomstAar.aar, aaretsJobs);
+    return sum + resultat.rubrik29 + resultat.rubrik51;
+  }, 0);
+  const samletFradragAllYears = allFradrag.reduce((sum, fradrag) => sum + (Number(fradrag.fradragIDKK) || 0), 0)
+    + koerselsfradragAllYears;
   
-  // Approximate tax saved: ~37% of deductions
-  const sparetEfterSkatAllYears = Math.round(samletFradragAllYears * 0.37);
-
   const skatOgAmTotal = activeSkatteBeregning.samletSkatOgAM;
   const daekketTotal = (activeOpsparing.indbetaltTilSkat || 0) + (activeOpsparing.opsparetPrivat || 0);
   const manglerOpsparing = Math.max(0, skatOgAmTotal - daekketTotal);
@@ -51,14 +53,14 @@ export const GlobalSidebar: React.FC<Props> = ({
       {/* AI Quick Upload Button */}
       <div className="bg-stone-900 text-white rounded-xl p-5 shadow-xs">
         <div className="flex items-center gap-2 text-amber-300 text-xs font-bold uppercase tracking-wider mb-2">
-          <Sparkles className="w-4 h-4" />
-          AI Bilagsscanner
+          <Inbox className="w-4 h-4" />
+          Revisoragentens indbakke
         </div>
         <h4 className="font-bold text-sm text-white leading-snug">
-          "Upload, så sker resten"
+          Fortæl det én gang
         </h4>
         <p className="text-xs text-stone-300 mt-1 leading-relaxed">
-          Drop en kontrakt, honorarseddel eller kvittering. AI udfylder job/fradrag og kalender.
+          Diktér, skriv eller upload et bilag. Agenten foreslår selv den rette placering og felterne til din godkendelse.
         </p>
         <button
           type="button"
@@ -66,7 +68,7 @@ export const GlobalSidebar: React.FC<Props> = ({
           className="mt-4 w-full py-2.5 px-4 bg-white text-stone-900 hover:bg-stone-100 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs"
         >
           <UploadCloud className="w-4 h-4 text-stone-900" />
-          Scan Bilag Nu
+          Åbn agentindbakke
         </button>
       </div>
 
@@ -83,12 +85,7 @@ export const GlobalSidebar: React.FC<Props> = ({
               {samletFradragAllYears.toLocaleString('da-DK')} DKK
             </span>
           </div>
-          <div>
-            <span className="text-[11px] text-stone-500 block">Estimeret sparet i skat:</span>
-            <span className="text-lg font-bold font-mono text-emerald-800">
-              ~ {sparetEfterSkatAllYears.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
+          <p className="text-[11px] text-stone-500">Fradragets faktiske skatteværdi afhænger af din samlede indkomst og beregnes ikke som en fast procent.</p>
         </div>
         <div className="mt-3 pt-3 border-t border-stone-100 text-[11px] text-stone-400">
           Opgjort på tværs af alle registrerede år.
@@ -155,7 +152,7 @@ export const GlobalSidebar: React.FC<Props> = ({
         </div>
         <div className="flex items-center justify-between">
           <span className="text-stone-500">Kørselsfradrag bil:</span>
-          <span className="font-mono text-emerald-800 font-semibold">3,79 kr/km</span>
+          <span className="font-mono text-emerald-800 font-semibold">{regler.takstBilMCFoerste20k.toLocaleString('da-DK')} kr/km</span>
         </div>
       </div>
     </aside>

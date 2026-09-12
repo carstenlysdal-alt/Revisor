@@ -28,15 +28,87 @@ export const DANSKE_KOMMUNER: KommuneSkat[] = [
   { navn: 'Lolland', kommuneskat: 26.30, kirkeskat: 1.15 }
 ];
 
+export interface SkatteRegler {
+  aar: number;
+  amBidragProcent: number;
+  bundskatProcent: number;
+  personfradrag: number;
+  mellemskatProcent: number;
+  mellemskatGraense: number;
+  topskatProcent: number;
+  topskatGraense: number;
+  toptopskatProcent: number;
+  toptopskatGraense: number;
+  takstBilMCFoerste20k: number;
+  takstBilMCOver20k: number;
+  takstCykelPrKm: number;
+  befordringBundgraenseKm: number;
+  befordringMellemGraenseKm: number;
+  befordringMellemTakst: number;
+  befordringHoejTakst: number;
+  kildeKontrolleret: string;
+}
+
+export const SKATTEREGLER: Record<number, SkatteRegler> = {
+  2025: {
+    aar: 2025,
+    amBidragProcent: 8,
+    bundskatProcent: 12.01,
+    personfradrag: 51600,
+    mellemskatProcent: 0,
+    mellemskatGraense: Number.POSITIVE_INFINITY,
+    topskatProcent: 15,
+    topskatGraense: 611800,
+    toptopskatProcent: 0,
+    toptopskatGraense: Number.POSITIVE_INFINITY,
+    takstBilMCFoerste20k: 3.81,
+    takstBilMCOver20k: 2.23,
+    takstCykelPrKm: 0.63,
+    befordringBundgraenseKm: 24,
+    befordringMellemGraenseKm: 120,
+    befordringMellemTakst: 2.23,
+    befordringHoejTakst: 1.12,
+    kildeKontrolleret: '2026-09-12',
+  },
+  2026: {
+    aar: 2026,
+    amBidragProcent: 8,
+    bundskatProcent: 12.01,
+    personfradrag: 54100,
+    mellemskatProcent: 7.5,
+    mellemskatGraense: 641200,
+    topskatProcent: 7.5,
+    topskatGraense: 777900,
+    toptopskatProcent: 5,
+    toptopskatGraense: 2592700,
+    takstBilMCFoerste20k: 3.94,
+    takstBilMCOver20k: 2.28,
+    takstCykelPrKm: 0.64,
+    befordringBundgraenseKm: 24,
+    befordringMellemGraenseKm: 120,
+    befordringMellemTakst: 3.17,
+    befordringHoejTakst: 1.59,
+    kildeKontrolleret: '2026-09-12',
+  },
+};
+
+export function getSkatteRegler(aar: number): SkatteRegler {
+  const regler = SKATTEREGLER[aar];
+  if (!regler) {
+    throw new Error(`Skatteregler for ${aar} er ikke understøttet.`);
+  }
+  return regler;
+}
+
+const CURRENT_RULES = SKATTEREGLER[2026]!;
 export const SKATTESATSER = {
-  amBidragProcent: 8.0,
-  bundskatProcent: 12.06,
-  topskatProcent: 15.0,
-  topskatGraense2026: 588900,
-  personfradrag2026: 51600,
+  amBidragProcent: CURRENT_RULES.amBidragProcent,
+  bundskatProcent: CURRENT_RULES.bundskatProcent,
+  topskatProcent: CURRENT_RULES.topskatProcent,
+  topskatGraense2026: CURRENT_RULES.topskatGraense,
+  personfradrag2026: CURRENT_RULES.personfradrag,
   skatteloftProcent: 52.07,
-  // Statens takster for befordring/kørsel
-  takstBilMCPrKm: 3.79, // B-indkomst erhvervsmæssig kørsel i egen bil/MC (Rubrik 29)
-  takstCykelPrKm: 0.63, // Egen cykel/knallert (Rubrik 29)
-  takstPassagerPrKm: 2.23 // Ligningsmæssigt passager (Rubrik 51)
+  takstBilMCPrKm: CURRENT_RULES.takstBilMCFoerste20k,
+  takstCykelPrKm: CURRENT_RULES.takstCykelPrKm,
+  takstPassagerPrKm: CURRENT_RULES.befordringMellemTakst,
 };

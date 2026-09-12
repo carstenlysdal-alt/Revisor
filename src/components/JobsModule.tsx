@@ -9,16 +9,16 @@ import {
   Trash2,
   Edit2,
   Calendar,
-  Clock,
   Download,
-  Check,
-  AlertCircle,
-  Sparkles,
-  ExternalLink
+  Inbox
 } from 'lucide-react';
-import { Job, TransportMiddel, IndkomstAar } from '../types';
-import { SKATTESATSER } from '../data/danishTaxData';
+import type { IndkomstRubrik, Job, JobStatus, TransportMiddel, IndkomstAar } from '../types';
+import { getSkatteRegler } from '../data/danishTaxData';
+import { calculateAaretsKoerselsfradragMedPoster, calculateJobKoerselsfradrag } from '../utils/mileageCalculator';
 import { createGoogleCalendarUrl, downloadIcsFile } from '../utils/calendarExport';
+import { BilagButton } from './BilagButton';
+import { KildeTekst } from './KildeTekst';
+import { useModal } from '../hooks/useModal';
 
 interface Props {
   jobs: Job[];
@@ -39,13 +39,14 @@ export const JobsModule: React.FC<Props> = ({
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
+  useModal(isModalOpen, () => setIsModalOpen(false));
 
   // Form State
   const [hvervgiver, setHvervgiver] = useState('');
   const [honorar, setHonorar] = useState<number>(0);
-  const [startDato, setStartDato] = useState(new Date().toISOString().split('T')[0]);
-  const [slutDato, setSlutDato] = useState(new Date().toISOString().split('T')[0]);
-  const [betalingsDato, setBetalingsDato] = useState(new Date().toISOString().split('T')[0]);
+  const [startDato, setStartDato] = useState(new Date().toISOString().slice(0, 10));
+  const [slutDato, setSlutDato] = useState(new Date().toISOString().slice(0, 10));
+  const [betalingsDato, setBetalingsDato] = useState(new Date().toISOString().slice(0, 10));
   const [transportmiddel, setTransportmiddel] = useState<TransportMiddel>('NONE');
   const [antalKm, setAntalKm] = useState<number>(0);
   const [antalTure, setAntalTure] = useState<number>(1);
@@ -55,30 +56,18 @@ export const JobsModule: React.FC<Props> = ({
   const [timerJob, setTimerJob] = useState<number>(4);
   const [timerTransportForberedelse, setTimerTransportForberedelse] = useState<number>(2);
   const [noter, setNoter] = useState('');
-
-  const calculateKoerselsfradrag = (
-    transport: TransportMiddel,
-    km: number,
-    ture: number
-  ): number => {
-    if (transport === 'NONE' || km <= 0) return 0;
-    let takst = 0;
-    if (transport === 'OWN_CAR_MC') takst = SKATTESATSER.takstBilMCPrKm;
-    else if (transport === 'OWN_BIKE') takst = SKATTESATSER.takstCykelPrKm;
-    else if (transport === 'PASSENGER') takst = SKATTESATSER.takstPassagerPrKm;
-
-    return Math.round(km * takst * (ture || 1));
-  };
-
-  const calculatedFradrag = calculateKoerselsfradrag(transportmiddel, antalKm, antalTure);
+  const [rubrik, setRubrik] = useState<IndkomstRubrik>(12);
+  const [status, setStatus] = useState<JobStatus>('PLANLAGT');
+  const regler = getSkatteRegler(indkomstAar.aar);
+  const calculatedFradrag = calculateJobKoerselsfradrag(indkomstAar.aar, transportmiddel, antalKm, antalTure);
 
   const resetForm = () => {
     setEditingJobId(null);
     setHvervgiver('');
     setHonorar(0);
-    setStartDato(new Date().toISOString().split('T')[0]);
-    setSlutDato(new Date().toISOString().split('T')[0]);
-    setBetalingsDato(new Date().toISOString().split('T')[0]);
+    setStartDato(new Date().toISOString().slice(0, 10));
+    setSlutDato(new Date().toISOString().slice(0, 10));
+    setBetalingsDato(new Date().toISOString().slice(0, 10));
     setTransportmiddel('NONE');
     setAntalKm(0);
     setAntalTure(1);
@@ -88,6 +77,8 @@ export const JobsModule: React.FC<Props> = ({
     setTimerJob(4);
     setTimerTransportForberedelse(2);
     setNoter('');
+    setRubrik(12);
+    setStatus('PLANLAGT');
   };
 
   const openNewJobModal = () => {
@@ -111,6 +102,8 @@ export const JobsModule: React.FC<Props> = ({
     setTimerJob(job.timerJob || 0);
     setTimerTransportForberedelse(job.timerTransportForberedelse || 0);
     setNoter(job.noter || '');
+    setRubrik(job.rubrik ?? 12);
+    setStatus(job.status ?? 'PLANLAGT');
     setIsModalOpen(true);
   };
 
@@ -143,6 +136,8 @@ export const JobsModule: React.FC<Props> = ({
       timerJob: Number(timerJob),
       timerTransportForberedelse: Number(timerTransportForberedelse),
       noter: noter.trim(),
+      rubrik,
+      status,
     };
 
     if (editingJobId) {
@@ -154,28 +149,35 @@ export const JobsModule: React.FC<Props> = ({
   };
 
   const totalHonorar = jobs.reduce((sum, j) => sum + (Number(j.honorar) || 0), 0);
-  const totalKoersel = jobs.reduce((sum, j) => sum + (Number(j.koerselsFradrag) || 0), 0);
+  const aaretsKoersel = calculateAaretsKoerselsfradragMedPoster(indkomstAar.aar, jobs);
+  const totalKoersel = aaretsKoersel.rubrik29 + aaretsKoersel.rubrik51;
 
   const exportJobsCSV = () => {
     const headers = ['Hvervgiver', 'Honorar DKK', 'Startdato', 'Betalingsdato', 'Transport', 'Km', 'Fradrag DKK', 'Type'];
+    const csvCell = (value: string | number) => {
+      const raw = String(value);
+      const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+      return `"${safe.replaceAll('"', '""')}"`;
+    };
     const rows = jobs.map((j) => [
-      `"${j.hvervgiver}"`,
+      j.hvervgiver,
       j.honorar,
       j.startDato,
       j.betalingsDato,
       j.transportmiddel,
       j.antalKm,
-      j.koerselsFradrag,
-      `"${j.type || ''}"`,
+      aaretsKoersel.prJob[j.id] ?? 0,
+      j.type || '',
     ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = '\uFEFF' + [headers, ...rows].map((row) => row.map(csvCell).join(';')).join('\r\n');
+    const encodedUri = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
     link.setAttribute('download', `jobs-${indkomstAar.aar}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(encodedUri);
   };
 
   return (
@@ -198,8 +200,8 @@ export const JobsModule: React.FC<Props> = ({
             onClick={onOpenAiScanner}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-stone-100 hover:bg-stone-200/80 text-stone-900 text-xs font-semibold transition border border-stone-300"
           >
-            <Sparkles className="w-4 h-4 text-amber-600" />
-            Scan Kontrakt med AI
+            <Inbox className="w-4 h-4 text-amber-700" />
+            Fortæl agenten
           </button>
           <button
             type="button"
@@ -232,14 +234,17 @@ export const JobsModule: React.FC<Props> = ({
               {jobs.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-stone-400">
-                    Ingen jobs oprettet for {indkomstAar.aar} endnu. Klik på "Scan Kontrakt med AI" eller "Nyt Honorarjob".
+                    Ingen jobs oprettet for {indkomstAar.aar} endnu. Klik på "Fortæl agenten" eller "Nyt Honorarjob".
                   </td>
                 </tr>
               ) : (
-                jobs.map((job) => (
+                jobs.map((job) => {
+                  const beregnetKoerselsfradrag = aaretsKoersel.prJob[job.id] ?? 0;
+                  return (
                   <tr key={job.id} className="hover:bg-stone-50/60 transition group">
                     <td className="py-3.5 px-4 font-semibold text-stone-900">
                       <div>{job.hvervgiver}</div>
+                      <span className="text-[10px] text-stone-500">Rubrik {job.rubrik ?? 12} · {job.status === 'BETALT' ? 'Betalt' : job.status === 'AFLYST' ? 'Aflyst' : 'Planlagt'}</span>
                       {job.destinationAdresse && (
                         <div className="text-[11px] text-stone-400 font-normal truncate max-w-xs">
                           {job.destinationAdresse}
@@ -250,6 +255,8 @@ export const JobsModule: React.FC<Props> = ({
                           AM-fritaget
                         </span>
                       )}
+                      <BilagButton ids={job.bilagIds} names={job.bilagNavne} />
+                      <KildeTekst text={job.kildeTekst} />
                     </td>
 
                     <td className="py-3.5 px-4">
@@ -287,7 +294,7 @@ export const JobsModule: React.FC<Props> = ({
                     </td>
 
                     <td className="py-3.5 px-4 text-right font-mono font-medium">
-                      {job.koerselsFradrag > 0 ? (
+                      {beregnetKoerselsfradrag > 0 ? (
                         <span
                           className={
                             job.transportmiddel === 'PASSENGER'
@@ -295,7 +302,7 @@ export const JobsModule: React.FC<Props> = ({
                               : 'text-emerald-800 font-semibold'
                           }
                         >
-                          {job.koerselsFradrag.toLocaleString('da-DK')} DKK
+                          {beregnetKoerselsfradrag.toLocaleString('da-DK')} DKK
                           <span className="text-[10px] block font-normal text-stone-400">
                             {job.transportmiddel === 'PASSENGER' ? 'Rubrik 51' : 'Rubrik 29'}
                           </span>
@@ -317,7 +324,8 @@ export const JobsModule: React.FC<Props> = ({
                         <button
                           type="button"
                           title="Føj til Google Kalender"
-                          onClick={() => window.open(createGoogleCalendarUrl(job), '_blank')}
+                          aria-label={`Føj ${job.hvervgiver} til Google Kalender`}
+                          onClick={() => window.open(createGoogleCalendarUrl(job), '_blank', 'noopener,noreferrer')}
                           className="p-1 rounded text-stone-400 hover:text-blue-600 hover:bg-stone-100"
                         >
                           <Calendar className="w-3.5 h-3.5" />
@@ -325,6 +333,7 @@ export const JobsModule: React.FC<Props> = ({
                         <button
                           type="button"
                           title="Hent .ics fil til Apple/Outlook"
+                          aria-label={`Hent kalenderfil for ${job.hvervgiver}`}
                           onClick={() => downloadIcsFile(job)}
                           className="p-1 rounded text-stone-400 hover:text-stone-800 hover:bg-stone-100"
                         >
@@ -338,6 +347,7 @@ export const JobsModule: React.FC<Props> = ({
                         <button
                           type="button"
                           title="Kopier job"
+                          aria-label={`Kopier job for ${job.hvervgiver}`}
                           onClick={() => handleCopyJob(job)}
                           className="p-1 rounded text-stone-400 hover:text-stone-700 hover:bg-stone-100"
                         >
@@ -346,6 +356,7 @@ export const JobsModule: React.FC<Props> = ({
                         <button
                           type="button"
                           title="Rediger job"
+                          aria-label={`Rediger job for ${job.hvervgiver}`}
                           onClick={() => openEditModal(job)}
                           className="p-1 rounded text-stone-400 hover:text-stone-700 hover:bg-stone-100"
                         >
@@ -354,6 +365,7 @@ export const JobsModule: React.FC<Props> = ({
                         <button
                           type="button"
                           title="Slet job"
+                          aria-label={`Slet job for ${job.hvervgiver}`}
                           onClick={() => onDeleteJob(job.id)}
                           className="p-1 rounded text-stone-400 hover:text-red-600 hover:bg-stone-100"
                         >
@@ -362,7 +374,8 @@ export const JobsModule: React.FC<Props> = ({
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
 
@@ -398,7 +411,7 @@ export const JobsModule: React.FC<Props> = ({
 
       {/* Create / Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-xs p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-xs p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-label={editingJobId ? 'Rediger honorarjob' : 'Opret honorarjob'}>
           <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-xl shadow-xl overflow-hidden my-6">
             <form onSubmit={handleSubmit}>
               <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 bg-stone-50">
@@ -408,6 +421,7 @@ export const JobsModule: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
+                  aria-label="Luk jobformular"
                   className="text-stone-400 hover:text-stone-700 p-1"
                 >
                   ✕
@@ -492,9 +506,9 @@ export const JobsModule: React.FC<Props> = ({
                       className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs bg-white"
                     >
                       <option value="NONE">Ingen transport / ikke brugt eget transportmiddel</option>
-                      <option value="OWN_CAR_MC">Egen bil eller motorcykel (3,79 kr/km - Rubrik 29)</option>
-                      <option value="OWN_BIKE">Egen cykel, knallert (0,63 kr/km - Rubrik 29)</option>
-                      <option value="PASSENGER">Passager i bil/MC (2,23 kr/km - Rubrik 51)</option>
+                      <option value="OWN_CAR_MC">Egen bil eller motorcykel ({regler.takstBilMCFoerste20k.toLocaleString('da-DK')} kr/km op til 20.000 km - Rubrik 29)</option>
+                      <option value="OWN_BIKE">Egen cykel eller knallert ({regler.takstCykelPrKm.toLocaleString('da-DK')} kr/km - Rubrik 29)</option>
+                      <option value="PASSENGER">Almindeligt befordringsfradrag (afstandstrin - Rubrik 51)</option>
                     </select>
                   </div>
 
@@ -606,6 +620,20 @@ export const JobsModule: React.FC<Props> = ({
                   </div>
                 </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <label className="font-semibold text-stone-700">Indkomstrubrik
+                    <select value={rubrik} onChange={(event) => setRubrik(Number(event.target.value) as IndkomstRubrik)} className="mt-1 w-full px-3 py-2 border border-stone-300 rounded-lg bg-white">
+                      <option value={12}>Rubrik 12 — honorar/B-indkomst</option>
+                      <option value={17}>Rubrik 17 — særlig indkomst/legat</option>
+                    </select>
+                  </label>
+                  <label className="font-semibold text-stone-700">Betalingsstatus
+                    <select value={status} onChange={(event) => setStatus(event.target.value as JobStatus)} className="mt-1 w-full px-3 py-2 border border-stone-300 rounded-lg bg-white">
+                      <option value="PLANLAGT">Planlagt</option><option value="BETALT">Betalt</option><option value="AFLYST">Aflyst</option>
+                    </select>
+                  </label>
+                </div>
+
                 {/* AM-bidragsfritagelse Checkbox */}
                 <div className="flex items-center gap-2 pt-1">
                   <input
@@ -616,7 +644,7 @@ export const JobsModule: React.FC<Props> = ({
                     className="rounded border-stone-300 text-stone-900 focus:ring-0"
                   />
                   <label htmlFor="amFritaget" className="text-xs text-stone-700 cursor-pointer">
-                    Der skal <strong>ikke</strong> betales AM-bidrag af dette honorar (fx biblioteksafgift, Copydan, Gramex, legater, kunststøtte)
+                    Bilaget eller en faglig vurdering dokumenterer, at der ikke skal betales AM-bidrag
                   </label>
                 </div>
               </div>

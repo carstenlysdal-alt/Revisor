@@ -1,13 +1,5 @@
 import React from 'react';
-import {
-  BarChart3,
-  Clock,
-  DollarSign,
-  TrendingUp,
-  PieChart,
-  CalendarDays,
-  Percent
-} from 'lucide-react';
+import { BarChart3 } from 'lucide-react';
 import { Job, IndkomstAar } from '../types';
 
 interface Props {
@@ -30,7 +22,6 @@ export const StatistikModule: React.FC<Props> = ({ jobs, indkomstAar }) => {
   const monthTotals: number[] = Array(12).fill(0);
 
   // Aggregate by Weekday
-  const weekdayNames = ['Søn', 'Man', 'Tir', 'Ons', 'Tor', 'Fre', 'Lør'];
   const weekdayTotals: number[] = Array(7).fill(0);
 
   let totalHonorar = 0;
@@ -59,8 +50,8 @@ export const StatistikModule: React.FC<Props> = ({ jobs, indkomstAar }) => {
     if (j.startDato) {
       const d = new Date(j.startDato);
       if (!isNaN(d.getTime())) {
-        monthTotals[d.getMonth()] += h;
-        weekdayTotals[d.getDay()] += h;
+        monthTotals[d.getMonth()] = (monthTotals[d.getMonth()] ?? 0) + h;
+        weekdayTotals[d.getDay()] = (weekdayTotals[d.getDay()] ?? 0) + h;
       }
     }
   });
@@ -186,7 +177,7 @@ export const StatistikModule: React.FC<Props> = ({ jobs, indkomstAar }) => {
         <h3 className="font-bold text-stone-900 text-sm mb-4">
           B-indkomst fordelt pr. måned ({indkomstAar.aar})
         </h3>
-        <div className="grid grid-cols-12 gap-1.5 sm:gap-2 items-end h-40 pt-4 border-b border-stone-200">
+        <div className="grid grid-cols-12 gap-1.5 sm:gap-2 items-end h-40 pt-4 border-b border-stone-200" role="img" aria-label={`Månedsfordeling af ${totalHonorar.toLocaleString('da-DK')} kroner i honorarer for ${indkomstAar.aar}`}>
           {monthTotals.map((amount, idx) => {
             const heightPct = Math.round((amount / maxMonthHonorar) * 100);
             return (

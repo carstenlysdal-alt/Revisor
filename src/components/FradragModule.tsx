@@ -5,12 +5,12 @@ import {
   Trash2,
   Edit2,
   AlertTriangle,
-  CheckCircle2,
-  Sparkles,
-  Download,
-  Info
+  Inbox
 } from 'lucide-react';
 import { Fradrag, IndkomstAar, SkatteBeregningResultat } from '../types';
+import { BilagButton } from './BilagButton';
+import { KildeTekst } from './KildeTekst';
+import { useModal } from '../hooks/useModal';
 
 interface Props {
   fradragList: Fradrag[];
@@ -32,23 +32,24 @@ export const FradragModule: React.FC<Props> = ({
   onOpenAiScanner,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  useModal(isModalOpen, () => setIsModalOpen(false));
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Form State
   const [beskrivelse, setBeskrivelse] = useState('');
   const [typeKategori, setTypeKategori] = useState('Udstyr');
-  const [fakturaDato, setFakturaDato] = useState(new Date().toISOString().split('T')[0]);
+  const [fakturaDato, setFakturaDato] = useState(new Date().toISOString().slice(0, 10));
   const [fakturaBeloeb, setFakturaBeloeb] = useState<number>(0);
   const [fradragsProcent, setFradragsProcent] = useState<number>(100);
   const [revisorNotat, setRevisorNotat] = useState('');
 
-  const fradragIDKK = Math.round(((fakturaBeloeb || 0) * (fradragsProcent || 100)) / 100);
+  const fradragIDKK = Math.round((Math.max(0, fakturaBeloeb) * Math.max(0, fradragsProcent)) / 100);
 
   const resetForm = () => {
     setEditingId(null);
     setBeskrivelse('');
     setTypeKategori('Udstyr');
-    setFakturaDato(new Date().toISOString().split('T')[0]);
+    setFakturaDato(new Date().toISOString().slice(0, 10));
     setFakturaBeloeb(0);
     setFradragsProcent(100);
     setRevisorNotat('');
@@ -120,8 +121,8 @@ export const FradragModule: React.FC<Props> = ({
             onClick={onOpenAiScanner}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-stone-100 hover:bg-stone-200/80 text-stone-900 text-xs font-semibold transition border border-stone-300"
           >
-            <Sparkles className="w-4 h-4 text-amber-600" />
-            Scan Kvittering med AI
+            <Inbox className="w-4 h-4 text-amber-700" />
+            Fortæl agenten
           </button>
           <button
             type="button"
@@ -140,12 +141,11 @@ export const FradragModule: React.FC<Props> = ({
           <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
           <div className="text-xs text-amber-950">
             <span className="font-bold block text-sm">
-              OBS: Grænse for Rubrik 29 er overskredet!
+              OBS: Appens nettoindkomstgrænse er overskredet
             </span>
             Dine samlede fradrag i Rubrik 29 ({skatteBeregning.oevrigeFradragRubrik29.toLocaleString('da-DK')} DKK inkl. kørsel) 
-            overstiger din B-indkomst efter AM-bidrag ({skatteBeregning.maksTilladtFradragRubrik29.toLocaleString('da-DK')} DKK). 
-            Ifølge dansk skattelovgivning kan B-indkomstfradrag ikke give underskud i personlig indkomst. 
-            Det overskydende beløb ({skatteBeregning.overskydendeFradrag.toLocaleString('da-DK')} DKK) kan ikke modregnes i år.
+            overstiger honorargrundlaget efter AM-bidrag ({skatteBeregning.maksTilladtFradragRubrik29.toLocaleString('da-DK')} DKK) i dette estimat.
+            Appen medregner derfor ikke det overskydende beløb ({skatteBeregning.overskydendeFradrag.toLocaleString('da-DK')} DKK). Kontrollér særskilt, hvis beløbet vedrører flere skattemæssige aktiviteter.
           </div>
         </div>
       )}
@@ -206,6 +206,8 @@ export const FradragModule: React.FC<Props> = ({
                                 {item.revisorNotat}
                               </div>
                             )}
+                            <BilagButton ids={item.bilagIds} names={item.bilagNavne} />
+                            <KildeTekst text={item.kildeTekst} />
                           </td>
                           <td className="py-3 px-4 text-stone-500">{item.typeKategori}</td>
                           <td className="py-3 px-4 text-stone-600">{item.fakturaDato}</td>
@@ -225,6 +227,7 @@ export const FradragModule: React.FC<Props> = ({
                               <button
                                 type="button"
                                 title="Rediger"
+                                aria-label={`Rediger ${item.beskrivelse}`}
                                 onClick={() => openEditModal(item)}
                                 className="p-1 rounded text-stone-400 hover:text-stone-700 hover:bg-stone-100"
                               >
@@ -233,6 +236,7 @@ export const FradragModule: React.FC<Props> = ({
                               <button
                                 type="button"
                                 title="Slet"
+                                aria-label={`Slet ${item.beskrivelse}`}
                                 onClick={() => onDeleteFradrag(item.id)}
                                 className="p-1 rounded text-stone-400 hover:text-red-600 hover:bg-stone-100"
                               >
@@ -274,7 +278,7 @@ export const FradragModule: React.FC<Props> = ({
 
       {/* Create / Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-xs p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-xs p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-label={editingId ? 'Rediger fradrag' : 'Opret fradrag'}>
           <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-lg shadow-xl overflow-hidden my-6">
             <form onSubmit={handleSubmit}>
               <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 bg-stone-50">
@@ -284,6 +288,7 @@ export const FradragModule: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
+                  aria-label="Luk fradragsformular"
                   className="text-stone-400 hover:text-stone-700 p-1"
                 >
                   ✕
@@ -349,7 +354,8 @@ export const FradragModule: React.FC<Props> = ({
                       type="number"
                       required
                       min={0}
-                      step={1}
+                      step={0.01}
+                      inputMode="decimal"
                       value={fakturaBeloeb || ''}
                       onChange={(e) => setFakturaBeloeb(Number(e.target.value))}
                       placeholder="fx 850"
@@ -364,10 +370,10 @@ export const FradragModule: React.FC<Props> = ({
                     <div className="flex items-center gap-2">
                       <input
                         type="number"
-                        min={1}
+                        min={0}
                         max={100}
                         value={fradragsProcent}
-                        onChange={(e) => setFradragsProcent(Math.min(100, Math.max(1, Number(e.target.value))))}
+                        onChange={(e) => setFradragsProcent(Math.min(100, Math.max(0, Number(e.target.value))))}
                         className="w-20 px-3 py-2 border border-stone-300 rounded-lg text-xs font-bold text-center"
                       />
                       <span className="text-stone-500 font-bold">%</span>
@@ -380,7 +386,7 @@ export const FradragModule: React.FC<Props> = ({
 
                 {/* Beregnet fradrag i DKK */}
                 <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-                  <span className="text-emerald-900 font-medium">Endeligt fradrag i Rubrik 29:</span>
+                  <span className="text-emerald-900 font-medium">Beregnet forslag til Rubrik 29:</span>
                   <span className="text-emerald-950 font-bold font-mono text-sm">
                     {fradragIDKK.toLocaleString('da-DK')} DKK
                   </span>

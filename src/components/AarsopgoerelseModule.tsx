@@ -4,9 +4,7 @@ import {
   Copy,
   Check,
   ExternalLink,
-  Info,
-  HelpCircle,
-  AlertCircle
+  HelpCircle
 } from 'lucide-react';
 import { SkatteBeregningResultat, IndkomstAar } from '../types';
 
@@ -37,7 +35,7 @@ export const AarsopgoerelseModule: React.FC<Props> = ({
             Skat — Årsopgørelse & Rubrikoversigt for {indkomstAar.aar}
           </h2>
           <p className="text-xs text-stone-500 mt-1">
-            Her er de nøjagtige tal og felter, som du skal indtaste eller kontrollere på TastSelv Borger (skat.dk).
+            Her er appens vejledende forslag til tal, som du skal kontrollere på TastSelv Borger (skat.dk).
           </p>
         </div>
 
@@ -114,11 +112,11 @@ export const AarsopgoerelseModule: React.FC<Props> = ({
 
           <div className="mt-4 pt-3 border-t border-stone-100 flex items-center justify-between">
             <span className="text-2xl font-bold font-mono text-emerald-900">
-              {skatteBeregning.oevrigeFradragRubrik29.toLocaleString('da-DK')} DKK
+              {skatteBeregning.anvendtFradragRubrik29.toLocaleString('da-DK')} DKK
             </span>
             <button
               type="button"
-              onClick={() => copyAmount('29', skatteBeregning.oevrigeFradragRubrik29)}
+              onClick={() => copyAmount('29', skatteBeregning.anvendtFradragRubrik29)}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-stone-300 hover:bg-stone-100 text-xs font-medium text-stone-700 transition"
             >
               {copiedRubrik === '29' ? (
@@ -241,8 +239,7 @@ export const AarsopgoerelseModule: React.FC<Props> = ({
               Hvorfor havner bilkørsel i Rubrik 29?
             </span>
             Når du kører i egen bil eller cykel til et B-indkomstjob, er kørslen en direkte driftsomkostning. 
-            Det giver fradrag i din <em>personlige indkomst</em> (Rubrik 29) med væsentlig højere skatteværdi (op til ca. 52%) 
-            end et almindeligt befordringsfradrag (Rubrik 51, ca. 26%).
+            Det kan give fradrag i din <em>personlige indkomst</em> (Rubrik 29). Den faktiske skatteværdi afhænger af din samlede indkomst og aktivitetens skattemæssige behandling. Almindelig transport mellem hjem og arbejde hører typisk til Rubrik 51.
           </div>
 
           <div className="p-3 bg-white rounded-lg border border-stone-200">
@@ -257,8 +254,7 @@ export const AarsopgoerelseModule: React.FC<Props> = ({
             <span className="font-bold text-stone-900 block mb-1">
               Dokumentationskrav
             </span>
-            Gem alle bilag og kørselsnotater for indkomståret i mindst 5 år. 
-            Du kan altid downloade dine bilag og eksportere en samlet rapport fra dette system.
+            Gem de oprindelige bilag og kørselsnotater efter de gældende dokumentationskrav. Uploadede originalfiler gemmes lokalt i denne browser; lav også din egen backup.
           </div>
         </div>
       </div>
