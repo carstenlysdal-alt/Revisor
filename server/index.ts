@@ -27,10 +27,12 @@ async function opretLager(): Promise<{
 }> {
   // Railway's interne hostname virker kun inde i Railway. Ved lokal kørsel
   // med `railway run` vælges den offentlige, TLS-beskyttede forbindelse.
+  const internDatabaseUrl = process.env.DATABASE_URL;
   const databaseUrl =
     process.env.NODE_ENV === 'production'
-      ? process.env.DATABASE_URL
-      : process.env.DATABASE_PUBLIC_URL ?? process.env.DATABASE_URL;
+      ? internDatabaseUrl
+      : process.env.DATABASE_PUBLIC_URL ??
+        (internDatabaseUrl?.includes('.railway.internal') ? undefined : internDatabaseUrl);
 
   if (databaseUrl) {
     const pg = new PostgresRepository(databaseUrl);
