@@ -20,7 +20,7 @@ import { Forside } from './components/Forside';
 import { GlobalSidebar } from './components/GlobalSidebar';
 import { AiBilagScannerModal } from './components/AiBilagScannerModal';
 import { RevisorChatModal } from './components/RevisorChatModal';
-import { Advarsel, Knap } from './components/ui';
+import { Advarsel, Knap, RevisorMaerke } from './components/ui';
 import { kr } from './lib/format';
 
 function MobilOverblik({
@@ -306,12 +306,7 @@ export default function App() {
                 onClick={() => setChatAaben(true)}
                 className="overgang hidden items-center gap-1.5 rounded-[4px] border border-rule-strong px-2.5 py-1 text-xs font-medium text-ink hover:bg-sunk lg:flex"
               >
-                <span
-                  aria-hidden="true"
-                  className="flex h-4 w-4 items-center justify-center rounded-[3px] border border-rule-strong font-display text-[9px] font-bold"
-                >
-                  R
-                </span>
+                <RevisorMaerke stoerrelse="sm" />
                 Revisor
               </button>
             )}

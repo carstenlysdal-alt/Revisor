@@ -44,6 +44,24 @@ export function Rubrik({ nr, aktiv = false }: { nr: 12 | 17 | 29 | 51; aktiv?: b
   );
 }
 
+/**
+ * Revisors eget mærke: et typografisk monogram, ikke et AI-glimt-ikon
+ * (bandlyst i DESIGN.md). Går igen samme sted i headeren, forsiden og
+ * chatten, så identiteten er den samme, uanset hvor man møder den.
+ */
+export function RevisorMaerke({ stoerrelse = 'lg' }: { stoerrelse?: 'sm' | 'lg' }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex shrink-0 items-center justify-center rounded-[4px] border border-rule-strong font-display font-bold text-ink ${
+        stoerrelse === 'sm' ? 'h-4 w-4 text-[9px]' : 'h-9 w-9 text-base'
+      }`}
+    >
+      R
+    </span>
+  );
+}
+
 export function Tabel({
   children,
   minBredde = 640,
@@ -383,7 +401,7 @@ export function Modal({
 }: {
   aaben: boolean;
   onLuk: () => void;
-  titel: string;
+  titel: React.ReactNode;
   beskrivelse?: string;
   bredde?: string;
   children: React.ReactNode;

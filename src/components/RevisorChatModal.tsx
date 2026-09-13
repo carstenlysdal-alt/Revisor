@@ -6,7 +6,7 @@ import { kr, pct } from '../lib/format';
 import { laesEventStroem } from '../lib/sse';
 import { KineticLoader } from './KineticLoader';
 import { PosteringForslagKort } from './PosteringForslagKort';
-import { Advarsel, Knap, Modal } from './ui';
+import { Advarsel, Knap, Modal, Notatfelt, RevisorMaerke } from './ui';
 import { Mic, MicOff } from 'lucide-react';
 import { useDiktering } from '../hooks/useDiktering';
 
@@ -85,7 +85,16 @@ export function RevisorChatModal({
   }, [beskeder, arbejder]);
 
   useEffect(() => {
-    if (!aaben) diktering.stop();
+    if (aaben) return;
+    diktering.stop();
+    // Samtalen skal ikke ligge og vente, næste gang chatten åbnes — hver
+    // åbning er en frisk samtale, ikke en fortsættelse af den forrige.
+    setBeskeder([]);
+    setInput('');
+    setFejl(null);
+    setAktivtForslagIndeks(null);
+    setBekraeftSignal(0);
+    setFase(null);
     // Hookens stop-funktion ændrer identitet ved render; modaltilstanden er
     // den eneste ændring, der skal styre denne oprydning.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -194,7 +203,12 @@ export function RevisorChatModal({
     <Modal
       aaben={aaben}
       onLuk={onLuk}
-      titel="Revisor"
+      titel={
+        <span className="flex items-center gap-2.5">
+          <RevisorMaerke stoerrelse="sm" />
+          Revisor
+        </span>
+      }
       beskrivelse={`Svarer ud fra dine egne tal for ${beregning.aar}. Beregningen kommer fra regelmotoren, ikke fra modellen.`}
       bredde="max-w-3xl"
     >
@@ -231,12 +245,11 @@ export function RevisorChatModal({
 
             <div className="space-y-5 py-2">
               {beskeder.map((b, i) => (
-                <div key={i}>
-                  <p className="mb-1 text-2xs font-medium uppercase tracking-wide text-ink-faint">
-                    {b.rolle === 'bruger' ? 'Dig' : 'Revisor'}
-                  </p>
+                <div key={i} className={b.rolle === 'bruger' ? 'ml-auto max-w-[80%]' : undefined}>
                   {b.rolle === 'bruger' ? (
-                    <p className="whitespace-pre-wrap text-sm text-ink">{b.indhold}</p>
+                    <p className="whitespace-pre-wrap text-right text-sm text-ink-muted">
+                      {b.indhold}
+                    </p>
                   ) : (
                     <div className="max-w-[68ch] text-sm text-ink">
                       <ReactMarkdown
@@ -305,15 +318,10 @@ export function RevisorChatModal({
               ))}
 
               {arbejder && (
-                <div>
-                  <p className="mb-1 text-2xs font-medium uppercase tracking-wide text-ink-faint">
-                    Revisor
-                  </p>
-                  <KineticLoader
-                    faser={soegning ? Object.values(FASETEKST) : FASER_UDEN_SOEGNING}
-                    aktivFase={fase}
-                  />
-                </div>
+                <KineticLoader
+                  faser={soegning ? Object.values(FASETEKST) : FASER_UDEN_SOEGNING}
+                  aktivFase={fase}
+                />
               )}
 
               {fejl && <Advarsel titel="Svaret kom ikke igennem">{fejl}</Advarsel>}
@@ -327,16 +335,14 @@ export function RevisorChatModal({
                 e.preventDefault();
                 void send(input);
               }}
-              className="flex items-end gap-2"
             >
               <label htmlFor="chat-input" className="sr-only">
                 Spørgsmål til revisoren
               </label>
-              <textarea
+              <Notatfelt
                 id="chat-input"
-                rows={2}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
+                vaerdi={input}
+                onVaerdi={setInput}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -344,23 +350,29 @@ export function RevisorChatModal({
                   }
                 }}
                 placeholder="Skriv dit spørgsmål"
-                className="min-h-[3rem] flex-1 resize-none rounded-[4px] border border-rule-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint"
               />
-              {diktering.understøttet && (
-                <Knap
-                  type="button"
-                  onClick={diktering.lytter ? diktering.stop : diktering.start}
-                  aria-label={diktering.lytter ? 'Stop diktering' : 'Diktér på dansk'}
-                  aria-pressed={diktering.lytter}
-                  className={diktering.lytter ? 'text-negative' : ''}
-                >
-                  {diktering.lytter ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                  <span className="hidden sm:inline">{diktering.lytter ? 'Stop' : 'Diktér'}</span>
+              <div className="mt-2.5 flex items-center justify-between gap-2">
+                {diktering.understøttet ? (
+                  <Knap
+                    type="button"
+                    onClick={diktering.lytter ? diktering.stop : diktering.start}
+                    aria-pressed={diktering.lytter}
+                    className={diktering.lytter ? 'text-negative' : ''}
+                  >
+                    {diktering.lytter ? (
+                      <MicOff className="h-3.5 w-3.5" />
+                    ) : (
+                      <Mic className="h-3.5 w-3.5" />
+                    )}
+                    {diktering.lytter ? 'Stop' : 'Diktér'}
+                  </Knap>
+                ) : (
+                  <span />
+                )}
+                <Knap art="primaer" type="submit" disabled={arbejder || !input.trim()}>
+                  Send
                 </Knap>
-              )}
-              <Knap art="primaer" type="submit" disabled={arbejder || !input.trim()}>
-                Send
-              </Knap>
+              </div>
             </form>
 
             {diktering.fejl && <p role="alert" className="mt-2 text-2xs text-negative">{diktering.fejl}</p>}

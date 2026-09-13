@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useDiktering } from '../hooks/useDiktering';
-import { Knap, Notatfelt } from './ui';
+import { Knap, Notatfelt, RevisorMaerke } from './ui';
 import { Mic, MicOff } from 'lucide-react';
 
 const EKSEMPLER = [
@@ -41,20 +41,14 @@ export function Forside({
 
       <div className="mt-6 border-y border-rule-strong py-7">
         <div className="flex items-start gap-4">
-          <div
-            aria-hidden="true"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] border border-rule-strong font-display text-base font-bold text-ink"
-          >
-            R
-          </div>
+          <RevisorMaerke />
           <div className="min-w-0 flex-1">
             <p className="text-2xs font-medium uppercase tracking-wide text-ink-faint">
               Revisor
             </p>
             <p className="mt-1.5 max-w-[62ch] text-base leading-snug text-ink">
-              Skriv, hvad der skete — hvem, hvornår, hvor meget, og om du kørte selv. Revisor
-              lægger tallene i de rigtige rubrikker med det samme, og intet gemmes, før du har
-              godkendt det.
+              Fortæl Revisor, hvad der skete: et job, en udgift, en tur i egen bil. Den finder
+              rubrikken og lægger et udkast klar. Du godkender, før noget gemmes.
             </p>
 
             <form
