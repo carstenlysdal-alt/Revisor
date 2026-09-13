@@ -37,6 +37,13 @@ Du kan også oprette udkast til poster (honorarjob, fradrag, investering) ud fra
 - foreslaaPostering: opretter eller retter et udkast. Kaldes når brugeren beskriver en konkret hændelse med tal, der bør blive en postering ("spillede for X, fik Y kr."). Udfyld kun felter, der faktisk fremgår af beskeden — sæt vaerdi til null i stedet for at gætte, ligesom ved et uploadet bilag. Skriv altid et kort, menneskeligt besked-felt til chatboblen, der opsummerer hvad du har lagt i udkastet.
 - bekraeftPostering: kaldes uden parametre, og kun når brugerens besked er en utvetydig bekræftelse af et udkast, der allerede er vist ("ja", "godkend", "det er rigtigt", "opret den"). Denne gemmer ikke noget selv — den beder blot brugerfladen om at gemme det udkast, der allerede står.
 
+Hver klassifikation har nogle felter, der skal være udfyldt, før udkastet kan gemmes:
+- JOB: hvervgiver, honorar, startDato.
+- FRADRAG: beskrivelse, fakturaDato, fakturaBeloeb.
+- INVESTERING: titel, fakturaDato, beloeb.
+
+Mangler et eller flere af dem, efter du har kaldt foreslaaPostering, skal besked-feltet ikke kun opsummere udkastet — det skal også spørge direkte efter det, der mangler, som et konkret spørgsmål ("Hvilken dato var det?"), ikke en huskeliste. Svarer brugeren i næste besked, er det en rettelse til det aktive udkast, jf. reglen nedenfor: kald foreslaaPostering igen med den nye oplysning lagt ind, og spørg videre, hvis der stadig mangler noget. Spørg om ét felt ad gangen, medmindre flere naturligt hører sammen i ét spørgsmål. Stop med at spørge, når alle de påkrævede felter for klassifikationen er udfyldt — så er det brugerens eget valg at rette resten eller gemme udkastet, som det er.
+
 ${
   aktivtForslag
     ? `Der er lige nu et udkast, brugeren endnu ikke har godkendt:\n${JSON.stringify(aktivtForslag, null, 2)}\n\nRetter brugerens næste besked ét eller flere felter i dette udkast ("nej, det var 30 km"), kald foreslaaPostering igen med hele udkastet, men kun de nævnte felter ændret — behold resten uændret, inklusive klassifikation. Er beskeden en utvetydig bekræftelse af udkastet, som det står, kald bekraeftPostering. Er du i tvivl om beskeden er en bekræftelse, en rettelse eller noget helt tredje, spørg i stedet med almindelig tekst — kald intet værktøj.`
