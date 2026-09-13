@@ -234,8 +234,21 @@ export function opretGeminiUdbyder(): AiUdbyder {
         return { tekst: '', kilder: kilder ?? [], bekraeftet: true };
       }
       if (kald?.name === 'foreslaaPostering') {
-        const forslag = rensPosteringForslag(PosteringForslagSkema.parse(kald.args ?? {}));
-        return { tekst: forslag.besked, kilder: kilder ?? [], forslag };
+        try {
+          const forslag = rensPosteringForslag(PosteringForslagSkema.parse(kald.args ?? {}));
+          return { tekst: forslag.besked, kilder: kilder ?? [], forslag };
+        } catch (err) {
+          // Modellen kaldte værktøjet, men leverede et udkast, der ikke kunne
+          // læses — typisk en besked med flere fakta på én gang. Bedre at
+          // bede brugeren dele det op end at kaste en fejl, der intet siger
+          // om hvad der gik galt.
+          console.error('foreslaaPostering: udkastet kunne ikke læses.', err);
+          return {
+            tekst:
+              'Jeg fangede ikke det hele i den besked. Prøv at dele den op — fx hvervgiver og beløb først, kørslen bagefter.',
+            kilder: kilder ?? [],
+          };
+        }
       }
 
       return { tekst: (svar.text ?? '').trim(), kilder: kilder ?? [] };

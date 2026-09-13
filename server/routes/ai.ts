@@ -7,8 +7,16 @@ import { ManglendeApiNoegleError } from '../ai/udbyder';
 import { PdfUdenTekstError } from '../ai/pdf';
 import { rensProsa } from '../ai/rens';
 
-/** Oversætter en fejl til noget, brugeren kan handle på. */
-function tilBrugerfejl(err: unknown): { status: number; fejl: string } {
+/**
+ * Oversætter en fejl til noget, brugeren kan handle på.
+ *
+ * Den sidste, uspecifikke fejl afhænger af kald: kontekst 'bilag' taler om et
+ * dokument, 'chat' om et svar. De to endpoints deler ellers samme oversættelse.
+ */
+function tilBrugerfejl(
+  err: unknown,
+  kontekst: 'bilag' | 'chat' = 'bilag'
+): { status: number; fejl: string } {
   if (err instanceof ManglendeApiNoegleError) return { status: 503, fejl: err.message };
   if (err instanceof PdfUdenTekstError) return { status: 422, fejl: err.message };
 
@@ -41,7 +49,10 @@ function tilBrugerfejl(err: unknown): { status: number; fejl: string } {
 
   return {
     status: 500,
-    fejl: 'Bilaget kunne ikke læses. Prøv igen, eller opret posten manuelt.',
+    fejl:
+      kontekst === 'chat'
+        ? 'Svaret kunne ikke dannes. Prøv igen, eller omformulér spørgsmålet.'
+        : 'Bilaget kunne ikke læses. Prøv igen, eller opret posten manuelt.',
   };
 }
 
@@ -124,7 +135,7 @@ export function aiRoutes(repo: Repository, arkiv: BilagsLager): Router {
       }
     } catch (err) {
       console.error('Revisor-chat fejlede:', err);
-      const { fejl } = tilBrugerfejl(err);
+      const { fejl } = tilBrugerfejl(err, 'chat');
       if (!res.headersSent) res.setHeader('Content-Type', 'text/event-stream');
       send('fejl', { fejl });
     } finally {

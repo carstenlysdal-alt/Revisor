@@ -171,14 +171,22 @@ export function opretDeepseekUdbyder(): AiUdbyder {
         return { tekst: '', kilder: kilder ?? [], bekraeftet: true };
       }
       if (kald?.type === 'function' && kald.function.name === 'foreslaaPostering') {
-        let raa: unknown;
         try {
-          raa = JSON.parse(kald.function.arguments || '{}');
-        } catch {
-          throw new Error('Forslaget til posteringen kunne ikke læses.');
+          const raa: unknown = JSON.parse(kald.function.arguments || '{}');
+          const forslag = rensPosteringForslag(PosteringForslagSkema.parse(raa));
+          return { tekst: forslag.besked, kilder: kilder ?? [], forslag };
+        } catch (err) {
+          // Modellen kaldte værktøjet, men leverede et udkast, der ikke kunne
+          // læses — typisk en besked med flere fakta på én gang. Bedre at
+          // bede brugeren dele det op end at kaste en fejl, der intet siger
+          // om hvad der gik galt.
+          console.error('foreslaaPostering: udkastet kunne ikke læses.', err);
+          return {
+            tekst:
+              'Jeg fangede ikke det hele i den besked. Prøv at dele den op — fx hvervgiver og beløb først, kørslen bagefter.',
+            kilder: kilder ?? [],
+          };
         }
-        const forslag = rensPosteringForslag(PosteringForslagSkema.parse(raa));
-        return { tekst: forslag.besked, kilder: kilder ?? [], forslag };
       }
 
       return {

@@ -9,14 +9,25 @@ import { z } from 'zod';
  * Der gættes aldrig på et resultat.
  */
 
+/**
+ * Et funktions-kald håndhæves ikke lige så strengt som et skema-tvunget
+ * svar (analyserBilag) — modellen afleverer sommetider et felt som en ren
+ * værdi ("startDato": "2026-09-06") i stedet for den indpakkede form
+ * ({"vaerdi": "2026-09-06", "sikkerhed": 0.8}), typisk når beskeden bærer
+ * flere fakta på én gang. Uden dette kaster det hele forslaget, og
+ * brugeren ser en fejl, der intet siger om hvad der gik galt.
+ */
 const felt = <T extends z.ZodTypeAny>(type: T) =>
-  z.object({
-    vaerdi: type.nullish().transform((v) => v ?? null),
-    sikkerhed: z.coerce
-      .number()
-      .nullish()
-      .transform((v) => Math.min(1, Math.max(0, Number(v) || 0))),
-  });
+  z.preprocess(
+    (raa) => (raa !== null && typeof raa === 'object' && 'vaerdi' in raa ? raa : { vaerdi: raa, sikkerhed: 0.6 }),
+    z.object({
+      vaerdi: type.nullish().transform((v) => v ?? null),
+      sikkerhed: z.coerce
+        .number()
+        .nullish()
+        .transform((v) => Math.min(1, Math.max(0, Number(v) || 0))),
+    })
+  );
 
 const tekstfelt = felt(z.coerce.string());
 const talfelt = felt(z.coerce.number());

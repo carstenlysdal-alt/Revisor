@@ -63,6 +63,24 @@ describe('PosteringForslagSkema', () => {
     expect(parset.investering).toBeUndefined();
   });
 
+  it('accepterer et felt leveret som en flad værdi, ikke {vaerdi, sikkerhed} — modellen flader nogle gange strukturen ud ved en besked med mange fakta', () => {
+    const parset = PosteringForslagSkema.parse({
+      klassifikation: 'JOB',
+      besked: 'Comwell i Kolding, 4.000 kr.',
+      job: {
+        hvervgiver: 'Comwell i Kolding',
+        honorar: 4000,
+        startDato: '2026-09-06',
+        transportmiddel: 'OWN_CAR_MC',
+      },
+    });
+
+    expect(parset.job?.hvervgiver.vaerdi).toBe('Comwell i Kolding');
+    expect(parset.job?.honorar.vaerdi).toBe(4000);
+    expect(parset.job?.startDato.vaerdi).toBe('2026-09-06');
+    expect(parset.job?.transportmiddel.vaerdi).toBe('OWN_CAR_MC');
+  });
+
   it('klemmer en sikkerhed uden for [0,1] ind i intervallet', () => {
     const parset = PosteringForslagSkema.parse({
       klassifikation: 'JOB',

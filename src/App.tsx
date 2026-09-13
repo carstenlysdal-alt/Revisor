@@ -297,6 +297,25 @@ export default function App() {
               </select>
             </div>
             )}
+            {aktivtAar && beregning && (
+              // Kun på lg+: mobilen har allerede en fast Revisor-knap i
+              // bundnavigationen. Denne dækker hullet på skrivebordet, hvor
+              // GlobalSidebar — og dermed dens "Spørg revisoren"-knap —
+              // skjules på fanerne 'aar' og 'statistik'.
+              <button
+                type="button"
+                onClick={() => setChatAaben(true)}
+                className="overgang hidden items-center gap-1.5 rounded-[4px] border border-rule-strong px-2.5 py-1 text-xs font-medium text-ink hover:bg-sunk lg:flex"
+              >
+                <span
+                  aria-hidden="true"
+                  className="flex h-4 w-4 items-center justify-center rounded-[3px] border border-rule-strong font-display text-[9px] font-bold"
+                >
+                  R
+                </span>
+                Revisor
+              </button>
+            )}
             {auth.status?.kraeverLogin && (
               <button
                 type="button"
@@ -396,7 +415,6 @@ export default function App() {
                       beregning={beregning}
                       aiKlar={aiKlar}
                       onStilSpoergsmaal={stilSpoergsmaal}
-                      onGaaTil={(fane) => naviger({ fane })}
                     />
                   )}
 

@@ -6,36 +6,10 @@ import { useDiktering } from '../hooks/useDiktering';
 import { Knap, Notatfelt } from './ui';
 import { Mic, MicOff } from 'lucide-react';
 
-interface Gruppe {
-  titel: string;
-  elementer: { id: string; navn: string; beskrivelse: string }[];
-}
-
-const GRUPPER: Gruppe[] = [
-  {
-    titel: 'Indtægt og fradrag',
-    elementer: [
-      { id: 'jobs', navn: 'Jobs og kørsel', beskrivelse: 'Honorarer, rubrik 12 og 17' },
-      { id: 'fradrag', navn: 'Fradrag', beskrivelse: 'Driftsomkostninger, rubrik 29' },
-      { id: 'investeringer', navn: 'Investeringer', beskrivelse: 'Anlægsaktiver' },
-    ],
-  },
-  {
-    titel: 'Skat',
-    elementer: [
-      { id: 'overblik', navn: 'Skatteoverblik', beskrivelse: 'Beregningen for året' },
-      { id: 'aarsopgoerelse', navn: 'Årsopgørelse', beskrivelse: 'Rubrik for rubrik' },
-      { id: 'opsparing', navn: 'Sæt til side', beskrivelse: 'Det du skal have liggende' },
-    ],
-  },
-  {
-    titel: 'Andet',
-    elementer: [
-      { id: 'statistik', navn: 'Statistik', beskrivelse: 'Udvikling over tid' },
-      { id: 'dokumentation', navn: 'Dokumentation', beskrivelse: 'Bilag og noter, samlet' },
-      { id: 'aar', navn: 'Indkomstår', beskrivelse: 'Opret, lås, skift år' },
-    ],
-  },
+const EKSEMPLER = [
+  'Spillede for Jazzhus Montmartre i går, fik 4.500 kr., kørte selv i egen bil fra Slagelse',
+  'Købt et nyt mikrofonstativ hos Thomann til 890 kr. i går',
+  'Foredrag for Kolding Bibliotek, 2.000 kr., betalt som legat uden AM-bidrag',
 ];
 
 function hilsen(): string {
@@ -51,19 +25,17 @@ export function Forside({
   beregning,
   aiKlar,
   onStilSpoergsmaal,
-  onGaaTil,
 }: {
   indkomstAar: IndkomstAar;
   beregning: SkatteBeregning;
   aiKlar: boolean;
   onStilSpoergsmaal: (tekst: string) => void;
-  onGaaTil: (fane: string) => void;
 }) {
   const [tekst, setTekst] = useState('');
   const diktering = useDiktering(tekst, setTekst);
 
-  const send = () => {
-    const besked = tekst.trim();
+  const send = (valgtTekst?: string) => {
+    const besked = (valgtTekst ?? tekst).trim();
     if (!besked) return;
     diktering.stop();
     onStilSpoergsmaal(besked);
@@ -71,14 +43,14 @@ export function Forside({
   };
 
   return (
-    <div className="max-w-[70ch]">
+    <div>
       <p className="text-2xs uppercase tracking-wide text-ink-faint">
         Indkomstår {indkomstAar.aar}
       </p>
       <h1 className="mt-1 font-display text-2xl font-bold tracking-tight text-ink">
         {hilsen()}.
       </h1>
-      <p className="mt-2 text-sm text-ink-muted">
+      <p className="mt-2 max-w-[70ch] text-sm text-ink-muted">
         Året står på <span className="tal font-medium text-ink">{kr(beregning.samletSkatOgAM)} kr.</span> i
         skat og AM-bidrag, og den næste krone honorar beskattes med{' '}
         <span className="tal font-medium text-ink">
@@ -87,19 +59,26 @@ export function Forside({
         .
       </p>
 
-      <div className="mt-8 border-y border-rule-strong py-6">
-        <div className="flex items-start gap-3">
+      <div className="mt-10 border-y border-rule-strong py-7">
+        <div className="flex items-start gap-4">
           <div
             aria-hidden="true"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[4px] border border-rule-strong font-display text-sm font-bold text-ink"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[4px] border border-rule-strong font-display text-base font-bold text-ink"
           >
             R
           </div>
           <div className="min-w-0 flex-1">
-            <p className="mb-2 text-2xs font-medium uppercase tracking-wide text-ink-faint">
+            <p className="text-2xs font-medium uppercase tracking-wide text-ink-faint">
               Revisor
             </p>
+            <p className="mt-1.5 max-w-[62ch] text-base leading-snug text-ink">
+              Skriv, hvad der skete — hvem, hvornår, hvor meget, og om du kørte selv. Revisor
+              lægger tallene i de rigtige rubrikker med det samme, og intet gemmes, før du har
+              godkendt det.
+            </p>
+
             <form
+              className="mt-5"
               onSubmit={(e) => {
                 e.preventDefault();
                 send();
@@ -110,7 +89,7 @@ export function Forside({
                 onVaerdi={setTekst}
                 placeholder={
                   aiKlar
-                    ? 'Skriv, eller diktér: "spillede for Jazzhus, fik 3000 kr."'
+                    ? 'Skriv, eller diktér: "spillede for Jazzhus, fik 3000 kr., kørte selv derover"'
                     : 'Kræver en AI-nøgle på serveren.'
                 }
                 disabled={!aiKlar}
@@ -150,33 +129,25 @@ export function Forside({
                 {diktering.fejl}
               </p>
             )}
+
+            {aiKlar && (
+              <ul className="mt-5 space-y-1.5 border-t border-rule pt-4">
+                {EKSEMPLER.map((e) => (
+                  <li key={e}>
+                    <button
+                      type="button"
+                      onClick={() => send(e)}
+                      className="overgang text-left text-2xs text-ink-muted underline decoration-rule-strong underline-offset-4 hover:text-ink"
+                    >
+                      {e}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       </div>
-
-      <nav aria-label="Moduler" className="mt-8">
-        {GRUPPER.map((gruppe) => (
-          <div key={gruppe.titel} className="mb-7 last:mb-0">
-            <h2 className="mb-1 text-2xs font-medium uppercase tracking-wide text-ink-faint">
-              {gruppe.titel}
-            </h2>
-            <ul>
-              {gruppe.elementer.map((e) => (
-                <li key={e.id} className="border-b border-rule">
-                  <button
-                    type="button"
-                    onClick={() => onGaaTil(e.id)}
-                    className="overgang flex w-full items-baseline justify-between gap-4 py-2.5 text-left hover:text-ink"
-                  >
-                    <span className="text-sm font-medium text-ink">{e.navn}</span>
-                    <span className="shrink-0 text-2xs text-ink-faint">{e.beskrivelse}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </nav>
     </div>
   );
 }
