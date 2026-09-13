@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   beregnSkat,
   beregnIndkomstskat,
+  beregnLavindkomstBefordringstillaeg,
   indkomstAarForJob,
   betalingKrydserAarsskifte,
   IndkomstAarInput,
@@ -43,6 +44,20 @@ describe('satser', () => {
     expect(getSatser(2026).personfradrag).toBe(54_100);
     expect(getSatser(2025).erhvervsKoersel.bilMcFoerste20000).toBe(3.81);
     expect(getSatser(2026).erhvervsKoersel.bilMcFoerste20000).toBe(3.94);
+  });
+
+  it('har myndighedskontrollerede hovedsatser for begge år', () => {
+    const s25 = getSatser(2025);
+    expect([s25.amBidragProcent, s25.bundskatProcent, s25.skatteloftPersonligIndkomstProcent]).toEqual([8, 12.01, 52.07]);
+    expect(s25.beskaeftigelsesfradrag).toEqual({ procent: 12.3, maksimum: 55_600 });
+    expect(s25.ekstraBeskFradragEnlig).toEqual({ procent: 11.5, maksimum: 48_300 });
+    expect(s25.befordring).toMatchObject({ sats25til120: 2.23, satsOver120: 1.12, yderkommuneSats: 2.47 });
+
+    const s26 = getSatser(2026);
+    expect([s26.amBidragProcent, s26.bundskatProcent, s26.skatteloftPersonligIndkomstProcent]).toEqual([8, 12.01, 44.57]);
+    expect(s26.beskaeftigelsesfradrag).toEqual({ procent: 12.75, maksimum: 63_300 });
+    expect(s26.ekstraBeskFradragSenior).toEqual({ procent: 1.4, maksimum: 6_100 });
+    expect(s26.befordring).toMatchObject({ sats25til120: 3.17, satsOver120: 1.59, yderkommuneSats: 3.51 });
   });
 
   it('kender 2026-progressionen med mellemskat og top-topskat', () => {
@@ -125,6 +140,57 @@ describe('befordringsfradragets trin', () => {
     const forventet = (120 - 24) * 3.17 + (km - 120) * 1.59;
     expect(beregnBefordringPrDag(km, satser)).toBeCloseTo(forventet, 6);
   });
+
+  it('bruger den forhøjede sats på alle kilometer over 24 i en yderkommune', () => {
+    expect(beregnBefordringPrDag(200, satser, true)).toBeCloseTo((200 - 24) * 3.51, 6);
+  });
+
+  it('beregner og aftrapper lavindkomsttillægget', () => {
+    expect(beregnLavindkomstBefordringstillaeg(10_000, 300_000, satser)).toBe(6_400);
+    expect(beregnLavindkomstBefordringstillaeg(10_000, 366_500, satser)).toBe(3_200);
+    expect(beregnLavindkomstBefordringstillaeg(10_000, 391_500, satser)).toBe(0);
+  });
+});
+
+describe('arbejdsfradrag', () => {
+  const satser = getSatser(2026);
+
+  it('beregner beskæftigelsesfradrag af bruttoindkomsten før AM-bidrag', () => {
+    const resultat = beregnIndkomstskat(92_000, 100_000, 0, satser, 25, 0);
+    expect(resultat.beskaeftigelsesfradrag).toBe(12_750);
+  });
+
+  it('anvender ekstrafradrag for enlig forsørger og berettiget senior', () => {
+    const resultat = beregnIndkomstskat(368_000, 400_000, 0, satser, 25, 0, {
+      enligForsoerger: true,
+      seniorfradragBerettiget: true,
+    });
+    expect(resultat.ekstraBeskFradragEnlig).toBe(46_000);
+    expect(resultat.ekstraBeskFradragSenior).toBe(5_600);
+  });
+
+  it('fører indkomstårets valg helt ind i B-indkomstberegningen', () => {
+    const uden = beregnSkat(aar({ forventetAIndkomst: 300_000 }), [job({ honorar: 100_000 })], []);
+    const med = beregnSkat(
+      aar({ forventetAIndkomst: 300_000, enligForsoerger: true, seniorfradragBerettiget: true }),
+      [job({ honorar: 100_000 })],
+      []
+    );
+    expect(med.skat.ekstraBeskFradragEnlig).toBeGreaterThan(0);
+    expect(med.skat.ekstraBeskFradragSenior).toBeGreaterThan(0);
+    expect(med.beregnetSkatIAlt).toBeLessThan(uden.beregnetSkatIAlt);
+  });
+});
+
+describe('forhøjet befordringsfradrag efter bopæl', () => {
+  it('genkender en yderkommune automatisk', () => {
+    const beregning = beregnSkat(
+      aar({ kommune: 'Aabenraa' }),
+      [job({ transportmiddel: 'PASSENGER', antalKm: 200, antalTure: 1 })],
+      []
+    );
+    expect(beregning.befordringsFradragRubrik51).toBe(Math.round((200 - 24) * 3.51));
+  });
 });
 
 describe('AC-03 — rubrik 29 må ikke give underskud i personlig indkomst', () => {
@@ -160,11 +226,11 @@ describe('AC-03 — rubrik 29 må ikke give underskud i personlig indkomst', () 
   });
 });
 
-describe('AC-06 — et job hører til året, arbejdet er udført i', () => {
-  const nytaarsjob = { startDato: '2025-12-30', betalingsDato: '2026-01-15' };
+describe('AC-06 — et job følger retserhvervelsesåret', () => {
+  const nytaarsjob = { startDato: '2025-12-30', slutDato: '2025-12-31', betalingsDato: '2026-01-15' };
 
-  it('allokerer efter startdato, ikke betalingsdato', () => {
-    expect(indkomstAarForJob(nytaarsjob)).toBe(2025);
+  it('bruger slutåret som standard, ikke startdatoen', () => {
+    expect(indkomstAarForJob({ ...nytaarsjob, slutDato: '2026-01-02' })).toBe(2026);
   });
 
   it('kan oplyse, at betalingen falder i et andet år', () => {
@@ -196,8 +262,8 @@ describe('den årlige 20.000 km-grænse for erhvervsmæssig kørsel', () => {
     const satser = getSatser(2026);
     const resultat = beregnAaretsKoersel(
       [
-        { id: 'a', transportmiddel: 'OWN_CAR_MC', antalKm: 15_000, antalTure: 1, startDato: '2026-02-01' },
-        { id: 'b', transportmiddel: 'OWN_CAR_MC', antalKm: 10_000, antalTure: 1, startDato: '2026-09-01' },
+        { id: 'a', hvervgiver: 'Samme sted', transportmiddel: 'OWN_CAR_MC', antalKm: 15_000, antalTure: 1, startDato: '2026-02-01' },
+        { id: 'b', hvervgiver: 'Samme sted', transportmiddel: 'OWN_CAR_MC', antalKm: 10_000, antalTure: 1, startDato: '2026-09-01' },
       ],
       satser
     );
@@ -211,13 +277,24 @@ describe('den årlige 20.000 km-grænse for erhvervsmæssig kørsel', () => {
     const satser = getSatser(2026);
     const omvendt = beregnAaretsKoersel(
       [
-        { id: 'sen', transportmiddel: 'OWN_CAR_MC', antalKm: 10_000, antalTure: 1, startDato: '2026-09-01' },
-        { id: 'tidlig', transportmiddel: 'OWN_CAR_MC', antalKm: 15_000, antalTure: 1, startDato: '2026-02-01' },
+        { id: 'sen', hvervgiver: 'Samme sted', transportmiddel: 'OWN_CAR_MC', antalKm: 10_000, antalTure: 1, startDato: '2026-09-01' },
+        { id: 'tidlig', hvervgiver: 'Samme sted', transportmiddel: 'OWN_CAR_MC', antalKm: 15_000, antalTure: 1, startDato: '2026-02-01' },
       ],
       satser
     );
     expect(omvendt.linjer.find((l) => l.jobId === 'tidlig')!.kmOverAarsgraense).toBe(0);
     expect(omvendt.linjer.find((l) => l.jobId === 'sen')!.kmOverAarsgraense).toBe(5_000);
+  });
+
+  it('giver hver hvervgiver sin egen 20.000 km-grænse', () => {
+    const resultat = beregnAaretsKoersel(
+      [
+        { id: 'a', hvervgiver: 'A', transportmiddel: 'OWN_CAR_MC', antalKm: 15_000, antalTure: 1, startDato: '2026-02-01' },
+        { id: 'b', hvervgiver: 'B', transportmiddel: 'OWN_CAR_MC', antalKm: 10_000, antalTure: 1, startDato: '2026-09-01' },
+      ],
+      getSatser(2026)
+    );
+    expect(resultat.linjer.every((linje) => linje.kmOverAarsgraense === 0)).toBe(true);
   });
 });
 
@@ -254,6 +331,13 @@ describe('skrå skatteloft', () => {
   it('giver intet nedslag, når marginalsatsen holder sig under loftet', () => {
     const resultat = beregnIndkomstskat(700_000, 700_000, 0, satser, 24.0, 0);
     expect(resultat.skatteloftNedslag).toBe(0);
+  });
+
+  it('anvender kun loftet én gang ved indkomst over top- og top-topskat', () => {
+    const pi = 3_000_000;
+    const resultat = beregnIndkomstskat(pi, pi, 0, satser, 26.3, 0);
+    const forventet = (pi - 641_200) * (45.81 - 44.57) / 100;
+    expect(resultat.skatteloftNedslag).toBeCloseTo(forventet, 4);
   });
 });
 

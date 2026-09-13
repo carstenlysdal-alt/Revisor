@@ -18,7 +18,7 @@ export interface Kilde {
 }
 
 /** Kun officielle kilder. En skattesats fra et tilfældigt blog er værdiløs. */
-const DOMAENER = ['skat.dk', 'retsinformation.dk', 'skm.dk'];
+const DOMAENER = ['skat.dk', 'info.skat.dk', 'retsinformation.dk', 'svmn.dk'];
 
 const MAKS_RESULTATER = 4;
 

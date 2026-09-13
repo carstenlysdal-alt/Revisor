@@ -18,29 +18,27 @@ export interface ProgressivSkat {
   procent: number;
   /** Grænse målt på personlig indkomst EFTER AM-bidrag. */
   graenseEfterAM: number;
-  /**
-   * Det skrå skatteloft for netop dette lag. Overstiger den samlede marginale
-   * sats (bundskat + kommuneskat + alle progressive lag til og med dette)
-   * loftet, gives et nedslag for forskellen.
-   */
-  skatteloftProcent: number;
 }
 
 export interface Satser {
   aar: number;
   amBidragProcent: number;
   bundskatProcent: number;
+  /** Loftet for bundskat, kommuneskat og første progressive skattelag. */
+  skatteloftPersonligIndkomstProcent: number;
   personfradrag: number;
   /** Sorteret stigende efter grænse. */
   progressiveSkatter: ProgressivSkat[];
   beskaeftigelsesfradrag: { procent: number; maksimum: number };
+  ekstraBeskFradragEnlig: { procent: number; maksimum: number };
+  ekstraBeskFradragSenior: { procent: number; maksimum: number } | null;
   jobfradrag: { procent: number; bundgraense: number; maksimum: number };
   /** Erhvervsmæssig kørsel, Skatterådets satser. Rubrik 29. */
   erhvervsKoersel: {
     bilMcFoerste20000: number;
     bilMcOver20000: number;
     cykelKnallert: number;
-    /** Km-grænsen er årlig og gælder på tværs af alle årets jobs. */
+    /** Km-grænsen er årlig pr. hvervgiver. */
     kmGraense: number;
   };
   /** Befordringsfradrag mellem hjem og arbejde. Rubrik 51. */
@@ -49,7 +47,16 @@ export interface Satser {
     bundfradragKm: number;
     sats25til120: number;
     satsOver120: number;
+    /** Forhøjet sats for alle kilometer over 24 i yderkommuner og på småøer. */
+    yderkommuneSats: number;
     graenseKm: number;
+  };
+  /** Automatisk tillæg til befordringsfradraget ved lav indkomst. */
+  lavindkomstBefordring: {
+    procent: number;
+    maksimum: number;
+    fuldtTilIndkomst: number;
+    bortfalderVedIndkomst: number;
   };
   /** Satser der ikke er bekræftet mod en kilde. Vises for brugeren. */
   uverificerede: string[];
@@ -59,6 +66,7 @@ const SATSER_2025: Satser = {
   aar: 2025,
   amBidragProcent: 8,
   bundskatProcent: 12.01,
+  skatteloftPersonligIndkomstProcent: 52.07,
   personfradrag: 51_600,
   progressiveSkatter: [
     {
@@ -66,10 +74,11 @@ const SATSER_2025: Satser = {
       navn: 'Topskat',
       procent: 15,
       graenseEfterAM: 611_800,
-      skatteloftProcent: 52.07,
     },
   ],
   beskaeftigelsesfradrag: { procent: 12.3, maksimum: 55_600 },
+  ekstraBeskFradragEnlig: { procent: 11.5, maksimum: 48_300 },
+  ekstraBeskFradragSenior: null,
   jobfradrag: { procent: 4.5, bundgraense: 224_500, maksimum: 2_900 },
   erhvervsKoersel: {
     bilMcFoerste20000: 3.81,
@@ -81,7 +90,14 @@ const SATSER_2025: Satser = {
     bundfradragKm: 24,
     sats25til120: 2.23,
     satsOver120: 1.12,
+    yderkommuneSats: 2.47,
     graenseKm: 120,
+  },
+  lavindkomstBefordring: {
+    procent: 64,
+    maksimum: 15_400,
+    fuldtTilIndkomst: 325_800,
+    bortfalderVedIndkomst: 375_800,
   },
   uverificerede: [],
 };
@@ -90,6 +106,7 @@ const SATSER_2026: Satser = {
   aar: 2026,
   amBidragProcent: 8,
   bundskatProcent: 12.01,
+  skatteloftPersonligIndkomstProcent: 44.57,
   personfradrag: 54_100,
   // 2026 er første år med den nye trestrengede progression fra
   // personskattereformen: mellemskat, topskat og top-topskat.
@@ -99,24 +116,23 @@ const SATSER_2026: Satser = {
       navn: 'Mellemskat',
       procent: 7.5,
       graenseEfterAM: 641_200,
-      skatteloftProcent: 44.57,
     },
     {
       id: 'topskat',
       navn: 'Topskat',
       procent: 7.5,
       graenseEfterAM: 777_900,
-      skatteloftProcent: 52.07,
     },
     {
       id: 'topTopskat',
       navn: 'Top-topskat',
       procent: 5,
       graenseEfterAM: 2_592_700,
-      skatteloftProcent: 57.07,
     },
   ],
   beskaeftigelsesfradrag: { procent: 12.75, maksimum: 63_300 },
+  ekstraBeskFradragEnlig: { procent: 11.5, maksimum: 50_600 },
+  ekstraBeskFradragSenior: { procent: 1.4, maksimum: 6_100 },
   jobfradrag: { procent: 4.5, bundgraense: 235_200, maksimum: 3_100 },
   erhvervsKoersel: {
     bilMcFoerste20000: 3.94,
@@ -132,12 +148,16 @@ const SATSER_2026: Satser = {
     sats25til120: 3.17,
     // Tilsvarende forhøjet fra 1,14 kr. til 1,59 kr.
     satsOver120: 1.59,
+    yderkommuneSats: 3.51,
     graenseKm: 120,
   },
-  uverificerede: [
-    'befordring.sats25til120 og befordring.satsOver120 (midlertidig, tilbagevirkende forhøjelse — bekræftet via fagforbund/revisionshus, ikke direkte set på skat.dk selv)',
-    'progressiveSkatter[].skatteloftProcent for mellemskat/topskat/topTopskat hver for sig — kun det samlede skatteloft på 44,57 % er officielt publiceret; opdelingen pr. lag er en fortolkning',
-  ],
+  lavindkomstBefordring: {
+    procent: 64,
+    maksimum: 30_800,
+    fuldtTilIndkomst: 341_500,
+    bortfalderVedIndkomst: 391_500,
+  },
+  uverificerede: [],
 };
 
 export const SATSER_PR_AAR: Record<number, Satser> = {

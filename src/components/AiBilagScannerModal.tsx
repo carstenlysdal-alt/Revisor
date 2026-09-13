@@ -551,6 +551,18 @@ export function AiBilagScannerModal({
                   />
                   <span>Hører til i rubrik 17 i stedet for rubrik 12</span>
                 </label>
+                <label className="flex items-start gap-2.5 text-xs text-ink">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(flag.erBestyrelseshverv)}
+                    onChange={(e) => setFlag({ ...flag, erBestyrelseshverv: e.target.checked })}
+                    className="mt-0.5 h-4 w-4 accent-[oklch(0.21_0.008_75)]"
+                  />
+                  <span>
+                    Bestyrelses-, udvalgs- eller kommissionshverv
+                    <UsikkerMarkering sikkerhed={sik('job', 'erBestyrelseshverv')} />
+                  </span>
+                </label>
               </div>
             </div>
           )}

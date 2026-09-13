@@ -11,6 +11,7 @@ export type TransportMiddel = 'NONE' | 'OWN_CAR_MC' | 'OWN_BIKE' | 'PASSENGER';
  */
 export interface KoerselsInput {
   id: string;
+  hvervgiver?: string;
   transportmiddel: TransportMiddel;
   antalKm: number;
   antalTure: number;
@@ -55,9 +56,15 @@ const rubrikFor = (t: TransportMiddel, erBestyrelseshverv: boolean | undefined):
  * De første 24 km giver intet fradrag, 25-120 km giver fuld sats, og alt
  * derover giver halv sats.
  */
-export function beregnBefordringPrDag(kmPrDag: number, satser: Satser): number {
-  const { bundfradragKm, sats25til120, satsOver120, graenseKm } = satser.befordring;
+export function beregnBefordringPrDag(
+  kmPrDag: number,
+  satser: Satser,
+  forhoejetSats = false
+): number {
+  const { bundfradragKm, sats25til120, satsOver120, yderkommuneSats, graenseKm } = satser.befordring;
   if (kmPrDag <= bundfradragKm) return 0;
+
+  if (forhoejetSats) return (kmPrDag - bundfradragKm) * yderkommuneSats;
 
   const kmTilFuldSats = Math.min(kmPrDag, graenseKm) - bundfradragKm;
   const kmTilHalvSats = Math.max(0, kmPrDag - graenseKm);
@@ -68,20 +75,20 @@ export function beregnBefordringPrDag(kmPrDag: number, satser: Satser): number {
 /**
  * Beregner årets kørselsfradrag samlet.
  *
- * Grænsen på 20.000 km for erhvervsmæssig kørsel i egen bil er årlig, ikke pr.
- * job, så den kan kun beregnes på hele året under ét. Jobs behandles i
- * datorækkefølge, så den lavere sats rammer årets sidste kilometer.
- *
- * Grænsen anvendes her på tværs af samtlige hvervgivere. Reglen er formuleret
- * pr. arbejdsgiver, men med mange hvervgivere er den samlede opgørelse den
- * forsigtige læsning, og den giver aldrig et for højt fradrag.
+ * Grænsen på 20.000 km for erhvervsmæssig kørsel i egen bil er årlig pr.
+ * hvervgiver. Jobs behandles i datorækkefølge.
  */
-export function beregnAaretsKoersel(jobs: KoerselsInput[], satser: Satser): AaretsKoersel {
+export function beregnAaretsKoersel(
+  jobs: KoerselsInput[],
+  satser: Satser,
+  forhoejetBefordringssats = false
+): AaretsKoersel {
   const { bilMcFoerste20000, bilMcOver20000, cykelKnallert, kmGraense } =
     satser.erhvervsKoersel;
 
   const sorteret = [...jobs].sort((a, b) => a.startDato.localeCompare(b.startDato));
-  let erhvervsKmBrugt = 0;
+  const bilKmPrHvervgiver = new Map<string, number>();
+  let erhvervsKmIAlt = 0;
 
   const linjer: KoerselsLinje[] = sorteret.map((job) => {
     const rubrik = rubrikFor(job.transportmiddel, job.erBestyrelseshverv);
@@ -93,22 +100,26 @@ export function beregnAaretsKoersel(jobs: KoerselsInput[], satser: Satser): Aare
       return { jobId: job.id, kmIAlt: 0, fradrag: 0, rubrik, kmOverAarsgraense: 0 };
     }
 
+    if (rubrik === 29) erhvervsKmIAlt += kmIAlt;
+
     // Bestyrelseshverv uden godtgørelse: egen bil/cykel bruger det
     // almindelige befordringsfradrag, ligesom en passager, ikke §9B-satserne.
     if (job.erBestyrelseshverv && (job.transportmiddel === 'OWN_CAR_MC' || job.transportmiddel === 'OWN_BIKE')) {
       return {
         jobId: job.id,
         kmIAlt,
-        fradrag: Math.round(beregnBefordringPrDag(km, satser) * ture),
+        fradrag: Math.round(beregnBefordringPrDag(km, satser, forhoejetBefordringssats) * ture),
         rubrik,
         kmOverAarsgraense: 0,
       };
     }
 
     if (job.transportmiddel === 'OWN_CAR_MC') {
-      const kmTilHoejSats = Math.max(0, Math.min(kmIAlt, kmGraense - erhvervsKmBrugt));
+      const noegle = job.hvervgiver?.trim().toLocaleLowerCase('da-DK') || job.id;
+      const brugtHosHvervgiver = bilKmPrHvervgiver.get(noegle) ?? 0;
+      const kmTilHoejSats = Math.max(0, Math.min(kmIAlt, kmGraense - brugtHosHvervgiver));
       const kmTilLavSats = kmIAlt - kmTilHoejSats;
-      erhvervsKmBrugt += kmIAlt;
+      bilKmPrHvervgiver.set(noegle, brugtHosHvervgiver + kmIAlt);
 
       return {
         jobId: job.id,
@@ -122,7 +133,6 @@ export function beregnAaretsKoersel(jobs: KoerselsInput[], satser: Satser): Aare
     }
 
     if (job.transportmiddel === 'OWN_BIKE') {
-      erhvervsKmBrugt += kmIAlt;
       return {
         jobId: job.id,
         kmIAlt,
@@ -136,7 +146,7 @@ export function beregnAaretsKoersel(jobs: KoerselsInput[], satser: Satser): Aare
     return {
       jobId: job.id,
       kmIAlt,
-      fradrag: Math.round(beregnBefordringPrDag(km, satser) * ture),
+      fradrag: Math.round(beregnBefordringPrDag(km, satser, forhoejetBefordringssats) * ture),
       rubrik,
       kmOverAarsgraense: 0,
     };
@@ -150,7 +160,7 @@ export function beregnAaretsKoersel(jobs: KoerselsInput[], satser: Satser): Aare
     fradragRubrik51: linjer
       .filter((l) => l.rubrik === 51)
       .reduce((sum, l) => sum + l.fradrag, 0),
-    erhvervsKmIAlt: erhvervsKmBrugt,
+    erhvervsKmIAlt,
   };
 }
 

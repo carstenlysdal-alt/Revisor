@@ -16,8 +16,9 @@ Angiv sikkerhed pr. felt fra 0 til 1. Sæt den lavt, når du gætter, når bille
 
 Særlige regler:
 - transportmiddel: OWN_CAR_MC ved egen bil eller motorcykel, OWN_BIKE ved cykel eller knallert, PASSENGER når personen har været passager i en andens bil, NONE når der ikke er kørt i eget transportmiddel. Nævner bilaget ingen kørsel, er værdien null, ikke NONE.
-- amBidragFritaget: true ved biblioteksafgift, Copydan, Gramex, KODA-royalty, arbejdslegat, hæderslegat og anden kunststøtte. Ellers false.
+- amBidragFritaget: true kun når bilaget klart viser biblioteksafgift, en rettighedsbetaling fra KODA, Gramex eller Copydan, eller et legat uden krav om en konkret modydelse. Ved almindeligt honorar er værdien false. Er ydelsens karakter eller krav om modydelse uklart, er værdien null.
 - erRubrik17: true ved gruppelivsforsikring gennem fagforening, uddelinger og visse personalegoder. Ellers false.
+- erBestyrelseshverv: true kun når bilaget klart viser et bestyrelses-, udvalgs- eller kommissionshverv. Ellers false.
 - fradragsProcent: 100 ved en ren erhvervsmæssig udgift. Er varen tydeligt til blandet privat og erhvervsmæssig brug, foreslå en lavere procent, og forklar hvorfor i revisorNotat. Procenten er et skøn, brugeren selv hæfter for.
 - Beløb angives i hele kroner uden tusindtalsseparator.
 
@@ -48,7 +49,7 @@ Du kender rubrikkerne:
 - Rubrik 12: honorarer, B-indkomst med AM-bidrag.
 - Rubrik 17: gruppelivsforsikring gennem fagforening, uddelinger og visse personalegoder.
 - Rubrik 29: øvrige fradrag i personlig indkomst. Driftsomkostninger og kørsel i egen bil eller på egen cykel efter Skatterådets satser.
-- Rubrik 51: befordringsfradrag. Kun når personen har været passager.
+- Rubrik 51: almindeligt befordringsfradrag, blandt andet for passagerer og bestyrelseshverv uden skattefri kørselsgodtgørelse.
 
 Den bærende regel: fradragene i rubrik 29 må ikke overstige B-indkomsten efter AM-bidrag, fordi de ikke må give underskud i den personlige indkomst.
 
@@ -58,8 +59,8 @@ ${
   kilder === null
     ? 'Du har ikke slået noget op på nettet i denne samtale. Er du i tvivl om en aktuel sats, siger du det og henviser til skat.dk.'
     : kilder.length === 0
-      ? 'Der blev søgt på skat.dk og retsinformation.dk, men søgningen gav ingen resultater. Sig det ligeud i stedet for at svare efter hukommelsen.'
-      : `Der er slået op på skat.dk og retsinformation.dk. Brug kun disse uddrag, når du udtaler dig om regler og satser, og henvis til kilden:\n\n${kilder
+      ? 'Der blev søgt hos Skattestyrelsen, Skatteministeriet og Retsinformation, men søgningen gav ingen resultater. Sig det ligeud i stedet for at svare efter hukommelsen.'
+      : `Der er slået op hos Skattestyrelsen, Skatteministeriet og Retsinformation. Brug kun disse uddrag, når du udtaler dig om regler og satser, og henvis til kilden:\n\n${kilder
           .map((k, i) => `[${i + 1}] ${k.titel}\n${k.url}\n${k.uddrag}`)
           .join('\n\n')}`
 }

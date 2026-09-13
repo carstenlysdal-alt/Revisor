@@ -39,6 +39,18 @@ export const KOMMUNE_SATS_KILDE = {
   hentet: '2026-09-12',
 } as const;
 
+/** Kommuner med forhøjet befordringsfradrag efter ligningslovens § 9 C. */
+export const YDERKOMMUNER = new Set([
+  'Bornholm', 'Brønderslev', 'Frederikshavn', 'Faaborg-Midtfyn', 'Guldborgsund',
+  'Hjørring', 'Jammerbugt', 'Langeland', 'Lolland', 'Læsø', 'Morsø', 'Norddjurs',
+  'Odsherred', 'Samsø', 'Skive', 'Slagelse', 'Struer', 'Svendborg', 'Sønderborg',
+  'Thisted', 'Tønder', 'Vesthimmerland', 'Vordingborg', 'Ærø', 'Aabenraa',
+]);
+
+export function erYderkommune(kommune: string | undefined): boolean {
+  return Boolean(kommune && YDERKOMMUNER.has(kommune));
+}
+
 /** [kommuneskat 2025, kirkeskat 2025, kommuneskat 2026, kirkeskat 2026] */
 const OFFICIELLE_SATSRAEKKER: Record<string, readonly [number, number, number, number]> = {
   'Aabenraa': [25.6, 0.95, 25.6, 0.95],

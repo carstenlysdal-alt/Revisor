@@ -11,9 +11,12 @@ export interface IndkomstAar {
   kirkeskatteprocent: number;
   forventetAIndkomst: number;
   forventetPensionSUDagpenge: number;
+  forventetDagpenge: number;
   forventedeFradragAIndkomst: number;
   medlemFolkekirken: boolean;
   enligForsoerger: boolean;
+  seniorfradragBerettiget: boolean;
+  borPaaUdpegetSmaaoe: boolean;
   laast: boolean;
 }
 
@@ -22,7 +25,7 @@ export interface Job {
   indkomstAarId: string;
   hvervgiver: string;
   honorar: number;
-  /** YYYY-MM-DD. Afgør hvilket indkomstår jobbet hører til. */
+  /** YYYY-MM-DD. Sammen med slutdatoen dokumenterer arbejdsperioden. */
   startDato: string;
   slutDato: string;
   betalingsDato: string;
@@ -126,6 +129,7 @@ export interface JobUdtraek {
   antalTure: UdtruktFelt<number>;
   amBidragFritaget: UdtruktFelt<boolean>;
   erRubrik17: UdtruktFelt<boolean>;
+  erBestyrelseshverv: UdtruktFelt<boolean>;
   type: UdtruktFelt<string>;
   timerJob: UdtruktFelt<number>;
   timerTransportForberedelse: UdtruktFelt<number>;

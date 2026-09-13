@@ -1,17 +1,24 @@
 import { Satser, getSatser } from './satser';
 import { KoerselsInput, beregnAaretsKoersel, AaretsKoersel } from './koersel';
+import { erYderkommune } from './kommuner';
 
 export interface IndkomstAarInput {
   aar: number;
+  kommune?: string;
   kommuneSkatteprocent: number;
   kirkeskatteprocent: number;
   medlemFolkekirken: boolean;
   /** Brutto A-indkomst for hele året, før AM-bidrag. */
   forventetAIndkomst: number;
-  /** Pension, SU og dagpenge. Ikke AM-pligtigt. */
+  /** Pension og SU. Ikke AM-pligtigt. */
   forventetPensionSUDagpenge: number;
+  /** Dagpenge. Ikke AM-pligtigt, men indgår i lavindkomsttillæggets grundlag. */
+  forventetDagpenge?: number;
   /** Fradrag i den personlige A-indkomst. Ikke B-indkomstfradrag. */
   forventedeFradragAIndkomst: number;
+  enligForsoerger?: boolean;
+  seniorfradragBerettiget?: boolean;
+  borPaaUdpegetSmaaoe?: boolean;
 }
 
 export interface JobInput extends KoerselsInput {
@@ -36,6 +43,8 @@ export interface SkattelinjeSaet {
   personfradragVaerdi: number;
   beskaeftigelsesfradrag: number;
   jobfradrag: number;
+  ekstraBeskFradragEnlig: number;
+  ekstraBeskFradragSenior: number;
   skattepligtigIndkomst: number;
   ialt: number;
 }
@@ -61,6 +70,8 @@ export interface SkatteBeregning {
   koerselsFradragRubrik29: number;
   oevrigeFradragRubrik29: number;
   befordringsFradragRubrik51: number;
+  /** Automatisk tillæg, der ikke skal indtastes i rubrik 51. */
+  lavindkomstBefordringstillaeg: number;
 
   // AM-bidrag
   amPligtigBIndkomst: number;
@@ -104,7 +115,8 @@ export function beregnIndkomstskat(
   ekstraLigningsmaessigeFradrag: number,
   satser: Satser,
   kommuneProcent: number,
-  kirkeProcent: number
+  kirkeProcent: number,
+  valg: { enligForsoerger?: boolean; seniorfradragBerettiget?: boolean } = {}
 ): SkattelinjeSaet {
   const pi = Math.max(0, personligIndkomst);
   const arbejde = Math.max(0, arbejdsindkomst);
@@ -117,9 +129,23 @@ export function beregnIndkomstskat(
     (Math.max(0, arbejde - satser.jobfradrag.bundgraense) * satser.jobfradrag.procent) / 100,
     satser.jobfradrag.maksimum
   );
+  const ekstraBeskFradragEnlig = valg.enligForsoerger
+    ? Math.min(
+        (arbejde * satser.ekstraBeskFradragEnlig.procent) / 100,
+        satser.ekstraBeskFradragEnlig.maksimum
+      )
+    : 0;
+  const ekstraBeskFradragSenior =
+    valg.seniorfradragBerettiget && satser.ekstraBeskFradragSenior
+      ? Math.min(
+          (arbejde * satser.ekstraBeskFradragSenior.procent) / 100,
+          satser.ekstraBeskFradragSenior.maksimum
+        )
+      : 0;
 
   const ligningsmaessigeFradrag =
-    beskaeftigelsesfradrag + jobfradrag + Math.max(0, ekstraLigningsmaessigeFradrag);
+    beskaeftigelsesfradrag + jobfradrag + ekstraBeskFradragEnlig +
+    ekstraBeskFradragSenior + Math.max(0, ekstraLigningsmaessigeFradrag);
   const skattepligtigIndkomst = Math.max(0, pi - ligningsmaessigeFradrag);
 
   const bundskat = (pi * satser.bundskatProcent) / 100;
@@ -132,23 +158,23 @@ export function beregnIndkomstskat(
     topTopskat: 0,
   };
   let skatteloftNedslag = 0;
-  let akkumuleretProgressivSats = 0;
 
   for (const lag of satser.progressiveSkatter) {
-    akkumuleretProgressivSats += lag.procent;
     const grundlag = Math.max(0, pi - lag.graenseEfterAM);
     if (grundlag === 0) continue;
 
     progressive[lag.id] = (grundlag * lag.procent) / 100;
 
-    // Skrå skatteloft: den samlede marginale sats i dette lag må ikke
-    // overstige loftet. AM-bidrag og kirkeskat tæller ikke med.
-    const marginalSats =
-      satser.bundskatProcent + kommuneProcent + akkumuleretProgressivSats;
-    const overskridelse = marginalSats - lag.skatteloftProcent;
-    if (overskridelse > 0) {
-      skatteloftNedslag += (grundlag * overskridelse) / 100;
-    }
+  }
+
+  // Loftet reducerer kun første progressive lag. Top- og top-topskat fra
+  // 2026 ligger uden for loftet og må ikke udløse samme nedslag igen.
+  const foersteLag = satser.progressiveSkatter[0];
+  if (foersteLag) {
+    const grundlag = Math.max(0, pi - foersteLag.graenseEfterAM);
+    const overskridelse = satser.bundskatProcent + kommuneProcent + foersteLag.procent -
+      satser.skatteloftPersonligIndkomstProcent;
+    if (overskridelse > 0) skatteloftNedslag = (grundlag * overskridelse) / 100;
   }
 
   const bruttoSkat =
@@ -182,6 +208,8 @@ export function beregnIndkomstskat(
     personfradragVaerdi,
     beskaeftigelsesfradrag,
     jobfradrag,
+    ekstraBeskFradragEnlig,
+    ekstraBeskFradragSenior,
     skattepligtigIndkomst,
     ialt,
   };
@@ -200,9 +228,27 @@ const traek = (med: SkattelinjeSaet, uden: SkattelinjeSaet): SkattelinjeSaet => 
     med.beskaeftigelsesfradrag - uden.beskaeftigelsesfradrag
   ),
   jobfradrag: Math.round(med.jobfradrag - uden.jobfradrag),
+  ekstraBeskFradragEnlig: Math.round(med.ekstraBeskFradragEnlig - uden.ekstraBeskFradragEnlig),
+  ekstraBeskFradragSenior: Math.round(med.ekstraBeskFradragSenior - uden.ekstraBeskFradragSenior),
   skattepligtigIndkomst: Math.round(med.skattepligtigIndkomst - uden.skattepligtigIndkomst),
   ialt: Math.round(med.ialt - uden.ialt),
 });
+
+export function beregnLavindkomstBefordringstillaeg(
+  befordringsfradrag: number,
+  indkomstgrundlag: number,
+  satser: Satser
+): number {
+  const regel = satser.lavindkomstBefordring;
+  if (befordringsfradrag <= 0 || indkomstgrundlag >= regel.bortfalderVedIndkomst) return 0;
+  const faktor = indkomstgrundlag <= regel.fuldtTilIndkomst
+    ? 1
+    : 1 - (indkomstgrundlag - regel.fuldtTilIndkomst) /
+      (regel.bortfalderVedIndkomst - regel.fuldtTilIndkomst);
+  return Math.round(
+    Math.min((befordringsfradrag * regel.procent) / 100, regel.maksimum) * Math.max(0, faktor)
+  );
+}
 
 export function beregnSkat(
   indkomstAar: IndkomstAarInput,
@@ -247,9 +293,20 @@ export function beregnSkat(
   const amBidrag = Math.round((amPligtigBIndkomst * satser.amBidragProcent) / 100);
 
   // Kørsel
-  const koersel = beregnAaretsKoersel(jobs, satser);
+  const koersel = beregnAaretsKoersel(
+    jobs,
+    satser,
+    erYderkommune(indkomstAar.kommune) || Boolean(indkomstAar.borPaaUdpegetSmaaoe)
+  );
   const koerselsFradragRubrik29 = koersel.fradragRubrik29;
   const befordringsFradragRubrik51 = koersel.fradragRubrik51;
+  const lavindkomstgrundlag = (Number(indkomstAar.forventetAIndkomst) || 0) +
+    amPligtigBIndkomst + (Number(indkomstAar.forventetDagpenge) || 0);
+  const lavindkomstBefordringstillaeg = beregnLavindkomstBefordringstillaeg(
+    befordringsFradragRubrik51,
+    lavindkomstgrundlag,
+    satser
+  );
 
   // Rubrik 29
   const fradragKatalogSum = fradragListe.reduce(
@@ -284,37 +341,41 @@ export function beregnSkat(
   }
 
   // A-indkomstens bidrag, som B-indkomsten lægger sig oven på.
-  const aIndkomstEfterAM = Math.max(0, Number(indkomstAar.forventetAIndkomst) || 0) * 0.92;
+  const aIndkomstBrutto = Math.max(0, Number(indkomstAar.forventetAIndkomst) || 0);
+  const aIndkomstEfterAM = aIndkomstBrutto * (1 - satser.amBidragProcent / 100);
   const personligIndkomstA = Math.max(
     0,
     aIndkomstEfterAM +
-      (Number(indkomstAar.forventetPensionSUDagpenge) || 0) -
+      (Number(indkomstAar.forventetPensionSUDagpenge) || 0) +
+      (Number(indkomstAar.forventetDagpenge) || 0) -
       (Number(indkomstAar.forventedeFradragAIndkomst) || 0)
   );
 
   // B-indkomstens egen opgørelse.
   const personligIndkomstB =
     honorarerRubrik12 + rubrik17Indkomst - amBidrag - anvendtFradragRubrik29;
-  const arbejdsindkomstB = Math.max(
-    0,
-    amPligtigBIndkomst - amBidrag - anvendtFradragRubrik29
-  );
+  const fradragsvalg = {
+    enligForsoerger: Boolean(indkomstAar.enligForsoerger),
+    seniorfradragBerettiget: Boolean(indkomstAar.seniorfradragBerettiget),
+  };
 
   const udenB = beregnIndkomstskat(
     personligIndkomstA,
-    aIndkomstEfterAM,
+    aIndkomstBrutto,
     0,
     satser,
     kommuneProcent,
-    kirkeProcent
+    kirkeProcent,
+    fradragsvalg
   );
   const medB = beregnIndkomstskat(
     personligIndkomstA + personligIndkomstB,
-    aIndkomstEfterAM + arbejdsindkomstB,
-    befordringsFradragRubrik51,
+    aIndkomstBrutto + amPligtigBIndkomst,
+    befordringsFradragRubrik51 + lavindkomstBefordringstillaeg,
     satser,
     kommuneProcent,
-    kirkeProcent
+    kirkeProcent,
+    fradragsvalg
   );
 
   const skat = traek(medB, udenB);
@@ -326,13 +387,19 @@ export function beregnSkat(
   // Marginalskat: hvad koster de næste 1.000 kr. honorar, inklusive AM-bidrag.
   const proeve = 1000;
   const amAfProeve = (proeve * satser.amBidragProcent) / 100;
+  const lavindkomstTillaegMedProeve = beregnLavindkomstBefordringstillaeg(
+    befordringsFradragRubrik51,
+    lavindkomstgrundlag + proeve,
+    satser
+  );
   const medProeve = beregnIndkomstskat(
     personligIndkomstA + personligIndkomstB + (proeve - amAfProeve),
-    aIndkomstEfterAM + arbejdsindkomstB + (proeve - amAfProeve),
-    befordringsFradragRubrik51,
+    aIndkomstBrutto + amPligtigBIndkomst + proeve,
+    befordringsFradragRubrik51 + lavindkomstTillaegMedProeve,
     satser,
     kommuneProcent,
-    kirkeProcent
+    kirkeProcent,
+    fradragsvalg
   );
   const marginalskatProcent =
     Math.round(((amAfProeve + medProeve.ialt - medB.ialt) / proeve) * 1000) / 10;
@@ -346,6 +413,7 @@ export function beregnSkat(
     koerselsFradragRubrik29,
     oevrigeFradragRubrik29,
     befordringsFradragRubrik51,
+    lavindkomstBefordringstillaeg,
     amPligtigBIndkomst,
     amBidrag,
     maksTilladtFradragRubrik29,
@@ -369,11 +437,12 @@ export function beregnSkat(
 }
 
 /**
- * Et job hører til det indkomstår, arbejdet er udført i, ikke det år honoraret
- * bliver udbetalt. Krydser et job årsskiftet, følger det startdatoen.
+ * Som praktisk standard bruges året, hvor et almindeligt afsluttet job slutter,
+ * fordi retten til honoraret typisk er endelig dér. Aftalen kan fastlægge et
+ * andet retserhvervelsestidspunkt.
  */
-export function indkomstAarForJob(job: { startDato: string }): number {
-  return Number(job.startDato.slice(0, 4));
+export function indkomstAarForJob(job: { startDato: string; slutDato?: string }): number {
+  return Number((job.slutDato || job.startDato).slice(0, 4));
 }
 
 export function betalingKrydserAarsskifte(job: {
@@ -381,5 +450,5 @@ export function betalingKrydserAarsskifte(job: {
   betalingsDato?: string;
 }): boolean {
   if (!job.betalingsDato) return false;
-  return job.betalingsDato.slice(0, 4) !== job.startDato.slice(0, 4);
+  return job.betalingsDato.slice(0, 4) !== String(indkomstAarForJob(job));
 }

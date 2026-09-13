@@ -44,6 +44,7 @@ export const JobUdtraekSkema = z
     antalTure: talfelt,
     amBidragFritaget: boolfelt,
     erRubrik17: boolfelt,
+    erBestyrelseshverv: boolfelt,
     type: tekstfelt,
     timerJob: talfelt,
     timerTransportForberedelse: talfelt,
@@ -133,6 +134,7 @@ export const JOB_JSON_SKEMA = {
     antalTure: jsonFelt('number'),
     amBidragFritaget: jsonFelt('boolean'),
     erRubrik17: jsonFelt('boolean'),
+    erBestyrelseshverv: jsonFelt('boolean'),
     type: jsonFelt('string'),
     timerJob: jsonFelt('number'),
     timerTransportForberedelse: jsonFelt('number'),
@@ -174,7 +176,7 @@ export const SKEMABESKRIVELSE = `Svar med ét JSON-objekt og intet andet. Objekt
 
 Hvert felt inde i job, fradrag og investering har formen {"vaerdi": ..., "sikkerhed": tal mellem 0 og 1}.
 
-job: hvervgiver (tekst), honorar (tal), startDato, slutDato, betalingsDato (YYYY-MM-DD), destinationAdresse (tekst), transportmiddel ("NONE" | "OWN_CAR_MC" | "OWN_BIKE" | "PASSENGER"), antalKm (tal), antalTure (tal), amBidragFritaget (true/false), erRubrik17 (true/false), type (tekst), timerJob (tal), timerTransportForberedelse (tal).
+job: hvervgiver (tekst), honorar (tal), startDato, slutDato, betalingsDato (YYYY-MM-DD), destinationAdresse (tekst), transportmiddel ("NONE" | "OWN_CAR_MC" | "OWN_BIKE" | "PASSENGER"), antalKm (tal), antalTure (tal), amBidragFritaget (true/false), erRubrik17 (true/false), erBestyrelseshverv (true/false), type (tekst), timerJob (tal), timerTransportForberedelse (tal).
 
 fradrag: beskrivelse (tekst), typeKategori (tekst), fakturaDato (YYYY-MM-DD), fakturaBeloeb (tal inklusive moms), fradragsProcent (0 til 100).
 

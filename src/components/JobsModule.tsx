@@ -61,7 +61,7 @@ const TRANSPORT: { vaerdi: TransportMiddel; navn: string; hjaelp: string }[] = [
     vaerdi: 'PASSENGER',
     navn: 'Passager i bil eller på motorcykel',
     hjaelp:
-      'Du har ikke selv kørt og har ingen dokumenteret udgift. Det giver et lavere fradrag, og det er den eneste mulighed, der lander i rubrik 51.',
+      'Du har ikke selv kørt og har ingen dokumenteret udgift. Det giver det almindelige befordringsfradrag i rubrik 51.',
   },
 ];
 
@@ -161,6 +161,7 @@ export function JobsModule({
       return beregnKoerselForJob(
         {
           id: redigerer.id,
+          hvervgiver: redigerer.hvervgiver,
           transportmiddel: redigerer.transportmiddel,
           antalKm: talFraFelt(km),
           antalTure: talFraFelt(ture),
@@ -186,9 +187,9 @@ export function JobsModule({
       setFejl('Slutdatoen ligger før startdatoen.');
       return;
     }
-    if (Number(redigerer.startDato.slice(0, 4)) !== indkomstAar.aar) {
+    if (Number((redigerer.slutDato || redigerer.startDato).slice(0, 4)) !== indkomstAar.aar) {
       setFejl(
-        `Startdatoen ligger i ${redigerer.startDato.slice(0, 4)}, men du står i indkomståret ${indkomstAar.aar}. Et job hører til det år, arbejdet er udført i.`
+        `Slutdatoen ligger i ${(redigerer.slutDato || redigerer.startDato).slice(0, 4)}, men du står i indkomståret ${indkomstAar.aar}. For et almindeligt afsluttet job bruges slutåret som udgangspunkt for året, hvor du fik endelig ret til honoraret.`
       );
       return;
     }
@@ -217,7 +218,7 @@ export function JobsModule({
   return (
     <Sektion
       titel="Jobs og kørsel"
-      beskrivelse={`Honorarer havner i rubrik 12 på årsopgørelsen. Kørsel i egen bil eller på egen cykel havner i rubrik 29, kørsel som passager i rubrik 51. Satserne for ${beregning.satser.aar} bruges automatisk.`}
+      beskrivelse={`Honorarer havner normalt i rubrik 12 på årsopgørelsen. Erhvervskørsel i eget transportmiddel havner i rubrik 29; almindelig befordring havner i rubrik 51. Satserne for ${beregning.satser.aar} bruges automatisk.`}
       handling={
         laast ? null : (
           <>
@@ -461,7 +462,7 @@ export function JobsModule({
             </div>
 
             <div className="grid gap-4 sm:grid-cols-3">
-              <Felt label="Startdato" paakraevet hjaelp="Afgør hvilket år jobbet hører til.">
+              <Felt label="Startdato" paakraevet>
                 {(id) => (
                   <Datofelt
                     id={id}
@@ -478,7 +479,11 @@ export function JobsModule({
                   />
                 )}
               </Felt>
-              <Felt label="Slutdato" paakraevet>
+              <Felt
+                label="Slutdato"
+                paakraevet
+                hjaelp="Bruges som standard for retserhvervelsesåret ved et almindeligt afsluttet job."
+              >
                 {(id) => (
                   <Datofelt
                     id={id}
@@ -502,9 +507,9 @@ export function JobsModule({
 
             {betalingKrydserAarsskifte(redigerer) && (
               <Advarsel art="neutral" titel="Betalingen falder i et andet år">
-                Jobbet bliver liggende i {redigerer.startDato.slice(0, 4)}, fordi arbejdet er
-                udført der. Det er året for arbejdet, ikke året for udbetalingen, der afgør
-                hvor honoraret skal stå.
+                Betalingsdatoen afgør ikke i sig selv indkomståret. Som udgangspunkt bruges
+                året, hvor du fik endelig ret til honoraret; for et almindeligt afsluttet job
+                vil det normalt være slutåret.
               </Advarsel>
             )}
 
@@ -668,7 +673,7 @@ export function JobsModule({
 
                   <Afkrydsning
                     label="Der skal ikke betales AM-bidrag af dette honorar"
-                    hjaelp="Gælder blandt andet biblioteksafgift, Copydan, Gramex, legater og kunststøtte."
+                    hjaelp="Gælder fx biblioteksafgift, rettighedsbetalinger og legater uden krav om en konkret modydelse. Markér ikke almindelige honorarer."
                     checked={redigerer.amBidragFritaget}
                     onChange={(e) =>
                       setRedigerer({ ...redigerer, amBidragFritaget: e.target.checked })

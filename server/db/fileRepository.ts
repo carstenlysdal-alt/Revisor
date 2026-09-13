@@ -37,7 +37,14 @@ export class FileRepository implements Repository {
   private async læs(): Promise<DataSnapshot> {
     try {
       const rå = await fs.readFile(this.filsti, 'utf8');
-      return { ...tomtSnapshot(), ...JSON.parse(rå) };
+      const snapshot = { ...tomtSnapshot(), ...JSON.parse(rå) } as DataSnapshot;
+      snapshot.indkomstAar = snapshot.indkomstAar.map((aar) => ({
+        ...aar,
+        forventetDagpenge: Number(aar.forventetDagpenge) || 0,
+        seniorfradragBerettiget: Boolean(aar.seniorfradragBerettiget),
+        borPaaUdpegetSmaaoe: Boolean(aar.borPaaUdpegetSmaaoe),
+      }));
+      return snapshot;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') return tomtSnapshot();
       throw err;

@@ -43,9 +43,12 @@ const tomtAar = (aar: number): IndkomstAar => ({
   kirkeskatteprocent: 0,
   forventetAIndkomst: 0,
   forventetPensionSUDagpenge: 0,
+  forventetDagpenge: 0,
   forventedeFradragAIndkomst: 0,
   medlemFolkekirken: false,
   enligForsoerger: false,
+  seniorfradragBerettiget: false,
+  borPaaUdpegetSmaaoe: false,
   laast: false,
 });
 
@@ -66,6 +69,7 @@ export function IndkomstAarModule({
   // Beløbsfelter holdes som tekst, så de kan tømmes.
   const [aIndkomst, setAIndkomst] = useState('');
   const [pension, setPension] = useState('');
+  const [dagpenge, setDagpenge] = useState('');
   const [aFradrag, setAFradrag] = useState('');
   const [kommuneskat, setKommuneskat] = useState('');
   const [kirkeskat, setKirkeskat] = useState('');
@@ -79,6 +83,7 @@ export function IndkomstAarModule({
     setRedigerer(aar);
     setAIndkomst(aar.forventetAIndkomst ? String(aar.forventetAIndkomst) : '');
     setPension(aar.forventetPensionSUDagpenge ? String(aar.forventetPensionSUDagpenge) : '');
+    setDagpenge(aar.forventetDagpenge ? String(aar.forventetDagpenge) : '');
     setAFradrag(aar.forventedeFradragAIndkomst ? String(aar.forventedeFradragAIndkomst) : '');
     setKommuneskat(
       officielleSatser?.kommuneskat !== null && officielleSatser?.kommuneskat !== undefined
@@ -132,6 +137,7 @@ export function IndkomstAarModule({
         kirkeskatteprocent: talFraFelt(kirkeskat),
         forventetAIndkomst: talFraFelt(aIndkomst),
         forventetPensionSUDagpenge: talFraFelt(pension),
+        forventetDagpenge: talFraFelt(dagpenge),
         forventedeFradragAIndkomst: talFraFelt(aFradrag),
       });
       setRedigerer(null);
@@ -385,15 +391,21 @@ export function IndkomstAarModule({
               )}
             </Felt>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <Felt
                 label="Forventet A-indkomst"
                 hjaelp="Brutto for hele året, før AM-bidrag."
               >
                 {(id) => <BeloebFelt id={id} vaerdi={aIndkomst} onVaerdi={setAIndkomst} />}
               </Felt>
-              <Felt label="Pension, SU og dagpenge" hjaelp="Brutto for hele året.">
+              <Felt label="Pension og SU" hjaelp="Brutto for hele året.">
                 {(id) => <BeloebFelt id={id} vaerdi={pension} onVaerdi={setPension} />}
+              </Felt>
+              <Felt
+                label="Dagpenge"
+                hjaelp="Brutto for hele året. Holdes særskilt, fordi beløbet indgår i grundlaget for lavindkomsttillæg til kørselsfradraget."
+              >
+                {(id) => <BeloebFelt id={id} vaerdi={dagpenge} onVaerdi={setDagpenge} />}
               </Felt>
               <Felt
                 label="Fradrag i A-indkomsten"
@@ -412,11 +424,26 @@ export function IndkomstAarModule({
                 }
               />
               <Afkrydsning
-                label="Enlig forsørger"
+                label="Modtager ekstra børnetilskud som enlig forsørger"
+                hjaelp="Giver ekstra beskæftigelsesfradrag. Markér kun, hvis du modtager det ekstra børnetilskud."
                 checked={redigerer.enligForsoerger}
                 onChange={(e) =>
                   setRedigerer({ ...redigerer, enligForsoerger: e.target.checked })
                 }
+              />
+              {redigerer.aar === 2026 && (
+                <Afkrydsning
+                  label="Berettiget til seniorfradrag"
+                  hjaelp="Gælder i 2026 for personer med 1 eller 2 år til folkepensionsalderen."
+                  checked={redigerer.seniorfradragBerettiget}
+                  onChange={(e) => setRedigerer({ ...redigerer, seniorfradragBerettiget: e.target.checked })}
+                />
+              )}
+              <Afkrydsning
+                label="Bor på en af de 10 udpegede småøer"
+                hjaelp="Aarø, Baagø, Egholm, Endelave, Hjarnø, Mandø, Nekselø, Orø, Sejerø eller Tunø. Yderkommuner genkendes automatisk."
+                checked={redigerer.borPaaUdpegetSmaaoe}
+                onChange={(e) => setRedigerer({ ...redigerer, borPaaUdpegetSmaaoe: e.target.checked })}
               />
             </div>
           </div>

@@ -100,9 +100,12 @@ export class PostgresRepository implements Repository, BilagsLager {
         kirkeskatteprocent: tal(r.kirkeskatteprocent),
         forventetAIndkomst: tal(r.forventet_a_indkomst),
         forventetPensionSUDagpenge: tal(r.forventet_pension_su_dagpenge),
+        forventetDagpenge: tal(r.forventet_dagpenge),
         forventedeFradragAIndkomst: tal(r.forventede_fradrag_a_indkomst),
         medlemFolkekirken: Boolean(r.medlem_folkekirken),
         enligForsoerger: Boolean(r.enlig_forsoerger),
+        seniorfradragBerettiget: Boolean(r.seniorfradrag_berettiget),
+        borPaaUdpegetSmaaoe: Boolean(r.bor_paa_udpeget_smaaoe),
         laast: Boolean(r.laast),
       })
     );
@@ -122,6 +125,7 @@ export class PostgresRepository implements Repository, BilagsLager {
         destinationAdresse: r.destination_adresse ?? '',
         amBidragFritaget: Boolean(r.am_bidrag_fritaget),
         erRubrik17: Boolean(r.er_rubrik17),
+        erBestyrelseshverv: Boolean(r.er_bestyrelseshverv),
         timerJob: r.timer_job === null ? undefined : tal(r.timer_job),
         timerTransportForberedelse:
           r.timer_transport_forberedelse === null
@@ -212,8 +216,9 @@ export class PostgresRepository implements Repository, BilagsLager {
     await this.pool.query(
       `INSERT INTO indkomstaar (id, aar, hjemmeadresse, kommune, kommune_skatteprocent,
          kirkeskatteprocent, forventet_a_indkomst, forventet_pension_su_dagpenge,
-         forventede_fradrag_a_indkomst, medlem_folkekirken, enlig_forsoerger, laast)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+         forventet_dagpenge, forventede_fradrag_a_indkomst, medlem_folkekirken,
+         enlig_forsoerger, seniorfradrag_berettiget, bor_paa_udpeget_smaaoe, laast)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
        ON CONFLICT (id) DO UPDATE SET
          aar = EXCLUDED.aar,
          hjemmeadresse = EXCLUDED.hjemmeadresse,
@@ -222,14 +227,18 @@ export class PostgresRepository implements Repository, BilagsLager {
          kirkeskatteprocent = EXCLUDED.kirkeskatteprocent,
          forventet_a_indkomst = EXCLUDED.forventet_a_indkomst,
          forventet_pension_su_dagpenge = EXCLUDED.forventet_pension_su_dagpenge,
+         forventet_dagpenge = EXCLUDED.forventet_dagpenge,
          forventede_fradrag_a_indkomst = EXCLUDED.forventede_fradrag_a_indkomst,
          medlem_folkekirken = EXCLUDED.medlem_folkekirken,
          enlig_forsoerger = EXCLUDED.enlig_forsoerger,
+         seniorfradrag_berettiget = EXCLUDED.seniorfradrag_berettiget,
+         bor_paa_udpeget_smaaoe = EXCLUDED.bor_paa_udpeget_smaaoe,
          laast = EXCLUDED.laast`,
       [
         a.id, a.aar, a.hjemmeadresse, a.kommune, a.kommuneSkatteprocent,
         a.kirkeskatteprocent, a.forventetAIndkomst, a.forventetPensionSUDagpenge,
-        a.forventedeFradragAIndkomst, a.medlemFolkekirken, a.enligForsoerger, a.laast,
+        a.forventetDagpenge, a.forventedeFradragAIndkomst, a.medlemFolkekirken,
+        a.enligForsoerger, a.seniorfradragBerettiget, a.borPaaUdpegetSmaaoe, a.laast,
       ]
     );
     return a;
@@ -245,9 +254,9 @@ export class PostgresRepository implements Repository, BilagsLager {
     await this.pool.query(
       `INSERT INTO job (id, indkomstaar_id, hvervgiver, honorar, start_dato, slut_dato,
          betalings_dato, transportmiddel, antal_km, antal_ture, destination_adresse,
-         am_bidrag_fritaget, er_rubrik17, timer_job, timer_transport_forberedelse,
-         type, noter, er_eksempel)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+         am_bidrag_fritaget, er_rubrik17, er_bestyrelseshverv, timer_job,
+         timer_transport_forberedelse, type, noter, er_eksempel)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
        ON CONFLICT (id) DO UPDATE SET
          indkomstaar_id = EXCLUDED.indkomstaar_id,
          hvervgiver = EXCLUDED.hvervgiver,
@@ -261,6 +270,7 @@ export class PostgresRepository implements Repository, BilagsLager {
          destination_adresse = EXCLUDED.destination_adresse,
          am_bidrag_fritaget = EXCLUDED.am_bidrag_fritaget,
          er_rubrik17 = EXCLUDED.er_rubrik17,
+         er_bestyrelseshverv = EXCLUDED.er_bestyrelseshverv,
          timer_job = EXCLUDED.timer_job,
          timer_transport_forberedelse = EXCLUDED.timer_transport_forberedelse,
          type = EXCLUDED.type,
@@ -270,7 +280,8 @@ export class PostgresRepository implements Repository, BilagsLager {
         j.id, j.indkomstAarId, j.hvervgiver, j.honorar, j.startDato, j.slutDato,
         j.betalingsDato || null, j.transportmiddel, j.antalKm, j.antalTure,
         j.destinationAdresse ?? null, j.amBidragFritaget, Boolean(j.erRubrik17),
-        j.timerJob ?? null, j.timerTransportForberedelse ?? null, j.type ?? null,
+        Boolean(j.erBestyrelseshverv), j.timerJob ?? null,
+        j.timerTransportForberedelse ?? null, j.type ?? null,
         j.noter ?? null, Boolean(j.erEksempel),
       ]
     );

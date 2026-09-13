@@ -264,6 +264,11 @@ export function PosteringForslagKort({
             checked={Boolean(flag.amBidragFritaget)}
             onChange={(e) => setFlag({ ...flag, amBidragFritaget: e.target.checked })}
           />
+          <Afkrydsning
+            label="Bestyrelses-, udvalgs- eller kommissionshverv"
+            checked={Boolean(flag.erBestyrelseshverv)}
+            onChange={(e) => setFlag({ ...flag, erBestyrelseshverv: e.target.checked })}
+          />
         </div>
       )}
 

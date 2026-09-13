@@ -26,9 +26,12 @@ export function byggEksempeldata(aar: number): {
       kirkeskatteprocent: 0.8,
       forventetAIndkomst: 80_000,
       forventetPensionSUDagpenge: 0,
+      forventetDagpenge: 0,
       forventedeFradragAIndkomst: 0,
       medlemFolkekirken: true,
       enligForsoerger: false,
+      seniorfradragBerettiget: false,
+      borPaaUdpegetSmaaoe: false,
       laast: false,
     },
     jobs: [

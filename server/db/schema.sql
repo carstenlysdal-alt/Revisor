@@ -15,9 +15,12 @@ CREATE TABLE IF NOT EXISTS indkomstaar (
   kirkeskatteprocent          numeric(6,3) NOT NULL DEFAULT 0,
   forventet_a_indkomst        numeric(14,2) NOT NULL DEFAULT 0,
   forventet_pension_su_dagpenge numeric(14,2) NOT NULL DEFAULT 0,
+  forventet_dagpenge           numeric(14,2) NOT NULL DEFAULT 0,
   forventede_fradrag_a_indkomst numeric(14,2) NOT NULL DEFAULT 0,
   medlem_folkekirken          boolean NOT NULL DEFAULT false,
   enlig_forsoerger            boolean NOT NULL DEFAULT false,
+  seniorfradrag_berettiget    boolean NOT NULL DEFAULT false,
+  bor_paa_udpeget_smaaoe      boolean NOT NULL DEFAULT false,
   laast                       boolean NOT NULL DEFAULT false,
   UNIQUE (aar)
 );
@@ -58,6 +61,7 @@ CREATE TABLE IF NOT EXISTS job (
   destination_adresse           text,
   am_bidrag_fritaget            boolean NOT NULL DEFAULT false,
   er_rubrik17                   boolean NOT NULL DEFAULT false,
+  er_bestyrelseshverv           boolean NOT NULL DEFAULT false,
   timer_job                     numeric(6,2),
   timer_transport_forberedelse  numeric(6,2),
   type                          text,
@@ -128,3 +132,8 @@ CREATE TABLE IF NOT EXISTS google_drive_forbindelse (
 -- om forbindelsen findes endnu — status skal overleve en genudrulning.
 ALTER TABLE bilag ADD COLUMN IF NOT EXISTS drev_backup_tidspunkt timestamptz;
 ALTER TABLE bilag ADD COLUMN IF NOT EXISTS drev_backup_fejl text;
+
+ALTER TABLE indkomstaar ADD COLUMN IF NOT EXISTS forventet_dagpenge numeric(14,2) NOT NULL DEFAULT 0;
+ALTER TABLE indkomstaar ADD COLUMN IF NOT EXISTS seniorfradrag_berettiget boolean NOT NULL DEFAULT false;
+ALTER TABLE indkomstaar ADD COLUMN IF NOT EXISTS bor_paa_udpeget_smaaoe boolean NOT NULL DEFAULT false;
+ALTER TABLE job ADD COLUMN IF NOT EXISTS er_bestyrelseshverv boolean NOT NULL DEFAULT false;

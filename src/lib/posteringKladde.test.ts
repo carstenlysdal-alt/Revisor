@@ -11,19 +11,23 @@ const aar = (id: string, tal: number): IndkomstAar => ({
   kirkeskatteprocent: 0,
   forventetAIndkomst: 0,
   forventetPensionSUDagpenge: 0,
+  forventetDagpenge: 0,
   forventedeFradragAIndkomst: 0,
   medlemFolkekirken: false,
   enligForsoerger: false,
+  seniorfradragBerettiget: false,
+  borPaaUdpegetSmaaoe: false,
   laast: false,
 });
 
 describe('findIndkomstAarTilKladde', () => {
   const liste = [aar('2025', 2025), aar('2026', 2026)];
 
-  it('bruger arbejdsåret for honorarjobs', () => {
-    expect(findIndkomstAarTilKladde('JOB', { startDato: '2025-12-18' }, liste, '2026')).toBe(
+  it('bruger slutåret som standard for retserhvervelsen af honorarjobs', () => {
+    expect(findIndkomstAarTilKladde('JOB', { startDato: '2025-12-18', slutDato: '2025-12-20' }, liste, '2026')).toBe(
       '2025'
     );
+    expect(findIndkomstAarTilKladde('JOB', { startDato: '2025-12-18', slutDato: '2026-01-03' }, liste, '2025')).toBe('2026');
   });
 
   it('bruger fakturaåret for fradrag og falder sikkert tilbage uden et kendt år', () => {

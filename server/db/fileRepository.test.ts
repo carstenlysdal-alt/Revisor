@@ -70,9 +70,12 @@ describe('FileRepository — Google Drive-forbindelsen', () => {
       kirkeskatteprocent: 0,
       forventetAIndkomst: 0,
       forventetPensionSUDagpenge: 0,
+      forventetDagpenge: 0,
       forventedeFradragAIndkomst: 0,
       medlemFolkekirken: false,
       enligForsoerger: false,
+      seniorfradragBerettiget: false,
+      borPaaUdpegetSmaaoe: false,
       laast: false,
     });
     await repo.gemGoogleDriveForbindelse({

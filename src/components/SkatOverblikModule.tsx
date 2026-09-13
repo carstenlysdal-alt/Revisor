@@ -120,7 +120,14 @@ export function SkatOverblikModule({ indkomstAar, beregning }: Props) {
                 rubrik={51}
                 negativ
                 daempet
-                note="Kun kørsel registreret som passager."
+                note="Kørsel registreret som passager eller et bestyrelseshverv uden skattefri godtgørelse."
+              />
+              <Linje
+                tekst="Automatisk lavindkomsttillæg til befordring"
+                beloeb={beregning.lavindkomstBefordringstillaeg}
+                negativ
+                daempet
+                note="Skattestyrelsen beregner tillægget automatisk; beløbet skal ikke skrives i rubrik 51."
               />
               <Linje
                 tekst="Beskæftigelsesfradrag"
@@ -135,6 +142,18 @@ export function SkatOverblikModule({ indkomstAar, beregning }: Props) {
                 negativ
                 daempet
                 note={`${satser.jobfradrag.procent} % af indkomsten over ${kr(satser.jobfradrag.bundgraense)} kr., højst ${kr(satser.jobfradrag.maksimum)} kr.`}
+              />
+              <Linje
+                tekst="Ekstra beskæftigelsesfradrag som enlig forsørger"
+                beloeb={skat.ekstraBeskFradragEnlig}
+                negativ
+                daempet
+              />
+              <Linje
+                tekst="Ekstra beskæftigelsesfradrag som senior"
+                beloeb={skat.ekstraBeskFradragSenior}
+                negativ
+                daempet
               />
               <Total tekst="Skattepligtig indkomst af B-indkomsten" beloeb={beregning.skattepligtigIndkomst} />
             </tbody>

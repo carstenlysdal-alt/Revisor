@@ -68,7 +68,7 @@ export function findIndkomstAarTilKladde(
   indkomstAarListe: IndkomstAar[],
   fallbackId: string
 ): string {
-  const dato = valgtType === 'JOB' ? tekst.startDato : tekst.fakturaDato;
+  const dato = valgtType === 'JOB' ? (tekst.slutDato || tekst.startDato) : tekst.fakturaDato;
   const aar = /^\d{4}-\d{2}-\d{2}$/.test(dato ?? '') ? Number(dato.slice(0, 4)) : null;
   return indkomstAarListe.find((kandidat) => kandidat.aar === aar)?.id ?? fallbackId;
 }
@@ -104,6 +104,7 @@ export function byggJobFraKladde(
     destinationAdresse: tekst.destinationAdresse || '',
     amBidragFritaget: Boolean(flag.amBidragFritaget),
     erRubrik17: Boolean(flag.erRubrik17),
+    erBestyrelseshverv: Boolean(flag.erBestyrelseshverv),
     timerJob: kladdeTal(tekst, 'timerJob') || undefined,
     timerTransportForberedelse: kladdeTal(tekst, 'timerTransportForberedelse') || undefined,
     type: tekst.type || '',
