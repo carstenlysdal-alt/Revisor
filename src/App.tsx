@@ -103,11 +103,16 @@ export default function App() {
   const [handlingsfejl, setHandlingsfejl] = useState<string | null>(null);
 
   useEffect(() => {
+    // Statustjekket ligger bag login. Køres det kun ved allerførste mount, når
+    // brugeren endnu ikke er logget ind, fejler kaldet med 401 og bliver aldrig
+    // hentet igen — AI-funktionerne fremstår slået fra resten af sessionen, selv
+    // med en gyldig nøgle på serveren.
+    if (auth.tilstand !== 'aaben') return;
     api
       .aiStatus()
       .then(setAi)
       .catch(() => setAi({ klar: false, udbyder: null, modeller: null }));
-  }, []);
+  }, [auth.tilstand]);
 
   const visBesked = (tekst: string) => {
     setBesked(tekst);

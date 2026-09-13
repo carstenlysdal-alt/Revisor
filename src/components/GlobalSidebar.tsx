@@ -221,10 +221,15 @@ export function GlobalSidebar({
         )}
 
         <div className="mt-5 space-y-2 border-t border-rule pt-4">
-          <Knap onClick={onAabnScanner} disabled={!aiKlar} className="w-full justify-center">
+          {/*
+            Ikke disabled på aiKlar: en deaktiveret knap giver ingen forklaring,
+            og ser ud som om funktionen slet ikke findes. Klikker brugeren
+            alligevel, åbner modalen og viser selv hvorfor den er slået fra.
+          */}
+          <Knap onClick={onAabnScanner} className="w-full justify-center">
             Læs et bilag
           </Knap>
-          <Knap onClick={onAabnChat} disabled={!aiKlar} className="w-full justify-center">
+          <Knap onClick={onAabnChat} className="w-full justify-center">
             Spørg revisoren
           </Knap>
           {!aiKlar && (
