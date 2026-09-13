@@ -20,6 +20,9 @@ interface Props {
   onGemJob: (job: Job) => Promise<unknown>;
   onGemFradrag: (fradrag: Fradrag) => Promise<unknown>;
   onGemInvestering: (inv: Investering) => Promise<unknown>;
+  /** Sat når chatten åbnes fra forsidens spørgeboks, med teksten der skal sendes med det samme. */
+  startBesked?: string | null;
+  onStartBeskedForbrugt?: () => void;
 }
 
 /** Faser vi faktisk kan skelne, fordi serveren melder dem fra strømmen. */
@@ -52,6 +55,8 @@ export function RevisorChatModal({
   onGemJob,
   onGemFradrag,
   onGemInvestering,
+  startBesked,
+  onStartBeskedForbrugt,
 }: Props) {
   const [beskeder, setBeskeder] = useState<ChatBesked[]>([]);
   const [input, setInput] = useState('');
@@ -173,6 +178,17 @@ export function RevisorChatModal({
       setFase(null);
     }
   };
+
+  useEffect(() => {
+    // Forsidens spørgeboks åbner chatten og leverer teksten i samme
+    // handling. Forbruget nulstiller den hos App, så den ikke sendes igen,
+    // hvis modalen lukkes og åbnes uden en ny forespørgsel.
+    if (aaben && startBesked) {
+      void send(startBesked);
+      onStartBeskedForbrugt?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aaben, startBesked]);
 
   return (
     <Modal

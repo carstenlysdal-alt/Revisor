@@ -66,12 +66,6 @@ export function Login({ onLoggetInd }: { onLoggetInd: () => void }) {
           {sender ? 'Logger ind' : 'Log ind'}
         </Knap>
       </form>
-
-      <p className="mt-8 border-t border-rule pt-4 text-2xs text-ink-faint">
-        Kodeordet er sat på serveren og kan ikke nulstilles herfra. Er det væk, laves
-        et nyt med <span className="tal">npm run kodeord</span> og sættes som
-        AUTH_PASSWORD_HASH.
-      </p>
     </main>
   );
 }

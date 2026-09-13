@@ -16,6 +16,7 @@ import { AarsopgoerelseModule } from './components/AarsopgoerelseModule';
 import { OpsparingTrackerModule } from './components/OpsparingTrackerModule';
 import { StatistikModule } from './components/StatistikModule';
 import { DokumentationModule } from './components/DokumentationModule';
+import { Forside } from './components/Forside';
 import { GlobalSidebar } from './components/GlobalSidebar';
 import { AiBilagScannerModal } from './components/AiBilagScannerModal';
 import { RevisorChatModal } from './components/RevisorChatModal';
@@ -76,6 +77,7 @@ function MobilOverblik({
 }
 
 const FANER = [
+  { id: 'forside', navn: 'Forside' },
   { id: 'jobs', navn: 'Jobs og kørsel' },
   { id: 'fradrag', navn: 'Fradrag' },
   { id: 'overblik', navn: 'Skatteoverblik' },
@@ -90,7 +92,7 @@ const FANER = [
 export default function App() {
   const auth = useAuth();
   const d = useRevisorData(auth.tilstand === 'aaben');
-  const { visning, naviger } = useUrlState('jobs');
+  const { visning, naviger } = useUrlState('forside');
   const [ai, setAi] = useState<{
     klar: boolean;
     udbyder: string | null;
@@ -99,8 +101,15 @@ export default function App() {
   const aiKlar = ai.klar;
   const [scannerAaben, setScannerAaben] = useState(false);
   const [chatAaben, setChatAaben] = useState(false);
+  const [chatStartBesked, setChatStartBesked] = useState<string | null>(null);
   const [besked, setBesked] = useState<string | null>(null);
   const [handlingsfejl, setHandlingsfejl] = useState<string | null>(null);
+
+  /** Forsidens spørgeboks åbner chatten og sender teksten med det samme. */
+  const stilSpoergsmaal = (tekst: string) => {
+    setChatStartBesked(tekst);
+    setChatAaben(true);
+  };
 
   useEffect(() => {
     // Statustjekket ligger bag login. Køres det kun ved allerførste mount, når
@@ -258,7 +267,7 @@ export default function App() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <button
             type="button"
-            onClick={() => naviger({ fane: 'jobs' })}
+            onClick={() => naviger({ fane: 'forside' })}
             className="overgang flex items-baseline gap-2 hover:opacity-70"
           >
             <span className="font-display text-base font-extrabold tracking-tight text-ink">
@@ -381,6 +390,16 @@ export default function App() {
 
               {beregning && (
                 <>
+                  {visning.fane === 'forside' && (
+                    <Forside
+                      indkomstAar={aktivtAar}
+                      beregning={beregning}
+                      aiKlar={aiKlar}
+                      onStilSpoergsmaal={stilSpoergsmaal}
+                      onGaaTil={(fane) => naviger({ fane })}
+                    />
+                  )}
+
                   {visning.fane === 'jobs' && (
                     <JobsModule
                       jobs={aaretsJobs}
@@ -534,6 +553,8 @@ export default function App() {
           onGemJob={medFejlhaandtering(d.gemJob)}
           onGemFradrag={medFejlhaandtering(d.gemFradrag)}
           onGemInvestering={medFejlhaandtering(d.gemInvestering)}
+          startBesked={chatStartBesked}
+          onStartBeskedForbrugt={() => setChatStartBesked(null)}
         />
       )}
     </div>
