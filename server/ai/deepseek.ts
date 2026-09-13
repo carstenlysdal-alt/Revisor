@@ -157,7 +157,12 @@ export function opretDeepseekUdbyder(): AiUdbyder {
         messages: [
           {
             role: 'system',
-            content: chatSystemprompt(indgang.beregning, kilder, indgang.aktivtForslag ?? null),
+            content: chatSystemprompt(
+              indgang.beregning,
+              kilder,
+              indgang.aktivtForslag ?? null,
+              indgang.tidligereHistorik ?? []
+            ),
           },
           ...indgang.beskeder.slice(-HISTORIK_VINDUE).map((b) => ({
             role: b.rolle === 'bruger' ? ('user' as const) : ('assistant' as const),

@@ -14,6 +14,12 @@ export interface ChatIndgang {
   brugWebsoegning: boolean;
   /** Det udkast, brugeren endnu ikke har godkendt, hvis der er ét. */
   aktivtForslag?: PosteringForslag | null;
+  /**
+   * Tidligere samtaler, uafhængigt af den aktuelle — klienten nulstiller sin
+   * egen visning ved hver åbning, men modellen skal stadig kunne svare på
+   * "hvad spurgte jeg om i går", hvis brugeren selv spørger til det.
+   */
+  tidligereHistorik?: { rolle: 'bruger' | 'assistent'; indhold: string; tidspunkt: string }[];
 }
 
 export type ChatFase = 'laeser' | 'soeger' | 'laeser_kilder' | 'skriver';

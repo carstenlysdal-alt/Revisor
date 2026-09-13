@@ -137,3 +137,16 @@ ALTER TABLE indkomstaar ADD COLUMN IF NOT EXISTS forventet_dagpenge numeric(14,2
 ALTER TABLE indkomstaar ADD COLUMN IF NOT EXISTS seniorfradrag_berettiget boolean NOT NULL DEFAULT false;
 ALTER TABLE indkomstaar ADD COLUMN IF NOT EXISTS bor_paa_udpeget_smaaoe boolean NOT NULL DEFAULT false;
 ALTER TABLE job ADD COLUMN IF NOT EXISTS er_bestyrelseshverv boolean NOT NULL DEFAULT false;
+
+-- Revisor-chattens hukommelse på tværs af sessioner. Selve chatvinduet
+-- nulstiller sin visning ved hver åbning, men modellen skal stadig kunne
+-- svare på "hvad spurgte jeg om i går" — det kræver et log, den kan slå op i,
+-- uafhængigt af hvad klienten lige nu har liggende i sin egen samtale.
+CREATE TABLE IF NOT EXISTS chat_historik (
+  id         bigserial PRIMARY KEY,
+  rolle      text NOT NULL CHECK (rolle IN ('bruger','assistent')),
+  indhold    text NOT NULL,
+  tidspunkt  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS chat_historik_tidspunkt_idx ON chat_historik (tidspunkt DESC);

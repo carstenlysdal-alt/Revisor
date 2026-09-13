@@ -8,7 +8,16 @@ import type {
   Job,
   OpsparingsTracker,
 } from '../../src/types';
-import { DataSnapshot, GoogleDriveForbindelse, Repository, tomtSnapshot } from './repository';
+import {
+  ChatHistorikPost,
+  DataSnapshot,
+  GoogleDriveForbindelse,
+  Repository,
+  tomtSnapshot,
+} from './repository';
+
+/** Hvor mange beskeder chatloggen maks gemmer. Ældre linjer falder ud i takt med nye. */
+const CHAT_HISTORIK_MAKS = 200;
 
 /**
  * Fil-baseret lager. Holder hele datasættet i én JSON-fil under DATA_DIR.
@@ -27,11 +36,14 @@ export class FileRepository implements Repository {
    * ved en fremtidig rettelse et andet sted i koden.
    */
   private readonly driveFilsti: string;
+  private readonly chatFilsti: string;
   private kø: Promise<unknown> = Promise.resolve();
+  private chatKø: Promise<unknown> = Promise.resolve();
 
   constructor(dataDir: string) {
     this.filsti = path.join(dataDir, 'data.json');
     this.driveFilsti = path.join(dataDir, 'google-drive.json');
+    this.chatFilsti = path.join(dataDir, 'chat-historik.json');
   }
 
   private async læs(): Promise<DataSnapshot> {
@@ -190,5 +202,35 @@ export class FileRepository implements Repository {
 
   async sletGoogleDriveForbindelse(): Promise<void> {
     await fs.rm(this.driveFilsti, { force: true });
+  }
+
+  /* --------------------------------------------------------- Chat-historik */
+
+  private async læsChatHistorik(): Promise<ChatHistorikPost[]> {
+    try {
+      return JSON.parse(await fs.readFile(this.chatFilsti, 'utf8')) as ChatHistorikPost[];
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+      throw err;
+    }
+  }
+
+  gemChatBesked(post: ChatHistorikPost): Promise<void> {
+    const næste = this.chatKø.then(async () => {
+      const historik = await this.læsChatHistorik();
+      historik.push(post);
+      const beskåret = historik.slice(-CHAT_HISTORIK_MAKS);
+      await fs.mkdir(path.dirname(this.chatFilsti), { recursive: true });
+      const temp = `${this.chatFilsti}.${process.pid}.tmp`;
+      await fs.writeFile(temp, JSON.stringify(beskåret, null, 2), 'utf8');
+      await fs.rename(temp, this.chatFilsti);
+    });
+    this.chatKø = næste.catch(() => undefined);
+    return næste;
+  }
+
+  async hentChatHistorik(graense: number): Promise<ChatHistorikPost[]> {
+    const historik = await this.læsChatHistorik();
+    return historik.slice(-graense);
   }
 }

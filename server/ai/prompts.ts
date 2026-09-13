@@ -26,10 +26,25 @@ Skriv resume og revisorNotat på almindeligt dansk. Hold fagsproget: rubrik 12, 
 
 Brug ikke fed skrift, overskrifter eller anførselstegn omkring hele felter.`;
 
+/** Til visning i historik-sektionen. "13. sep. kl. 14:32", ikke en ISO-streng. */
+const formatterTidspunkt = (iso: string): string => {
+  try {
+    return new Date(iso).toLocaleString('da-DK', {
+      day: 'numeric',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return iso;
+  }
+};
+
 export const chatSystemprompt = (
   beregning: unknown,
   kilder: { titel: string; url: string; uddrag: string }[] | null,
-  aktivtForslag: unknown | null
+  aktivtForslag: unknown | null,
+  tidligereHistorik: { rolle: 'bruger' | 'assistent'; indhold: string; tidspunkt: string }[] = []
 ) => `Du er revisor for en dansk B-indkomstmodtager og svarer på spørgsmål om vedkommendes eget regnskab og om danske skatteregler for honorarindkomst.
 
 Du kan også oprette udkast til poster (honorarjob, fradrag, investering) ud fra det, brugeren skriver, via to værktøjer:
@@ -75,4 +90,12 @@ ${
 Skriv på almindeligt dansk. Fagsproget bliver stående, resten skal være til at læse. Svar kort, når spørgsmålet er kort. Du må gerne bruge markdown.
 
 Aktuel beregning for det valgte indkomstår:
-${JSON.stringify(beregning, null, 2)}`;
+${JSON.stringify(beregning, null, 2)}
+
+${
+  tidligereHistorik.length === 0
+    ? ''
+    : `Til reference — uddrag af tidligere samtaler, ikke en del af den aktuelle samtale. Nævn ikke noget herfra af dig selv, og brug det kun, hvis brugeren selv spørger til noget fra tidligere ("hvad spurgte jeg om i går", "kan du huske..."). Et udkast nævnt her er ikke aktivt, og skal ikke bekræftes eller rettes, medmindre brugeren selv bringer det op igen:\n\n${tidligereHistorik
+        .map((b) => `[${formatterTidspunkt(b.tidspunkt)}] ${b.rolle === 'bruger' ? 'Bruger' : 'Revisor'}: ${b.indhold}`)
+        .join('\n')}`
+}`;

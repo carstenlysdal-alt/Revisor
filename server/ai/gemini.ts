@@ -223,7 +223,8 @@ export function opretGeminiUdbyder(): AiUdbyder {
           systemInstruction: chatSystemprompt(
             indgang.beregning,
             kilder,
-            indgang.aktivtForslag ?? null
+            indgang.aktivtForslag ?? null,
+            indgang.tidligereHistorik ?? []
           ),
           tools: [{ functionDeclarations: [FORESLAA_POSTERING, BEKRAEFT_POSTERING] }],
         },

@@ -40,6 +40,17 @@ export interface GoogleDriveForbindelse {
 }
 
 /**
+ * Én linje i Revisor-chattens langtidshukommelse. Uafhængig af klientens
+ * egen samtale, som nulstilles ved hver åbning — dette er loggen, modellen
+ * kan slå op i, når brugeren selv spørger til noget fra en tidligere session.
+ */
+export interface ChatHistorikPost {
+  rolle: 'bruger' | 'assistent';
+  indhold: string;
+  tidspunkt: string;
+}
+
+/**
  * Kontrakten mellem routes og lagringen. Routes taler kun med denne grænseflade,
  * så en Postgres-driver kan skiftes ind uden at røre noget andet.
  */
@@ -76,4 +87,8 @@ export interface Repository {
   hentGoogleDriveForbindelse(): Promise<GoogleDriveForbindelse | null>;
   gemGoogleDriveForbindelse(forbindelse: GoogleDriveForbindelse): Promise<void>;
   sletGoogleDriveForbindelse(): Promise<void>;
+
+  gemChatBesked(post: ChatHistorikPost): Promise<void>;
+  /** De seneste `graense` beskeder, ældste først. */
+  hentChatHistorik(graense: number): Promise<ChatHistorikPost[]>;
 }

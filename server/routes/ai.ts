@@ -7,6 +7,9 @@ import { ManglendeApiNoegleError } from '../ai/udbyder';
 import { PdfUdenTekstError } from '../ai/pdf';
 import { rensProsa } from '../ai/rens';
 
+/** Hvor mange tidligere beskeder der hentes med som hukommelse til hvert chat-kald. */
+const HISTORIK_TIL_HUKOMMELSE = 20;
+
 /**
  * Oversætter en fejl til noget, brugeren kan handle på.
  *
@@ -107,16 +110,37 @@ export function aiRoutes(repo: Repository, arkiv: BilagsLager): Router {
       res.flushHeaders?.();
 
       const { beskeder, beregning, brugWebsoegning, aktivtForslag } = req.body ?? {};
+      const beskederListe: { rolle: 'bruger' | 'assistent'; indhold: string }[] = Array.isArray(
+        beskeder
+      )
+        ? beskeder
+        : [];
+
+      const tidligereHistorik = await repo.hentChatHistorik(HISTORIK_TIL_HUKOMMELSE);
 
       const svar = await getUdbyder().chat(
         {
-          beskeder: Array.isArray(beskeder) ? beskeder : [],
+          beskeder: beskederListe,
           beregning,
           brugWebsoegning: Boolean(brugWebsoegning),
           aktivtForslag: aktivtForslag ?? null,
+          tidligereHistorik,
         },
         (fase) => send('status', { fase })
       );
+
+      // Bedst-mulig hukommelse: fejler denne, skal chatsvaret stadig nå frem.
+      const gemTilHistorik = async (rolle: 'bruger' | 'assistent', indhold: string) => {
+        if (!indhold.trim()) return;
+        try {
+          await repo.gemChatBesked({ rolle, indhold, tidspunkt: new Date().toISOString() });
+        } catch (err) {
+          console.error('Kunne ikke gemme chatbesked til historikken:', err);
+        }
+      };
+
+      const sidsteBrugerbesked = [...beskederListe].reverse().find((b) => b.rolle === 'bruger');
+      if (sidsteBrugerbesked) await gemTilHistorik('bruger', sidsteBrugerbesked.indhold);
 
       if (svar.bekraeftet) {
         // Kun et signal — serveren gemmer intet selv. Klienten holder allerede
@@ -124,14 +148,18 @@ export function aiRoutes(repo: Repository, arkiv: BilagsLager): Router {
         // som når "Godkend"-knappen klikkes.
         send('bekraeft', {});
       } else if (svar.forslag) {
-        send('forslag', { besked: rensProsa(svar.forslag.besked), forslag: svar.forslag });
+        const besked = rensProsa(svar.forslag.besked);
+        send('forslag', { besked, forslag: svar.forslag });
+        await gemTilHistorik('assistent', besked);
       } else if (!svar.tekst) {
         send('fejl', { fejl: 'Der kom ikke noget svar tilbage. Prøv igen.' });
       } else {
+        const tekst = rensProsa(svar.tekst);
         send('faerdig', {
-          tekst: rensProsa(svar.tekst),
+          tekst,
           kilder: svar.kilder.map((k) => ({ titel: k.titel, url: k.url })),
         });
+        await gemTilHistorik('assistent', tekst);
       }
     } catch (err) {
       console.error('Revisor-chat fejlede:', err);

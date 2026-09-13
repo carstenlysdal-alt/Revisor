@@ -11,7 +11,13 @@ import type {
 } from '../../src/types';
 import { BilagFindesIkkeError, type BilagsLager } from '../storage/lager';
 import { beregnHash } from '../storage/bilag';
-import { DataSnapshot, GoogleDriveForbindelse, Repository, tomtSnapshot } from './repository';
+import {
+  ChatHistorikPost,
+  DataSnapshot,
+  GoogleDriveForbindelse,
+  Repository,
+  tomtSnapshot,
+} from './repository';
 
 // pg returnerer numeric som streng for ikke at tabe præcision. Beløbene her
 // ligger langt inden for det, en double kan bære, og resten af koden regner
@@ -516,5 +522,26 @@ export class PostgresRepository implements Repository, BilagsLager {
 
   async sletGoogleDriveForbindelse(): Promise<void> {
     await this.pool.query(`DELETE FROM google_drive_forbindelse WHERE id = 'enkelt'`);
+  }
+
+  /* --------------------------------------------------------- Chat-historik */
+
+  async gemChatBesked(post: ChatHistorikPost): Promise<void> {
+    await this.pool.query(
+      'INSERT INTO chat_historik (rolle, indhold, tidspunkt) VALUES ($1,$2,$3)',
+      [post.rolle, post.indhold, post.tidspunkt]
+    );
+  }
+
+  async hentChatHistorik(graense: number): Promise<ChatHistorikPost[]> {
+    const { rows } = await this.pool.query(
+      'SELECT rolle, indhold, tidspunkt FROM chat_historik ORDER BY tidspunkt DESC LIMIT $1',
+      [graense]
+    );
+    return rows.reverse().map((r) => ({
+      rolle: r.rolle,
+      indhold: r.indhold,
+      tidspunkt: r.tidspunkt instanceof Date ? r.tidspunkt.toISOString() : String(r.tidspunkt),
+    }));
   }
 }
