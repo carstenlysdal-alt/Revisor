@@ -2,11 +2,15 @@
 
 ## Retning
 
-**Revisionsprotokol.** Appen er et arbejdsdokument, ikke en oversigtsskærm. Indhold adskilles med typografi, hårfine linjer og hvidrum. Ikke med kort, og aldrig med kort inde i kort.
+Appen taler to sprog, alt efter om skærmen er et **regnskab** eller et **overblik**.
 
-**Signaturelementet** er rubriknummeret. Hver eneste beløbslinje bærer sit rubriknummer (12, 17, 29, 51) sat i mono i venstre margen, og markøren går igen i Jobs, Fradrag, Overblik og Årsopgørelse. Man skal aldrig være i tvivl om, hvor et beløb ender på årsopgørelsen.
+**Regnskabssprog** gælder Indtægter, Udgifter & fradrag, Kørsel, Investeringer, Skatteoverblik og Årsopgørelse — stedet, hvor et beløb til sidst skal kunne genfindes på en årsopgørelse. Her er appen et arbejdsdokument, ikke en oversigtsskærm. Indhold adskilles med typografi, hårfine linjer og hvidrum. Ikke med kort, og aldrig med kort inde i kort.
 
-**Gitteret** er det andet bærende greb. Beløbskolonnen står samme sted på tværs af moduler, så tallene flugter, når man skifter fane.
+**Signaturelementet i regnskabssproget** er rubriknummeret. Hver eneste beløbslinje bærer sit rubriknummer (12, 17, 29, 51) sat i mono i venstre margen. Man skal aldrig være i tvivl om, hvor et beløb ender på årsopgørelsen.
+
+**Gitteret** er det andet bærende greb i regnskabssproget. Beløbskolonnen står samme sted på tværs af moduler, så tallene flugter, når man skifter fane.
+
+**Overbliksprog** gælder Forsiden og andre steder, der opsummerer og giver adgang til handling, snarere end at dokumentere en post til en årsopgørelse. Her må kort, badges og enkle monokrome ikoner bruges — se "Dashboard-elementer" under Komponentsprog. De to sprog må ikke blandes på samme skærm: en tabel får ikke et kort omkring sig, og en oversigtsflade får ikke et rubriknummer, den ikke selv dokumenterer.
 
 ## Farve
 
@@ -35,6 +39,8 @@ Alle værdier i OKLCH. Ingen neutral er ren hvid eller sort; alle er tonet mod h
 | `--focus` | `oklch(0.550 0.140 250)` | fokusring, kun tastaturnavigation |
 
 Fokusringen er blå, fordi det er platformkonventionen. Den skal ikke læses som en brandfarve, og den bruges intet andet sted.
+
+**Badges i overblikssproget** låner samme to farver, ikke nye: en lys grøn bund (samme familie som `--positive-ground`) til "Indtægt", og en neutral grå bund til "Udgift"/"Investering". Grønt betyder stadig det samme — penge, der styrker regnskabet — så en indtægtsbadge bryder ikke reglen om at kulør betyder noget, den bekræfter den. Der indføres ingen tredje farve.
 
 ## Typografi
 
@@ -91,6 +97,13 @@ Brydepunkter: 375, 768, 1024, 1440. Berøringsmål mindst 48 px høje.
 - **Felt:** label over feltet, hjælpetekst under, mindst 48px højt. Beløbsfelter er højrestillede og i mono.
 - **Tom tilstand:** en sætning om hvad der mangler, og den handling der løser det. Ingen illustration.
 
+### Dashboard-elementer (kun overbliksprog)
+
+- **Kort:** `--surface`-bund, `1px --rule-strong`, `4px` radius, ingen skygge. Bruges til at gruppere en handling eller et overblik — aldrig et kort inde i et andet kort, og aldrig som erstatning for en tabel.
+- **Badge:** lille, fyldt bund (grøn/grå, se Farve), `999px` radius, kun til korte kategori-ord ("Indtægt", "Udgift"). Ikke en standardcontainer — resten af overbliksproget er almindelig tekst og linjer, ikke pilleformede bokse.
+- **Ikonflise (hurtig handling):** ramme som et kort, ét monokromt streg-ikon (ingen farve, ingen baggrundscirkel), en kort handling og en støttetekst. Ikonet illustrerer handlingen, det pynter ikke.
+- **Revisors avatar:** kun på Forsiden. En rund, lys flade med et enkelt, monokromt robotansigt i streg og et lille glimt ved siden af, som identitetsmærke for AI-assistenten dér. Andre steder (headerknap, chattens egen header) bruges fortsat det typografiske "R"-monogram — de to er samme identitet, ikke to forskellige.
+
 ## Bandlyst
 
-Kantstriber i siden af en boks, gradienttekst, glassmorphism, hero-tal med støttetal under, ens kortgitre, modal som første indskydelse, glimt-ikoner på AI-funktioner, tankestreger i brugervendt tekst.
+Kantstriber i siden af en boks, gradienttekst, glassmorphism, hero-tal med støttetal under, modal som første indskydelse, tankestreger i brugervendt tekst, kort i regnskabssproget, et rubriknummer i overbliksproget, mere end to badge-farver, et glimt-ikon andre steder end Revisors avatar på Forsiden.

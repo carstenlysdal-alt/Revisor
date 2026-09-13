@@ -37,6 +37,12 @@ interface Props {
   onGem: (job: Job) => Promise<unknown>;
   onSlet: (id: string) => Promise<unknown>;
   onAabnScanner: () => void;
+  /**
+   * Samme jobs, to visninger. Kørsel er altid en del af jobbet, det hører
+   * til — der findes ikke en egen kørselspost, kun et andet udsnit af
+   * kolonner over de samme data, og den samme "Nyt job"-formular.
+   */
+  visning?: 'indtaegter' | 'koersel';
 }
 
 const TRANSPORT: { vaerdi: TransportMiddel; navn: string; hjaelp: string }[] = [
@@ -92,6 +98,7 @@ export function JobsModule({
   onGem,
   onSlet,
   onAabnScanner,
+  visning = 'indtaegter',
 }: Props) {
   const [redigerer, setRedigerer] = useState<Job | null>(null);
   const [gemmer, setGemmer] = useState(false);
@@ -215,43 +222,153 @@ export function JobsModule({
   const valgtTransport = TRANSPORT.find((t) => t.vaerdi === redigerer?.transportmiddel);
   const laast = indkomstAar.laast;
 
+  const koerselRubrik = (job: Job): 29 | 51 =>
+    job.transportmiddel === 'PASSENGER' || job.erBestyrelseshverv ? 51 : 29;
+  const koerselJobs = jobs.filter((j) => j.transportmiddel !== 'NONE');
+  const visteJobs = visning === 'koersel' ? koerselJobs : jobs;
+  const nytJobKnap = (
+    <Knap art="primaer" onClick={() => aabn(nytJob(indkomstAar.id, indkomstAar.aar))}>
+      Nyt job
+    </Knap>
+  );
+  const læsBilagKnap = (
+    <Knap onClick={onAabnScanner} className="hidden lg:inline-flex">
+      Læs et bilag
+    </Knap>
+  );
+
   return (
     <Sektion
-      titel="Jobs og kørsel"
-      beskrivelse={`Honorarer havner normalt i rubrik 12 på årsopgørelsen. Erhvervskørsel i eget transportmiddel havner i rubrik 29; almindelig befordring havner i rubrik 51. Satserne for ${beregning.satser.aar} bruges automatisk.`}
-      handling={
-        laast ? null : (
-          <>
-            <Knap onClick={onAabnScanner} className="hidden lg:inline-flex">
-              Læs et bilag
-            </Knap>
-            <Knap art="primaer" onClick={() => aabn(nytJob(indkomstAar.id, indkomstAar.aar))}>
-              Nyt job
-            </Knap>
-          </>
-        )
+      titel={visning === 'koersel' ? 'Kørsel' : 'Indtægter'}
+      beskrivelse={
+        visning === 'koersel'
+          ? `Kørsel i egen bil eller på egen cykel til et honorarjob havner i rubrik 29 — næsten altid en bedre skatteværdi end befordringsfradraget i rubrik 51. Bestyrelseshverv uden kørselsgodtgørelse bruger i stedet rubrik 51. Adressen er altid din egen hjemmeadresse, sat under Indkomstår. Kørsel hører til det job, den er en del af, og oprettes derfor sammen med det.`
+          : `Honorarer havner normalt i rubrik 12 på årsopgørelsen. Satserne for ${beregning.satser.aar} bruges automatisk.`
       }
+      handling={laast ? null : <>{læsBilagKnap}{nytJobKnap}</>}
     >
-      {jobs.length === 0 ? (
+      {visteJobs.length === 0 ? (
         <TomTilstand
-          besked="Der er ingen jobs i året endnu. Opret det første, eller læg en honorarkontrakt ind og lad den blive læst."
-          handling={
-            laast ? undefined : (
-              <>
-                <Knap art="primaer" onClick={() => aabn(nytJob(indkomstAar.id, indkomstAar.aar))}>
-                  Nyt job
-                </Knap>
-                <Knap onClick={onAabnScanner} className="hidden lg:inline-flex">
-              Læs et bilag
-            </Knap>
-              </>
-            )
+          besked={
+            visning === 'koersel'
+              ? 'Der er ikke registreret kørsel endnu. Kørsel sættes på det job, den hører til — opret jobbet, eller rediger et eksisterende og sæt et transportmiddel.'
+              : 'Der er ingen jobs i året endnu. Opret det første, eller læg en honorarkontrakt ind og lad den blive læst.'
+          }
+          handling={laast ? undefined : <>{nytJobKnap}{læsBilagKnap}</>}
+        />
+      ) : visning === 'koersel' ? (
+        <Responsiv
+          tabel={
+            <Tabel minBredde={780}>
+              <thead>
+                <tr>
+                  <Th bredde="2.5rem" />
+                  <Th>Hvervgiver</Th>
+                  <Th>Transportmiddel</Th>
+                  <Th bredde="9rem">Adresse</Th>
+                  <Th hoejre bredde="6rem">Km i alt</Th>
+                  <Th hoejre bredde="9rem">Fradrag</Th>
+                  <Th bredde="9rem" />
+                </tr>
+              </thead>
+              <tbody>
+                {visteJobs.map((job) => {
+                  const linje = koerselPrJob.get(job.id);
+                  return (
+                    <tr key={job.id}>
+                      <Td>
+                        <Rubrik nr={koerselRubrik(job)} aktiv />
+                      </Td>
+                      <Td>
+                        <span className="font-medium text-ink">{job.hvervgiver}</span>
+                        <span className="block text-2xs text-ink-faint">{dato(job.startDato)}</span>
+                      </Td>
+                      <Td>{TRANSPORT.find((t) => t.vaerdi === job.transportmiddel)?.navn}</Td>
+                      <Td className="text-2xs text-ink-muted">{job.destinationAdresse || '–'}</Td>
+                      <Td hoejre tal>
+                        {linje ? linje.kmIAlt.toLocaleString('da-DK') : job.antalKm * job.antalTure}
+                      </Td>
+                      <Td hoejre tal>{kr(linje?.fradrag ?? 0)}</Td>
+                      <Td hoejre>
+                        {!laast && (
+                          <div className="ikke-print flex justify-end gap-1">
+                            <Knap art="tekst" onClick={() => aabn(job)}>
+                              Rediger
+                            </Knap>
+                          </div>
+                        )}
+                      </Td>
+                    </tr>
+                  );
+                })}
+                <Sumraekke
+                  celler={[
+                    {
+                      indhold: `${visteJobs.length} ${visteJobs.length === 1 ? 'tur' : 'ture'}`,
+                      span: 4,
+                    },
+                    {
+                      indhold: visteJobs
+                        .reduce((s, j) => s + (koerselPrJob.get(j.id)?.kmIAlt ?? 0), 0)
+                        .toLocaleString('da-DK'),
+                      hoejre: true,
+                      tal: true,
+                    },
+                    {
+                      indhold: kr(
+                        beregning.koerselsFradragRubrik29 + beregning.befordringsFradragRubrik51
+                      ),
+                      hoejre: true,
+                      tal: true,
+                    },
+                    { indhold: '' },
+                  ]}
+                />
+              </tbody>
+            </Tabel>
+          }
+          liste={
+            <>
+              {visteJobs.map((job) => {
+                const linje = koerselPrJob.get(job.id);
+                return (
+                  <MobilPost
+                    key={job.id}
+                    rubrik={koerselRubrik(job)}
+                    titel={job.hvervgiver}
+                    undertitel={
+                      <>
+                        {TRANSPORT.find((t) => t.vaerdi === job.transportmiddel)?.navn}
+                        {job.destinationAdresse && ` · ${job.destinationAdresse}`}
+                      </>
+                    }
+                    beloeb={`${kr(linje?.fradrag ?? 0)} kr.`}
+                    beloebNote={linje ? `${linje.kmIAlt.toLocaleString('da-DK')} km` : undefined}
+                    handlinger={
+                      laast ? undefined : (
+                        <button
+                          type="button"
+                          onClick={() => aabn(job)}
+                          className="text-2xs text-ink-muted underline underline-offset-4"
+                        >
+                          Rediger
+                        </button>
+                      )
+                    }
+                  />
+                );
+              })}
+              <MobilSum
+                tekst={`${visteJobs.length} ${visteJobs.length === 1 ? 'tur' : 'ture'} i alt`}
+                beloeb={`${kr(beregning.koerselsFradragRubrik29 + beregning.befordringsFradragRubrik51)} kr.`}
+              />
+            </>
           }
         />
       ) : (
         <Responsiv
           tabel={
-            <Tabel minBredde={860}>
+            <Tabel minBredde={720}>
           <thead>
             <tr>
               <Th bredde="2.5rem" />
@@ -259,13 +376,11 @@ export function JobsModule({
               <Th bredde="7rem">Dato</Th>
               <Th bredde="7rem">Betaling</Th>
               <Th hoejre bredde="8rem">Honorar</Th>
-              <Th hoejre bredde="9rem">Kørsel</Th>
               <Th bredde="13rem" />
             </tr>
           </thead>
           <tbody>
-            {jobs.map((job) => {
-              const linje = koerselPrJob.get(job.id);
+            {visteJobs.map((job) => {
               const krydser = betalingKrydserAarsskifte(job);
               return (
                 <tr key={job.id}>
@@ -315,20 +430,6 @@ export function JobsModule({
                   <Td hoejre tal>
                     {kr(job.honorar)}
                   </Td>
-                  <Td hoejre tal>
-                    {linje && linje.fradrag > 0 ? (
-                      <>
-                        {kr(linje.fradrag)}
-                        <span className="block font-sans text-2xs text-ink-faint">
-                          {linje.kmIAlt.toLocaleString('da-DK')} km
-                          {linje.kmOverAarsgraense > 0 &&
-                            `, heraf ${linje.kmOverAarsgraense.toLocaleString('da-DK')} over 20.000`}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-ink-faint">–</span>
-                    )}
-                  </Td>
                   <Td hoejre>
                     <div className="ikke-print flex justify-end gap-1">
                       <Knap
@@ -358,15 +459,8 @@ export function JobsModule({
             })}
             <Sumraekke
               celler={[
-                { indhold: `${jobs.length} ${jobs.length === 1 ? 'job' : 'jobs'}`, span: 4 },
+                { indhold: `${visteJobs.length} ${visteJobs.length === 1 ? 'job' : 'jobs'}`, span: 4 },
                 { indhold: kr(beregning.honorarerRubrik12 + beregning.rubrik17Indkomst), hoejre: true, tal: true },
-                {
-                  indhold: kr(
-                    beregning.koerselsFradragRubrik29 + beregning.befordringsFradragRubrik51
-                  ),
-                  hoejre: true,
-                  tal: true,
-                },
                 { indhold: '' },
               ]}
             />
@@ -375,7 +469,7 @@ export function JobsModule({
           }
           liste={
             <>
-              {jobs.map((job) => {
+              {visteJobs.map((job) => {
                 const linje = koerselPrJob.get(job.id);
                 return (
                   <MobilPost
@@ -420,7 +514,7 @@ export function JobsModule({
                 );
               })}
               <MobilSum
-                tekst={`${jobs.length} ${jobs.length === 1 ? 'job' : 'jobs'} i alt`}
+                tekst={`${visteJobs.length} ${visteJobs.length === 1 ? 'job' : 'jobs'} i alt`}
                 beloeb={`${kr(beregning.honorarerRubrik12 + beregning.rubrik17Indkomst)} kr.`}
               />
             </>

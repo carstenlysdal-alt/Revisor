@@ -135,7 +135,7 @@ export function FradragModule({
 
   return (
     <Sektion
-      titel="Fradrag"
+      titel="Udgifter & fradrag"
       beskrivelse="Driftsomkostninger, der kan trækkes fra i rubrik 29. Er en udgift kun delvist erhvervsmæssig, sætter du selv procenten. Det skøn hæfter du for."
       handling={
         laast ? null : (

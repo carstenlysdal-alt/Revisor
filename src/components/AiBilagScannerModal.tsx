@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type {
   Bilag,
   BilagsAnalyse,
@@ -45,6 +45,9 @@ interface Props {
   onGemFradrag: (fradrag: Fradrag) => Promise<unknown>;
   onGemInvestering: (inv: Investering) => Promise<unknown>;
   onNytBilag: (bilag: Bilag) => void;
+  /** Sat når et bilag er trukket direkte ind på forsiden, og skal læses med det samme. */
+  startFil?: File | null;
+  onStartFilForbrugt?: () => void;
 }
 
 type Trin = 'vaelg' | 'dublet' | 'laeser' | 'kladde' | 'gemt' | 'fejl';
@@ -78,6 +81,8 @@ export function AiBilagScannerModal({
   onGemFradrag,
   onGemInvestering,
   onNytBilag,
+  startFil,
+  onStartFilForbrugt,
 }: Props) {
   const [trin, setTrin] = useState<Trin>('vaelg');
   const [fejl, setFejl] = useState<string | null>(null);
@@ -236,6 +241,17 @@ export function AiBilagScannerModal({
   };
 
   const kanGemme = kanGemmeKladde(valgtType, tekst);
+
+  useEffect(() => {
+    // Forsidens dropzone åbner scanneren og leverer filen i samme handling.
+    // Forbruget nulstiller den hos App, så den ikke læses igen ved en senere
+    // åbning uden en ny fil trukket ind.
+    if (aaben && startFil) {
+      void vaelgFil(startFil);
+      onStartFilForbrugt?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aaben, startFil]);
 
   return (
     <Modal

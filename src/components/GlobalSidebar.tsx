@@ -3,7 +3,11 @@ import type { IndkomstAar, OpsparingsTracker } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
 import { kr, pct } from '../lib/format';
 import { api } from '../lib/api';
-import { Advarsel, Knap } from './ui';
+import { Advarsel, Knap, Kort } from './ui';
+
+/** Samme opdeling som topnavigationen i App.tsx — kun til forklaringskortet. */
+const FANER_DRIFT_NAVNE = ['Indtægter', 'Udgifter & fradrag', 'Kørsel', 'Investeringer'];
+const FANER_OVERBLIK_NAVNE = ['Skatteoverblik', 'Årsopgørelse', 'Statistik', 'Dokumentation'];
 
 interface Props {
   indkomstAar: IndkomstAar;
@@ -14,6 +18,11 @@ interface Props {
   aiModel: string | null;
   onAabnScanner: () => void;
   onGaaTil: (fane: string) => void;
+  /** Kun sat fra Forsiden. */
+  antalJobs?: number;
+  investeringerIAlt?: number;
+  /** Forklaringskortet om Daglig drift/Samlet overblik — kun på Forsiden. */
+  visForklaring?: boolean;
 }
 
 function Noegletal({
@@ -163,6 +172,9 @@ export function GlobalSidebar({
   aiModel,
   onAabnScanner,
   onGaaTil,
+  antalJobs,
+  investeringerIAlt,
+  visForklaring = false,
 }: Props) {
   const afsat = opsparing.indbetaltTilSkat + opsparing.opsparetPrivat;
   const mangler = Math.max(0, beregning.samletSkatOgAM - afsat);
@@ -171,9 +183,16 @@ export function GlobalSidebar({
     <aside className="ikke-print w-full shrink-0 lg:w-72">
       <div className="lg:sticky lg:top-24">
         <h2 className="border-b border-rule-strong pb-1.5 font-display text-sm font-bold text-ink">
-          Året {beregning.aar}
+          Dit overblik i {beregning.aar}
         </h2>
 
+        {antalJobs !== undefined && (
+          <Noegletal
+            label="B-indkomst i år"
+            vaerdi={`${kr(beregning.honorarerRubrik12 + beregning.rubrik17Indkomst)} kr.`}
+            note={`${antalJobs} ${antalJobs === 1 ? 'job' : 'job'} indberettet`}
+          />
+        )}
         <Noegletal
           label="Skat og AM-bidrag"
           vaerdi={`${kr(beregning.samletSkatOgAM)} kr.`}
@@ -194,6 +213,9 @@ export function GlobalSidebar({
               : undefined
           }
         />
+        {investeringerIAlt !== undefined && (
+          <Noegletal label="Investeringer" vaerdi={`${kr(investeringerIAlt)} kr.`} />
+        )}
 
         {mangler > 0 && (
           <div className="mt-4">
@@ -256,6 +278,34 @@ export function GlobalSidebar({
             </p>
           )}
         </div>
+
+        {visForklaring && (
+          <Kort className="mt-4 p-4">
+            <p className="font-display text-sm font-bold text-ink">To områder – én løsning</p>
+            <p className="mt-1 text-2xs text-ink-muted">
+              Revis er delt op i to hovedområder, så du nemt kan holde styr på hverdagen og
+              det store overblik.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-3 text-2xs">
+              <div>
+                <p className="font-medium text-ink">Daglig drift</p>
+                <ul className="mt-1 space-y-0.5 text-ink-muted">
+                  {FANER_DRIFT_NAVNE.map((n) => (
+                    <li key={n}>{n}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p className="font-medium text-ink">Samlet overblik</p>
+                <ul className="mt-1 space-y-0.5 text-ink-muted">
+                  {FANER_OVERBLIK_NAVNE.map((n) => (
+                    <li key={n}>{n}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </Kort>
+        )}
       </div>
     </aside>
   );

@@ -76,18 +76,49 @@ function MobilOverblik({
   );
 }
 
-const FANER = [
+/** Daglig drift: det, der løbende registreres. */
+const FANER_DRIFT = [
   { id: 'forside', navn: 'Forside' },
-  { id: 'jobs', navn: 'Jobs og kørsel' },
-  { id: 'fradrag', navn: 'Fradrag' },
+  { id: 'indtaegter', navn: 'Indtægter' },
+  { id: 'fradrag', navn: 'Udgifter & fradrag' },
+  { id: 'koersel', navn: 'Kørsel' },
+  { id: 'investeringer', navn: 'Investeringer' },
+];
+
+/** Samlet overblik: det, der ser tilbage på hele året. */
+const FANER_OVERBLIK = [
   { id: 'overblik', navn: 'Skatteoverblik' },
   { id: 'aarsopgoerelse', navn: 'Årsopgørelse' },
-  { id: 'opsparing', navn: 'Sæt til side' },
   { id: 'statistik', navn: 'Statistik' },
-  { id: 'investeringer', navn: 'Investeringer' },
   { id: 'dokumentation', navn: 'Dokumentation' },
-  { id: 'aar', navn: 'Indkomstår' },
 ];
+
+function FaneKnap({
+  fane,
+  aktiv,
+  onNaviger,
+}: {
+  fane: { id: string; navn: string };
+  aktiv: boolean;
+  onNaviger: (naeste: { fane: string }) => void;
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => onNaviger({ fane: fane.id })}
+        aria-current={aktiv ? 'page' : undefined}
+        className={`overgang whitespace-nowrap border-b-2 px-3 py-2 text-xs ${
+          aktiv
+            ? 'border-ink font-semibold text-ink'
+            : 'border-transparent text-ink-muted hover:text-ink'
+        }`}
+      >
+        {fane.navn}
+      </button>
+    </li>
+  );
+}
 
 export default function App() {
   const auth = useAuth();
@@ -100,6 +131,7 @@ export default function App() {
   }>({ klar: false, udbyder: null, modeller: null });
   const aiKlar = ai.klar;
   const [scannerAaben, setScannerAaben] = useState(false);
+  const [scannerStartFil, setScannerStartFil] = useState<File | null>(null);
   const [chatAaben, setChatAaben] = useState(false);
   const [chatStartBesked, setChatStartBesked] = useState<string | null>(null);
   const [besked, setBesked] = useState<string | null>(null);
@@ -109,6 +141,12 @@ export default function App() {
   const stilSpoergsmaal = (tekst: string) => {
     setChatStartBesked(tekst);
     setChatAaben(true);
+  };
+
+  /** Et bilag trukket ind på forsiden åbner scanneren og læser det med det samme. */
+  const traekBilagInd = (fil: File) => {
+    setScannerStartFil(fil);
+    setScannerAaben(true);
   };
 
   useEffect(() => {
@@ -202,7 +240,7 @@ export default function App() {
     for (const j of data.jobs) await d.gemJob(j);
     for (const f of data.fradrag) await d.gemFradrag(f);
     for (const i of data.investeringer) await d.gemInvestering(i);
-    naviger({ aar: data.indkomstAar.id, fane: 'jobs' });
+    naviger({ aar: data.indkomstAar.id, fane: 'indtaegter' });
     visBesked('Eksempeldataene er indlæst. De er markeret som eksempel.');
   };
 
@@ -295,6 +333,13 @@ export default function App() {
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                onClick={() => naviger({ fane: 'aar' })}
+                className="text-2xs text-ink-muted underline underline-offset-4 hover:text-ink"
+              >
+                Administrér
+              </button>
             </div>
             )}
             {aktivtAar && beregning && (
@@ -322,27 +367,16 @@ export default function App() {
           </div>
         </div>
 
-        <nav aria-label="Moduler" className="mx-auto max-w-7xl overflow-x-auto px-4 sm:px-6">
+        <nav aria-label="Moduler" className="mx-auto flex max-w-7xl items-center justify-between gap-4 overflow-x-auto px-4 sm:px-6">
           <ul className="flex gap-1 pb-px">
-            {FANER.map((f) => {
-              const aktiv = visning.fane === f.id;
-              return (
-                <li key={f.id}>
-                  <button
-                    type="button"
-                    onClick={() => naviger({ fane: f.id })}
-                    aria-current={aktiv ? 'page' : undefined}
-                    className={`overgang whitespace-nowrap border-b-2 px-3 py-2 text-xs ${
-                      aktiv
-                        ? 'border-ink font-semibold text-ink'
-                        : 'border-transparent text-ink-muted hover:text-ink'
-                    }`}
-                  >
-                    {f.navn}
-                  </button>
-                </li>
-              );
-            })}
+            {FANER_DRIFT.map((f) => (
+              <FaneKnap key={f.id} fane={f} aktiv={visning.fane === f.id} onNaviger={naviger} />
+            ))}
+          </ul>
+          <ul className="flex gap-1 pb-px">
+            {FANER_OVERBLIK.map((f) => (
+              <FaneKnap key={f.id} fane={f} aktiv={visning.fane === f.id} onNaviger={naviger} />
+            ))}
           </ul>
         </nav>
       </header>
@@ -404,11 +438,34 @@ export default function App() {
               {beregning && (
                 <>
                   {visning.fane === 'forside' && (
-                    <Forside aiKlar={aiKlar} onStilSpoergsmaal={stilSpoergsmaal} />
+                    <Forside
+                      aiKlar={aiKlar}
+                      onStilSpoergsmaal={stilSpoergsmaal}
+                      onDropFil={traekBilagInd}
+                      onAabnScanner={() => setScannerAaben(true)}
+                      onGaaTil={(fane) => naviger({ fane })}
+                      jobs={aaretsJobs}
+                      fradragListe={aaretsFradrag}
+                      investeringer={aaretsInvesteringer}
+                    />
                   )}
 
-                  {visning.fane === 'jobs' && (
+                  {visning.fane === 'indtaegter' && (
                     <JobsModule
+                      visning="indtaegter"
+                      jobs={aaretsJobs}
+                      bilag={d.data.bilag}
+                      indkomstAar={aktivtAar}
+                      beregning={beregning}
+                      onGem={medFejlhaandtering(d.gemJob)}
+                      onSlet={medFejlhaandtering(d.sletJob)}
+                      onAabnScanner={() => setScannerAaben(true)}
+                    />
+                  )}
+
+                  {visning.fane === 'koersel' && (
+                    <JobsModule
+                      visning="koersel"
                       jobs={aaretsJobs}
                       bilag={d.data.bilag}
                       indkomstAar={aktivtAar}
@@ -494,6 +551,9 @@ export default function App() {
                 aiModel={ai.modeller?.tekst ?? null}
                 onAabnScanner={() => setScannerAaben(true)}
                   onGaaTil={(fane) => naviger({ fane })}
+                  antalJobs={aaretsJobs.length}
+                  investeringerIAlt={aaretsInvesteringer.reduce((s, i) => s + i.beloeb, 0)}
+                  visForklaring={visning.fane === 'forside'}
                 />
               </div>
             )}
@@ -545,6 +605,8 @@ export default function App() {
           onGemFradrag={medFejlhaandtering(d.gemFradrag)}
           onGemInvestering={medFejlhaandtering(d.gemInvestering)}
           onNytBilag={d.tilfoejBilag}
+          startFil={scannerStartFil}
+          onStartFilForbrugt={() => setScannerStartFil(null)}
         />
       )}
 

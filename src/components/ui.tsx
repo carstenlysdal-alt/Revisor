@@ -45,9 +45,9 @@ export function Rubrik({ nr, aktiv = false }: { nr: 12 | 17 | 29 | 51; aktiv?: b
 }
 
 /**
- * Revisors eget mærke: et typografisk monogram, ikke et AI-glimt-ikon
- * (bandlyst i DESIGN.md). Går igen samme sted i headeren, forsiden og
- * chatten, så identiteten er den samme, uanset hvor man møder den.
+ * Revisors kompakte mærke: et typografisk monogram. Bruges i headeren og
+ * chattens egen header — de små, tætte sammenhænge. På Forsiden bruges i
+ * stedet RevisorAvatar; se DESIGN.md, "Dashboard-elementer".
  */
 export function RevisorMaerke({ stoerrelse = 'lg' }: { stoerrelse?: 'sm' | 'lg' }) {
   return (
@@ -59,6 +59,98 @@ export function RevisorMaerke({ stoerrelse = 'lg' }: { stoerrelse?: 'sm' | 'lg' 
     >
       R
     </span>
+  );
+}
+
+/**
+ * Revisors avatar på Forsiden — det eneste sted i appen med et figurativt
+ * ikon for AI'en, jf. DESIGN.md. Rent monokromt streg-robotansigt, intet
+ * farvet, intet gradient.
+ */
+export function RevisorAvatar({ className = '' }: { className?: string }) {
+  return (
+    <div className={`relative shrink-0 ${className}`} aria-hidden="true">
+      <div className="flex h-full w-full items-center justify-center rounded-full bg-sunk">
+        <svg viewBox="0 0 48 48" className="h-[58%] w-[58%]" fill="none">
+          <rect x="10" y="14" width="28" height="22" rx="8" stroke="currentColor" strokeWidth="2.2" />
+          <path d="M24 14V8" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+          <circle cx="24" cy="5" r="2.2" fill="currentColor" />
+          <circle cx="18.5" cy="25" r="2.4" fill="currentColor" />
+          <circle cx="29.5" cy="25" r="2.4" fill="currentColor" />
+          <path d="M19 31.5C20.5 33 27.5 33 29 31.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+        </svg>
+      </div>
+      <svg
+        viewBox="0 0 24 24"
+        className="absolute -right-0.5 -top-0.5 h-[22%] w-[22%] text-ink"
+        fill="currentColor"
+      >
+        <path d="M12 0c.7 4.6 2.1 7.7 4.5 9.5 2.4 1.8 5.3 2.5 7.5 2.5-2.2 0-5.1.7-7.5 2.5-2.4 1.8-3.8 4.9-4.5 9.5-.7-4.6-2.1-7.7-4.5-9.5C5.1 12.7 2.2 12 0 12c2.2 0 5.1-.7 7.5-2.5C9.9 7.7 11.3 4.6 12 0z" />
+      </svg>
+    </div>
+  );
+}
+
+/** Statuskategori i overbliksproget. Kun to farver, jf. DESIGN.md — ingen tredje. */
+export function Badge({
+  art,
+  children,
+}: {
+  art: 'indtaegt' | 'neutral';
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-2xs font-medium ${
+        art === 'indtaegt' ? 'bg-positive-ground text-positive' : 'bg-sunk text-ink-muted'
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Kort — kun til overbliksprog (Forsiden). Aldrig i regnskabssproget, og aldrig i et andet kort. */
+export function Kort({
+  children,
+  className = '',
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`rounded-[4px] border border-rule-strong bg-surface ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+/** En hurtig handling på Forsiden: ikon, handling, kort støttetekst. */
+export function IkonFlise({
+  ikon,
+  titel,
+  undertekst,
+  onClick,
+}: {
+  ikon: React.ReactNode;
+  titel: string;
+  undertekst: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="overgang flex flex-col items-start gap-2 rounded-[4px] border border-rule-strong bg-surface p-3.5 text-left hover:bg-sunk"
+    >
+      <span aria-hidden="true" className="text-ink-muted">
+        {ikon}
+      </span>
+      <span>
+        <span className="block text-sm font-medium text-ink">{titel}</span>
+        <span className="block text-2xs text-ink-faint">{undertekst}</span>
+      </span>
+    </button>
   );
 }
 
