@@ -13,7 +13,6 @@ interface Props {
   aiUdbyder: string | null;
   aiModel: string | null;
   onAabnScanner: () => void;
-  onAabnChat: () => void;
   onGaaTil: (fane: string) => void;
 }
 
@@ -163,7 +162,6 @@ export function GlobalSidebar({
   aiUdbyder,
   aiModel,
   onAabnScanner,
-  onAabnChat,
   onGaaTil,
 }: Props) {
   const afsat = opsparing.indbetaltTilSkat + opsparing.opsparetPrivat;
@@ -225,17 +223,15 @@ export function GlobalSidebar({
             Ikke disabled på aiKlar: en deaktiveret knap giver ingen forklaring,
             og ser ud som om funktionen slet ikke findes. Klikker brugeren
             alligevel, åbner modalen og viser selv hvorfor den er slået fra.
+            Revisor-chatten har sin egen faste knap i headeren og på
+            forsiden — den gentages ikke her.
           */}
           <Knap onClick={onAabnScanner} className="w-full justify-center">
             Læs et bilag
           </Knap>
-          <Knap onClick={onAabnChat} className="w-full justify-center">
-            Spørg revisoren
-          </Knap>
           {!aiKlar && (
             <p className="text-2xs text-ink-faint">
-              Begge dele kræver en AI-nøgle på serveren. Sæt GEMINI_API_KEY eller
-              DEEPSEEK_API_KEY i .env.
+              Kræver en AI-nøgle på serveren. Sæt GEMINI_API_KEY eller DEEPSEEK_API_KEY i .env.
             </p>
           )}
         </div>

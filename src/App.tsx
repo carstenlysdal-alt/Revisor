@@ -298,10 +298,9 @@ export default function App() {
             </div>
             )}
             {aktivtAar && beregning && (
-              // Kun på lg+: mobilen har allerede en fast Revisor-knap i
-              // bundnavigationen. Denne dækker hullet på skrivebordet, hvor
-              // GlobalSidebar — og dermed dens "Spørg revisoren"-knap —
-              // skjules på fanerne 'aar' og 'statistik'.
+              // Den eneste vej til Revisor-chatten på skrivebordet — sidebaren
+              // gentager den ikke. Kun på lg+: mobilen har sin egen faste
+              // Revisor-knap i bundnavigationen.
               <button
                 type="button"
                 onClick={() => setChatAaben(true)}
@@ -410,12 +409,7 @@ export default function App() {
               {beregning && (
                 <>
                   {visning.fane === 'forside' && (
-                    <Forside
-                      indkomstAar={aktivtAar}
-                      beregning={beregning}
-                      aiKlar={aiKlar}
-                      onStilSpoergsmaal={stilSpoergsmaal}
-                    />
+                    <Forside aiKlar={aiKlar} onStilSpoergsmaal={stilSpoergsmaal} />
                   )}
 
                   {visning.fane === 'jobs' && (
@@ -504,7 +498,6 @@ export default function App() {
                 aiUdbyder={ai.udbyder}
                 aiModel={ai.modeller?.tekst ?? null}
                 onAabnScanner={() => setScannerAaben(true)}
-                onAabnChat={() => setChatAaben(true)}
                   onGaaTil={(fane) => naviger({ fane })}
                 />
               </div>

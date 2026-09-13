@@ -1,7 +1,4 @@
 import React, { useState } from 'react';
-import type { IndkomstAar } from '../types';
-import type { SkatteBeregning } from '../lib/tax/beregn';
-import { kr } from '../lib/format';
 import { useDiktering } from '../hooks/useDiktering';
 import { Knap, Notatfelt } from './ui';
 import { Mic, MicOff } from 'lucide-react';
@@ -21,13 +18,9 @@ function hilsen(): string {
 }
 
 export function Forside({
-  indkomstAar,
-  beregning,
   aiKlar,
   onStilSpoergsmaal,
 }: {
-  indkomstAar: IndkomstAar;
-  beregning: SkatteBeregning;
   aiKlar: boolean;
   onStilSpoergsmaal: (tekst: string) => void;
 }) {
@@ -44,22 +37,9 @@ export function Forside({
 
   return (
     <div>
-      <p className="text-2xs uppercase tracking-wide text-ink-faint">
-        Indkomstår {indkomstAar.aar}
-      </p>
-      <h1 className="mt-1 font-display text-2xl font-bold tracking-tight text-ink">
-        {hilsen()}.
-      </h1>
-      <p className="mt-2 max-w-[70ch] text-sm text-ink-muted">
-        Året står på <span className="tal font-medium text-ink">{kr(beregning.samletSkatOgAM)} kr.</span> i
-        skat og AM-bidrag, og den næste krone honorar beskattes med{' '}
-        <span className="tal font-medium text-ink">
-          {beregning.marginalskatProcent.toFixed(1).replace('.', ',')} %
-        </span>
-        .
-      </p>
+      <h1 className="font-display text-2xl font-bold tracking-tight text-ink">{hilsen()}.</h1>
 
-      <div className="mt-10 border-y border-rule-strong py-7">
+      <div className="mt-6 border-y border-rule-strong py-7">
         <div className="flex items-start gap-4">
           <div
             aria-hidden="true"
