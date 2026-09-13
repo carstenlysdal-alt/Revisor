@@ -436,7 +436,7 @@ export function Modal({
 
   return (
     <div
-      className="ikke-print fixed inset-0 z-50 flex items-stretch justify-center overflow-y-auto bg-ink/25 sm:items-start sm:p-8"
+      className="ikke-print fixed inset-0 z-50 flex h-dvh items-stretch justify-center overflow-y-auto bg-ink/25 sm:h-auto sm:items-start sm:p-8"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onLuk();
       }}
@@ -446,7 +446,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titelId}
-        className={`min-h-full w-full bg-surface sm:min-h-0 sm:border sm:border-rule-strong sm:shadow-lg ${bredde}`}
+        className={`min-h-dvh w-full bg-surface sm:min-h-0 sm:border sm:border-rule-strong sm:shadow-lg ${bredde}`}
       >
         <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-rule bg-surface px-5 py-4">
           <div>
