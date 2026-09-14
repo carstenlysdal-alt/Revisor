@@ -168,6 +168,9 @@ CREATE TABLE IF NOT EXISTS brugerprofil (
   medlem_folkekirken          boolean NOT NULL DEFAULT false,
   standard_transportmiddel    text NOT NULL DEFAULT 'OWN_CAR_MC',
   standard_bil_eller_maerke   text NOT NULL DEFAULT '',
+  fast_hvervgiver             text NOT NULL DEFAULT '',
   noter                       text NOT NULL DEFAULT '',
   opdateret                   timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE brugerprofil ADD COLUMN IF NOT EXISTS fast_hvervgiver text NOT NULL DEFAULT '';

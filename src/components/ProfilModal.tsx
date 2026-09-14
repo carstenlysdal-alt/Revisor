@@ -33,6 +33,7 @@ export function ProfilModal({ aaben, profil: startProfil, onLuk, onGem }: Props)
     medlemFolkekirken: Boolean(startProfil.medlemFolkekirken),
     standardTransportmiddel: startProfil.standardTransportmiddel ?? 'OWN_CAR_MC',
     standardBilorMærke: startProfil.standardBilorMærke ?? '',
+    fastHvervgiver: startProfil.fastHvervgiver ?? '',
     noter: startProfil.noter ?? '',
   }));
 
@@ -152,6 +153,20 @@ export function ProfilModal({ aaben, profil: startProfil, onLuk, onGem }: Props)
               )}
             </Felt>
           </div>
+
+          <Felt
+            label="Fast booker / hvervgiver (valgfrit)"
+            hjaelp="Hvis du oftest udbetales gennem det samme bookingbureau/agentur, mens spillestederne skifter. Så forveksler Revisor AI ikke spillestedet med din udbetaler."
+          >
+            {(id) => (
+              <Tekstfelt
+                id={id}
+                value={form.fastHvervgiver ?? ''}
+                placeholder="F.eks. Tajmer Booking, PDH Music eller primær udbetaler"
+                onChange={(e) => setForm({ ...form, fastHvervgiver: e.target.value })}
+              />
+            )}
+          </Felt>
         </section>
 
         {/* 2. Fast Bopæl & Skattekommune */}

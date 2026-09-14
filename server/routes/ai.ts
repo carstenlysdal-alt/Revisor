@@ -117,11 +117,20 @@ export function aiRoutes(repo: Repository, arkiv: BilagsLager): Router {
         : [];
 
       const tidligereHistorik = await repo.hentChatHistorik(HISTORIK_TIL_HUKOMMELSE);
-      const profil = await repo.hentProfil();
+      const snapshot = await repo.hentAlt();
+      const profil = snapshot.profil || (await repo.hentProfil());
+      const kendteHvervgivere = Array.from(
+        new Set([
+          ...(((beregning as Record<string, unknown>)?.kendteHvervgivere as string[]) || []),
+          ...snapshot.jobs.map((j) => j.hvervgiver).filter(Boolean),
+        ])
+      );
 
       const berigetBeregning = {
         ...(typeof beregning === 'object' && beregning !== null ? beregning : {}),
         profil,
+        fastHvervgiver: profil.fastHvervgiver,
+        kendteHvervgivere,
         navn: profil.navn || (beregning as Record<string, unknown>)?.navn,
         bopaelsadresse:
           profil.hjemmeadresse ||

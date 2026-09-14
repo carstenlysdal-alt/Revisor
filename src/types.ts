@@ -16,6 +16,7 @@ export interface BrugerProfil {
   medlemFolkekirken?: boolean;
   standardTransportmiddel?: TransportMiddel;
   standardBilorMærke?: string;
+  fastHvervgiver?: string;
   noter?: string;
 }
 

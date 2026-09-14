@@ -569,6 +569,7 @@ export class PostgresRepository implements Repository, BilagsLager {
       medlemFolkekirken: Boolean(r.medlem_folkekirken),
       standardTransportmiddel: r.standard_transportmiddel ?? undefined,
       standardBilorMærke: r.standard_bil_eller_maerke ?? undefined,
+      fastHvervgiver: r.fast_hvervgiver ?? undefined,
       noter: r.noter ?? undefined,
     };
   }
@@ -578,8 +579,8 @@ export class PostgresRepository implements Repository, BilagsLager {
       `INSERT INTO brugerprofil (
          id, navn, kunstnernavn, cpr_nummer, cvr_nummer, email, telefon,
          hjemmeadresse, kommune, kommune_skatteprocent, kirkeskatteprocent,
-         medlem_folkekirken, standard_transportmiddel, standard_bil_eller_maerke, noter, opdateret
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,now())
+         medlem_folkekirken, standard_transportmiddel, standard_bil_eller_maerke, fast_hvervgiver, noter, opdateret
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,now())
        ON CONFLICT (id) DO UPDATE SET
          navn = EXCLUDED.navn,
          kunstnernavn = EXCLUDED.kunstnernavn,
@@ -594,6 +595,7 @@ export class PostgresRepository implements Repository, BilagsLager {
          medlem_folkekirken = EXCLUDED.medlem_folkekirken,
          standard_transportmiddel = EXCLUDED.standard_transportmiddel,
          standard_bil_eller_maerke = EXCLUDED.standard_bil_eller_maerke,
+         fast_hvervgiver = EXCLUDED.fast_hvervgiver,
          noter = EXCLUDED.noter,
          opdateret = now()`,
       [
@@ -611,6 +613,7 @@ export class PostgresRepository implements Repository, BilagsLager {
         Boolean(p.medlemFolkekirken),
         p.standardTransportmiddel || 'OWN_CAR_MC',
         p.standardBilorMærke || '',
+        p.fastHvervgiver || '',
         p.noter || '',
       ]
     );

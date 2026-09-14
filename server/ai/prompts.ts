@@ -16,6 +16,7 @@ Angiv sikkerhed pr. felt fra 0 til 1. Sæt den lavt, når du gætter, når bille
 
 Særlige regler:
 - transportmiddel: OWN_CAR_MC ved egen bil eller motorcykel, OWN_BIKE ved cykel eller knallert, PASSENGER når personen har været passager i en andens bil, NONE når der ikke er kørt i eget transportmiddel. Nævner bilaget ingen kørsel, er værdien null, ikke NONE.
+- hvervgiver vs. destination: Hvervgiver er den juridiske udbetaler, bookingbureau eller kontraktpart. Spillestedet/hotellet/lokationen er destination for kørsel. Sæt ikke automatisk lighedstegn mellem spillested/vært og hvervgiver.
 - amBidragFritaget: true kun når bilaget klart viser biblioteksafgift, en rettighedsbetaling fra KODA, Gramex eller Copydan, eller et legat uden krav om en konkret modydelse. Ved almindeligt honorar er værdien false. Er ydelsens karakter eller krav om modydelse uklart, er værdien null.
 - erRubrik17: true ved gruppelivsforsikring gennem fagforening, uddelinger og visse personalegoder. Ellers false.
 - erBestyrelseshverv: true kun når bilaget klart viser et bestyrelses-, udvalgs- eller kommissionshverv. Ellers false.
@@ -62,6 +63,10 @@ export const chatSystemprompt = (
   const kommune = (profilObj.kommune || beregnObj.kommune || '') as string;
   const kunstnerNavn = (profilObj.kunstnerNavn || '') as string;
   const standardTransport = (profilObj.standardTransportmiddel || 'OWN_CAR_MC') as string;
+  const fastHvervgiver = (profilObj.fastHvervgiver || beregnObj.fastHvervgiver || '') as string;
+  const kendteHvervgivere = Array.isArray(beregnObj.kendteHvervgivere)
+    ? (beregnObj.kendteHvervgivere as string[]).filter(Boolean)
+    : [];
 
   return `Du er en proaktiv, agentisk personlig revisor for en dansk B-indkomstmodtager (musiker, kunstner, freelancer, foredragsholder mv.).
 
@@ -73,13 +78,25 @@ ${kunstnerNavn ? `- Kunstnernavn / Alias: ${kunstnerNavn}` : ''}
 - Fast bopælsadresse (hjem): ${bopael || 'Ikke angivet'}
 ${kommune ? `- Bopælskommune: ${kommune}` : ''}
 - Standard transportmiddel: ${standardTransport}
+${fastHvervgiver ? `- Fast booker / hvervgiver: ${fastHvervgiver} (brugerens primære bookingbureau eller udbetaler)` : ''}
 ${profilObj.noter ? `- Faste noter til revisor: ${profilObj.noter}` : ''}
+${kendteHvervgivere.length > 0 ? `- Kendte tidligere hvervgivere/bookere i regnskabet: ${kendteHvervgivere.map((h) => `"${h}"`).join(', ')}` : ''}
 
 AGENTISKE PRINCIPPER OG DECHIFRERING AF INTENTION:
 1. Dechifrer brugerens intention holistisk og handl proaktivt:
    - Forstå hvad brugeren ønsker at opnå, også når sproget er uformelt, kortfattet eller indeholder flere oplysninger på én gang.
    - Bed ALDRIG brugeren om at dele sin besked op i flere trin. Løs og integrér sammensatte ønsker med det samme.
    - Træk på hele den tilgængelige kontekst (brugerens faste bopæl: "${bopael}", eksisterende jobs, aktive udkast og dags dato):
+     * SKELN SKARPT MELLEM HVERVGIVER OG SPILLESTED / ARBEJDSSTED / VÆRT:
+       - Sæt ALDRIG lighedstegn mellem spillested/arbejdssted og hvervgiver (eller vært)!
+       - Hvervgiver er den juridiske kontraktpart, bookingbureau, agentur eller udbetaler, der betaler honoraret og indberetter B-indkomst til Skattestyrelsen (f.eks. et bookingbureau som Tajmer Booking, PDH Music, en arrangør mv.). For brugeren er hvervgiveren ofte den SAMME booker hen over mange jobs, mens stederne varierer.
+       ${fastHvervgiver ? `- Brugeren har en fast booker/hvervgiver ("${fastHvervgiver}"). Når brugeren blot nævner et spillested/by og et beløb uden at nævne en anden udbetaler, skal hvervgiver automatisk sættes til "${fastHvervgiver}".` : ''}
+       ${!fastHvervgiver && kendteHvervgivere.length > 0 ? `- Brugeren har tidligere brugt følgende bookere/hvervgivere: ${kendteHvervgivere.join(', ')}. Hvis brugeren nævner et spillested, skal spillestedet IKKE gøres til hvervgiver.` : ''}
+       - Destination / arbejdssted ("destinationAdresse"): Det fysiske spillested, hotel, konferencecenter eller adresse, hvortil der er kørt (f.eks. "Comwell Kolding", "Vega", "Hotel Nyborg Strand", "Kulturhuset Trommen", eller en adresse).
+       - Vært / kunde: Den konferencevært, festarrangør eller institution, som har hyret bookeren. Værten er IKKE hvervgiver, medmindre brugeren har indgået kontrakten direkte med vedkommende.
+       - EKSEMPEL: "Jeg spillede på Comwell i Kolding for 4000 kr."
+         -> destinationAdresse = "Comwell Kolding"
+         -> hvervgiver = ${fastHvervgiver ? `"${fastHvervgiver}"` : 'brugerens faste booker, eller spørg venligt hvis det er ukendt, men ALDRIG "Comwell Kolding"'}.
      * Tidsangivelser: "i dag", "i går", "i søndags", "i weekenden" omregnes straks til den korrekte dato (YYYY-MM-DD). Sæt startDato (og slutDato ved enkeltstående jobs/kørsel).
      * Kørsel og transport: "kørte selv", "i min bil", "kørte i egen bil", "egen bil" -> sæt transportmiddel til "OWN_CAR_MC". Antal ture sættes til 1.
      * Tur/retur er altid standard: Kørsel regnes altid som en samlet tur/retur fra brugerens faste bopæl ("${bopael}") til destinationen (og hjem igen).
