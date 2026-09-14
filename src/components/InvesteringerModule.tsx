@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import type { Bilag, IndkomstAar, Investering } from '../types';
 import { dato, kr, talFraFelt } from '../lib/format';
 import { api } from '../lib/api';
+import { Sparkles } from 'lucide-react';
 import {
   Advarsel,
   BeloebFelt,
@@ -29,6 +30,7 @@ interface Props {
   onGem: (inv: Investering) => Promise<unknown>;
   onSlet: (id: string) => Promise<unknown>;
   onAabnScanner: () => void;
+  onAabnChat?: (startBesked?: string) => void;
 }
 
 const nyInvestering = (indkomstAarId: string, aar: number): Investering => ({
@@ -48,6 +50,7 @@ export function InvesteringerModule({
   onGem,
   onSlet,
   onAabnScanner,
+  onAabnChat,
 }: Props) {
   const [redigerer, setRedigerer] = useState<Investering | null>(null);
   const [sletter, setSletter] = useState<Investering | null>(null);
@@ -78,6 +81,22 @@ export function InvesteringerModule({
 
   const laast = indkomstAar.laast;
 
+  const aiKnap = onAabnChat ? (
+    <Knap
+      art="sekundaer"
+      onClick={() =>
+        onAabnChat(
+          'Jeg har et spørgsmål om investeringer, udstyr eller afskrivning af aktiver:'
+        )
+      }
+      aria-label="Spørg Revisor AI"
+      title="Spørg Revisor AI"
+    >
+      <Sparkles className="h-3.5 w-3.5" />
+      <span className="hidden sm:inline">Spørg Revisor</span>
+    </Knap>
+  ) : null;
+
   return (
     <Sektion
       titel="Investeringer"
@@ -85,6 +104,7 @@ export function InvesteringerModule({
       handling={
         laast ? null : (
           <>
+            {aiKnap}
             <Knap onClick={onAabnScanner} className="hidden lg:inline-flex">
               Læs en faktura
             </Knap>
@@ -229,6 +249,24 @@ export function InvesteringerModule({
         {redigerer && (
           <div className="space-y-5">
             {fejl && <Advarsel titel="Investeringen blev ikke gemt">{fejl}</Advarsel>}
+
+            {onAabnChat && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onAabnChat(
+                      'Hjælp mig med regler for afskrivning eller fradrag for denne investering:'
+                    )
+                  }
+                  className="inline-flex items-center gap-1.5 text-2xs text-ink-muted hover:text-ink underline underline-offset-4"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-ink-muted" />
+                  <span>Spørg Revisor AI om råd</span>
+                </button>
+              </div>
+            )}
+
             <Felt label="Investering" paakraevet>
               {(id) => (
                 <Tekstfelt

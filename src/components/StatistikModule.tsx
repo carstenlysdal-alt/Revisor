@@ -1,10 +1,12 @@
 import React, { useMemo } from 'react';
 import type { Job } from '../types';
 import { kr } from '../lib/format';
+import { Sparkles } from 'lucide-react';
 import { Knap, Sektion, Tabel, Td, Th, TomTilstand } from './ui';
 
 interface Props {
   jobs: Job[];
+  onAabnChat?: (startBesked?: string) => void;
 }
 
 const UDEN_TYPE = 'Uden type';
@@ -122,7 +124,7 @@ const saml = (jobs: Job[], noegle: (job: Job) => string): Raekke[] => {
   return [...kort.values()];
 };
 
-export function StatistikModule({ jobs }: Props) {
+export function StatistikModule({ jobs, onAabnChat }: Props) {
   const prType = useMemo(
     () =>
       saml(jobs, (j) => j.type?.trim() || UDEN_TYPE).sort((a, b) => b.honorar - a.honorar),
@@ -165,7 +167,26 @@ export function StatistikModule({ jobs }: Props) {
           ? 'Fordelingen af årets honorarer og timer. Timelønnen regnes af både arbejdstid og forberedelse og transport.'
           : 'Fordelingen af årets honorarer. Udfylder du timer på jobbene, kommer timelønnen med her.'
       }
-      handling={<Knap onClick={() => window.print()}>Udskriv</Knap>}
+      handling={
+        <div className="flex items-center gap-2">
+          {onAabnChat && (
+            <Knap
+              art="sekundaer"
+              onClick={() =>
+                onAabnChat(
+                  'Hjælp mig med at analysere min statistik for honorarer og timeforbrug:'
+                )
+              }
+              aria-label="Spørg Revisor AI"
+              title="Spørg Revisor AI"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Spørg Revisor</span>
+            </Knap>
+          )}
+          <Knap onClick={() => window.print()}>Udskriv</Knap>
+        </div>
+      }
     >
       <div className="space-y-10">
         <Fordeling titel="Honorar pr. type" raekker={prType} visTimeloen={medTimer} />

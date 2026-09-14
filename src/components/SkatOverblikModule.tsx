@@ -2,11 +2,13 @@ import React from 'react';
 import type { IndkomstAar } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
 import { kr, pct } from '../lib/format';
+import { Sparkles } from 'lucide-react';
 import { Advarsel, Knap, Rubrik, Sektion } from './ui';
 
 interface Props {
   indkomstAar: IndkomstAar;
   beregning: SkatteBeregning;
+  onAabnChat?: (startBesked?: string) => void;
 }
 
 function Linje({
@@ -55,14 +57,33 @@ function Total({ tekst, beloeb, note }: { tekst: string; beloeb: number; note?: 
   );
 }
 
-export function SkatOverblikModule({ indkomstAar, beregning }: Props) {
+export function SkatOverblikModule({ indkomstAar, beregning, onAabnChat }: Props) {
   const { skat, satser } = beregning;
 
   return (
     <Sektion
       titel={`Skatteoverblik ${beregning.aar}`}
       beskrivelse={`Hvad B-indkomsten koster oven i den A-indkomst, du har oplyst. Beregnet med satserne for ${satser.aar} og en kommuneskat på ${indkomstAar.kommuneSkatteprocent.toString().replace('.', ',')} %.`}
-      handling={<Knap onClick={() => window.print()}>Udskriv</Knap>}
+      handling={
+        <div className="flex items-center gap-2">
+          {onAabnChat && (
+            <Knap
+              art="sekundaer"
+              onClick={() =>
+                onAabnChat(
+                  `Forklar venligst mit skatteoverblik og marginalskat for ${beregning.aar}:`
+                )
+              }
+              aria-label="Spørg Revisor AI"
+              title="Spørg Revisor AI"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Spørg Revisor</span>
+            </Knap>
+          )}
+          <Knap onClick={() => window.print()}>Udskriv</Knap>
+        </div>
+      }
     >
       {beregning.advarsler.length > 0 && (
         <div className="mb-5 space-y-2">

@@ -3,6 +3,7 @@ import type { Bilag, Fradrag, IndkomstAar } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
 import { dato, kr, pct, talFraFelt } from '../lib/format';
 import { api } from '../lib/api';
+import { Sparkles } from 'lucide-react';
 import {
   Advarsel,
   BeloebFelt,
@@ -32,6 +33,7 @@ interface Props {
   onGem: (fradrag: Fradrag) => Promise<unknown>;
   onSlet: (id: string) => Promise<unknown>;
   onAabnScanner: () => void;
+  onAabnChat?: (startBesked?: string) => void;
 }
 
 const UDEFINERET = 'Uden kategori';
@@ -57,6 +59,7 @@ export function FradragModule({
   onGem,
   onSlet,
   onAabnScanner,
+  onAabnChat,
 }: Props) {
   const [redigerer, setRedigerer] = useState<Fradrag | null>(null);
   const [sletter, setSletter] = useState<Fradrag | null>(null);
@@ -133,6 +136,22 @@ export function FradragModule({
 
   const laast = indkomstAar.laast;
 
+  const aiKnap = onAabnChat ? (
+    <Knap
+      art="sekundaer"
+      onClick={() =>
+        onAabnChat(
+          'Jeg har et spørgsmål om fradrag, driftsomkostninger (rubrik 29) eller moms/kvitteringer:'
+        )
+      }
+      aria-label="Spørg Revisor AI"
+      title="Spørg Revisor AI"
+    >
+      <Sparkles className="h-3.5 w-3.5" />
+      <span className="hidden sm:inline">Spørg Revisor</span>
+    </Knap>
+  ) : null;
+
   return (
     <Sektion
       titel="Udgifter & fradrag"
@@ -140,6 +159,7 @@ export function FradragModule({
       handling={
         laast ? null : (
           <>
+            {aiKnap}
             <Knap onClick={onAabnScanner} className="hidden lg:inline-flex">
               Læs en kvittering
             </Knap>
@@ -171,8 +191,9 @@ export function FradragModule({
                   Nyt fradrag
                 </Knap>
                 <Knap onClick={onAabnScanner} className="hidden lg:inline-flex">
-              Læs en kvittering
-            </Knap>
+                  Læs en kvittering
+                </Knap>
+                {aiKnap}
               </>
             )
           }
@@ -366,6 +387,23 @@ export function FradragModule({
         {redigerer && (
           <div className="space-y-5">
             {fejl && <Advarsel titel="Fradraget blev ikke gemt">{fejl}</Advarsel>}
+
+            {onAabnChat && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onAabnChat(
+                      'Hjælp mig med regler for fradrag og skattefradrag for denne udgift:'
+                    )
+                  }
+                  className="inline-flex items-center gap-1.5 text-2xs text-ink-muted hover:text-ink underline underline-offset-4"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-ink-muted" />
+                  <span>Spørg Revisor AI om råd</span>
+                </button>
+              </div>
+            )}
 
             <Felt label="Fradragsberettiget omkostning" paakraevet>
               {(id) => (

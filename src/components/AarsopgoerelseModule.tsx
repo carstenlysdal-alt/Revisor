@@ -2,14 +2,16 @@ import React from 'react';
 import type { IndkomstAar } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
 import { kr } from '../lib/format';
+import { Sparkles } from 'lucide-react';
 import { Advarsel, Knap, Rubrik, Sektion, Tabel, Td, Th } from './ui';
 
 interface Props {
   indkomstAar: IndkomstAar;
   beregning: SkatteBeregning;
+  onAabnChat?: (startBesked?: string) => void;
 }
 
-export function AarsopgoerelseModule({ indkomstAar, beregning }: Props) {
+export function AarsopgoerelseModule({ indkomstAar, beregning, onAabnChat }: Props) {
   const rubrikker: {
     nr: 12 | 17 | 29 | 51;
     navn: string;
@@ -47,7 +49,26 @@ export function AarsopgoerelseModule({ indkomstAar, beregning }: Props) {
     <Sektion
       titel={`Årsopgørelse ${beregning.aar}`}
       beskrivelse="Tallene, som de skal stå på årsopgørelsen på skat.dk. Sammenlign dem med det, der allerede er indberettet."
-      handling={<Knap onClick={() => window.print()}>Udskriv</Knap>}
+      handling={
+        <div className="flex items-center gap-2">
+          {onAabnChat && (
+            <Knap
+              art="sekundaer"
+              onClick={() =>
+                onAabnChat(
+                  `Hjælp mig med at forstå og indberette tallene på min årsopgørelse for ${beregning.aar}:`
+                )
+              }
+              aria-label="Spørg Revisor AI"
+              title="Spørg Revisor AI"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Spørg Revisor</span>
+            </Knap>
+          )}
+          <Knap onClick={() => window.print()}>Udskriv</Knap>
+        </div>
+      }
     >
       <Tabel minBredde={620}>
         <thead>

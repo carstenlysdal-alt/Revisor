@@ -20,6 +20,18 @@ import { Forside } from './components/Forside';
 import { GlobalSidebar } from './components/GlobalSidebar';
 import { AiBilagScannerModal } from './components/AiBilagScannerModal';
 import { RevisorChatModal } from './components/RevisorChatModal';
+import {
+  BarChart2,
+  Briefcase,
+  Building2,
+  Calculator,
+  Car,
+  FileCheck,
+  FileText,
+  Home,
+  Receipt,
+  Sparkles,
+} from 'lucide-react';
 import { Advarsel, Knap, RevisorMaerke } from './components/ui';
 import { kr } from './lib/format';
 
@@ -78,19 +90,19 @@ function MobilOverblik({
 
 /** Daglig drift: det, der løbende registreres. */
 const FANER_DRIFT = [
-  { id: 'forside', navn: 'Forside' },
-  { id: 'indtaegter', navn: 'Indtægter' },
-  { id: 'fradrag', navn: 'Udgifter & fradrag' },
-  { id: 'koersel', navn: 'Kørsel' },
-  { id: 'investeringer', navn: 'Investeringer' },
+  { id: 'forside', navn: 'Forside', ikon: Home },
+  { id: 'indtaegter', navn: 'Indtægter', ikon: Briefcase },
+  { id: 'fradrag', navn: 'Udgifter & fradrag', ikon: Receipt },
+  { id: 'koersel', navn: 'Kørsel', ikon: Car },
+  { id: 'investeringer', navn: 'Investeringer', ikon: Building2 },
 ];
 
 /** Samlet overblik: det, der ser tilbage på hele året. */
 const FANER_OVERBLIK = [
-  { id: 'overblik', navn: 'Skatteoverblik' },
-  { id: 'aarsopgoerelse', navn: 'Årsopgørelse' },
-  { id: 'statistik', navn: 'Statistik' },
-  { id: 'dokumentation', navn: 'Dokumentation' },
+  { id: 'overblik', navn: 'Skatteoverblik', ikon: Calculator },
+  { id: 'aarsopgoerelse', navn: 'Årsopgørelse', ikon: FileCheck },
+  { id: 'statistik', navn: 'Statistik', ikon: BarChart2 },
+  { id: 'dokumentation', navn: 'Dokumentation', ikon: FileText },
 ];
 
 function FaneKnap({
@@ -98,23 +110,25 @@ function FaneKnap({
   aktiv,
   onNaviger,
 }: {
-  fane: { id: string; navn: string };
+  fane: { id: string; navn: string; ikon?: React.ComponentType<{ className?: string }> };
   aktiv: boolean;
   onNaviger: (naeste: { fane: string }) => void;
 }) {
+  const Ikon = fane.ikon;
   return (
     <li>
       <button
         type="button"
         onClick={() => onNaviger({ fane: fane.id })}
         aria-current={aktiv ? 'page' : undefined}
-        className={`overgang whitespace-nowrap border-b-2 px-3 py-2 text-xs ${
+        className={`overgang inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-xs ${
           aktiv
             ? 'border-ink font-semibold text-ink'
             : 'border-transparent text-ink-muted hover:text-ink'
         }`}
       >
-        {fane.navn}
+        {Ikon && <Ikon className="h-3.5 w-3.5 shrink-0" />}
+        <span>{fane.navn}</span>
       </button>
     </li>
   );
@@ -460,6 +474,7 @@ export default function App() {
                       onGem={medFejlhaandtering(d.gemJob)}
                       onSlet={medFejlhaandtering(d.sletJob)}
                       onAabnScanner={() => setScannerAaben(true)}
+                      onAabnChat={stilSpoergsmaal}
                     />
                   )}
 
@@ -473,6 +488,7 @@ export default function App() {
                       onGem={medFejlhaandtering(d.gemJob)}
                       onSlet={medFejlhaandtering(d.sletJob)}
                       onAabnScanner={() => setScannerAaben(true)}
+                      onAabnChat={stilSpoergsmaal}
                     />
                   )}
 
@@ -485,15 +501,24 @@ export default function App() {
                       onGem={medFejlhaandtering(d.gemFradrag)}
                       onSlet={medFejlhaandtering(d.sletFradrag)}
                       onAabnScanner={() => setScannerAaben(true)}
+                      onAabnChat={stilSpoergsmaal}
                     />
                   )}
 
                   {visning.fane === 'overblik' && (
-                    <SkatOverblikModule indkomstAar={aktivtAar} beregning={beregning} />
+                    <SkatOverblikModule
+                      indkomstAar={aktivtAar}
+                      beregning={beregning}
+                      onAabnChat={stilSpoergsmaal}
+                    />
                   )}
 
                   {visning.fane === 'aarsopgoerelse' && (
-                    <AarsopgoerelseModule indkomstAar={aktivtAar} beregning={beregning} />
+                    <AarsopgoerelseModule
+                      indkomstAar={aktivtAar}
+                      beregning={beregning}
+                      onAabnChat={stilSpoergsmaal}
+                    />
                   )}
 
                   {visning.fane === 'opsparing' && (
@@ -510,7 +535,9 @@ export default function App() {
                     />
                   )}
 
-                  {visning.fane === 'statistik' && <StatistikModule jobs={aaretsJobs} />}
+                  {visning.fane === 'statistik' && (
+                    <StatistikModule jobs={aaretsJobs} onAabnChat={stilSpoergsmaal} />
+                  )}
 
                   {visning.fane === 'investeringer' && (
                     <InvesteringerModule
@@ -520,6 +547,7 @@ export default function App() {
                       onGem={medFejlhaandtering(d.gemInvestering)}
                       onSlet={medFejlhaandtering(d.sletInvestering)}
                       onAabnScanner={() => setScannerAaben(true)}
+                      onAabnChat={stilSpoergsmaal}
                     />
                   )}
 
@@ -529,6 +557,7 @@ export default function App() {
                       jobs={d.data.jobs}
                       fradrag={d.data.fradrag}
                       investeringer={d.data.investeringer}
+                      onAabnChat={stilSpoergsmaal}
                     />
                   )}
                 </>
@@ -587,9 +616,10 @@ export default function App() {
           <button
             type="button"
             onClick={() => setChatAaben(true)}
-            className="flex shrink-0 items-center justify-center bg-surface px-5 py-3.5 text-sm font-medium text-ink"
+            className="flex shrink-0 items-center justify-center gap-1.5 bg-surface px-5 py-3.5 text-sm font-medium text-ink"
           >
-            Revisor
+            <Sparkles className="h-4 w-4" />
+            <span>Revisor</span>
           </button>
         </nav>
       )}

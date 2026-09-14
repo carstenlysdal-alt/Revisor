@@ -3,6 +3,7 @@ import type { Fradrag, IndkomstAar, Investering, Job } from '../types';
 import { beregnSkat } from '../lib/tax/beregn';
 import { UkendtIndkomstAarError } from '../lib/tax/satser';
 import { dato, kr } from '../lib/format';
+import { Sparkles } from 'lucide-react';
 import { Advarsel, Knap, Sektion, Vaelger } from './ui';
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
   jobs: Job[];
   fradrag: Fradrag[];
   investeringer: Investering[];
+  onAabnChat?: (startBesked?: string) => void;
 }
 
 /**
@@ -273,7 +275,13 @@ function AarsRapport({
   );
 }
 
-export function DokumentationModule({ indkomstAarListe, jobs, fradrag, investeringer }: Props) {
+export function DokumentationModule({
+  indkomstAarListe,
+  jobs,
+  fradrag,
+  investeringer,
+  onAabnChat,
+}: Props) {
   const [valgtAarId, setValgtAarId] = useState<string>('alle');
 
   const sorteret = useMemo(
@@ -289,6 +297,21 @@ export function DokumentationModule({ indkomstAarListe, jobs, fradrag, investeri
       beskrivelse="Én samlet, printvenlig opgørelse over dine honorarjobs, fradrag og investeringer — til revisor, bank eller SKAT. Vælg et enkelt år eller alle på én gang."
       handling={
         <>
+          {onAabnChat && (
+            <Knap
+              art="sekundaer"
+              onClick={() =>
+                onAabnChat(
+                  'Hjælp mig med dokumentation og krav til bilag for SKAT / revisor:'
+                )
+              }
+              aria-label="Spørg Revisor AI"
+              title="Spørg Revisor AI"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Spørg Revisor</span>
+            </Knap>
+          )}
           <Vaelger value={valgtAarId} onChange={(e) => setValgtAarId(e.target.value)} className="w-auto">
             <option value="alle">Alle indkomstår</option>
             {sorteret.map((a) => (

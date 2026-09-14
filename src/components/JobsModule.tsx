@@ -6,6 +6,7 @@ import { beregnKoerselForJob } from '../lib/tax/koersel';
 import { dato, idag, kr, talFraFelt, timer } from '../lib/format';
 import { api } from '../lib/api';
 import { createGoogleCalendarUrl, hentIcsFil } from '../utils/calendarExport';
+import { Sparkles } from 'lucide-react';
 import {
   Advarsel,
   Afkrydsning,
@@ -37,11 +38,7 @@ interface Props {
   onGem: (job: Job) => Promise<unknown>;
   onSlet: (id: string) => Promise<unknown>;
   onAabnScanner: () => void;
-  /**
-   * Samme jobs, to visninger. Kørsel er altid en del af jobbet, det hører
-   * til — der findes ikke en egen kørselspost, kun et andet udsnit af
-   * kolonner over de samme data, og den samme "Nyt job"-formular.
-   */
+  onAabnChat?: (startBesked?: string) => void;
   visning?: 'indtaegter' | 'koersel';
 }
 
@@ -127,6 +124,7 @@ export function JobsModule({
   onGem,
   onSlet,
   onAabnScanner,
+  onAabnChat,
   visning = 'indtaegter',
 }: Props) {
   const [redigerer, setRedigerer] = useState<Job | null>(null);
@@ -303,6 +301,24 @@ export function JobsModule({
     </Knap>
   );
 
+  const aiKnap = onAabnChat ? (
+    <Knap
+      art="sekundaer"
+      onClick={() =>
+        onAabnChat(
+          visning === 'koersel'
+            ? 'Jeg har et spørgsmål om regler for kørsel (rubrik 29 / rubrik 51) og kørselsfradrag:'
+            : 'Jeg har et spørgsmål om indtægter, honorarer (rubrik 12) eller B-indkomst:'
+        )
+      }
+      aria-label="Spørg Revisor AI"
+      title="Spørg Revisor AI"
+    >
+      <Sparkles className="h-3.5 w-3.5" />
+      <span className="hidden sm:inline">Spørg Revisor</span>
+    </Knap>
+  ) : null;
+
   return (
     <Sektion
       titel={visning === 'koersel' ? 'Kørsel' : 'Indtægter'}
@@ -311,7 +327,7 @@ export function JobsModule({
           ? `Kørsel i egen bil eller på egen cykel til jobs, øvere eller andre erhvervsmæssige aktiviteter havner i rubrik 29 — næsten altid en bedre skatteværdi end befordringsfradraget i rubrik 51. Bestyrelseshverv uden kørselsgodtgørelse bruger i stedet rubrik 51. Adressen tager udgangspunkt i din egen hjemmeadresse, sat under Indkomstår.`
           : `Honorarer havner normalt i rubrik 12 på årsopgørelsen. Satserne for ${beregning.satser.aar} bruges automatisk.`
       }
-      handling={laast ? null : <>{læsBilagKnap}{handlingKnap}</>}
+      handling={laast ? null : <>{aiKnap}{læsBilagKnap}{handlingKnap}</>}
     >
       {visteJobs.length === 0 ? (
         <TomTilstand
@@ -320,7 +336,7 @@ export function JobsModule({
               ? 'Der er ikke registreret kørsel endnu. Opret en kørsel for at registrere ture til f.eks. øvere, prøver, møder eller jobs.'
               : 'Der er ingen jobs i året endnu. Opret det første, eller læg en honorarkontrakt ind og lad den blive læst.'
           }
-          handling={laast ? undefined : <>{handlingKnap}{læsBilagKnap}</>}
+          handling={laast ? undefined : <>{handlingKnap}{læsBilagKnap}{aiKnap}</>}
         />
       ) : visning === 'koersel' ? (
         <Responsiv
@@ -635,6 +651,25 @@ export function JobsModule({
               <Advarsel titel={visning === 'koersel' ? 'Kørslen blev ikke gemt' : 'Jobbet blev ikke gemt'}>
                 {fejl}
               </Advarsel>
+            )}
+
+            {onAabnChat && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() =>
+                    onAabnChat(
+                      visning === 'koersel'
+                        ? 'Hjælp mig med regler for kørsel og befordringsfradrag:'
+                        : 'Hjælp mig med at vurdere dette job og dets skattemæssige behandling:'
+                    )
+                  }
+                  className="inline-flex items-center gap-1.5 text-2xs text-ink-muted hover:text-ink underline underline-offset-4"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-ink-muted" />
+                  <span>Spørg Revisor AI om råd</span>
+                </button>
+              </div>
             )}
 
             {visning === 'koersel' ? (
