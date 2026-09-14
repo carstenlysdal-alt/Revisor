@@ -253,14 +253,17 @@ export function opretGeminiUdbyder(): AiUdbyder {
             : forslag;
           return { tekst: flettet.besked, kilder: kilder ?? [], forslag: flettet };
         } catch (err) {
-          // Modellen kaldte værktøjet, men leverede et udkast, der ikke kunne
-          // læses — typisk en besked med flere fakta på én gang. Bedre at
-          // bede brugeren dele det op end at kaste en fejl, der intet siger
-          // om hvad der gik galt.
           console.error('foreslaaPostering: udkastet kunne ikke læses.', err, kald.args);
+          if (indgang.aktivtForslag) {
+            return {
+              tekst: `Jeg har noteret tilføjelsen til dit udkast for ${indgang.aktivtForslag.hvervgiver || indgang.aktivtForslag.titel || 'posteringen'}. Kan du bekræfte de specifikke detaljer (f.eks. dato eller kørsel), så opdaterer jeg straks?`,
+              kilder: kilder ?? [],
+              forslag: indgang.aktivtForslag,
+            };
+          }
           return {
             tekst:
-              'Jeg fangede ikke det hele i den besked. Prøv at dele den op — fx hvervgiver og beløb først, kørslen bagefter.',
+              'Jeg har modtaget dine oplysninger om posteringen. Kunne du bekræfte eller uddybe et enkelt felt (fx beløb eller dato), så gør jeg straks udkastet helt klar til dig?',
             kilder: kilder ?? [],
           };
         }

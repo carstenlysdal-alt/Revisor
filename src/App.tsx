@@ -647,6 +647,7 @@ export default function App() {
           indkomstAar={aktivtAar}
           indkomstAarListe={aarListe}
           beregning={beregning}
+          jobs={aaretsJobs}
           aiKlar={aiKlar}
           onGemJob={medFejlhaandtering(d.gemJob)}
           onGemFradrag={medFejlhaandtering(d.gemFradrag)}

@@ -16,6 +16,7 @@ interface Props {
   indkomstAar: IndkomstAar;
   indkomstAarListe: IndkomstAar[];
   beregning: SkatteBeregning;
+  jobs?: Job[];
   aiKlar: boolean;
   onGemJob: (job: Job) => Promise<unknown>;
   onGemFradrag: (fradrag: Fradrag) => Promise<unknown>;
@@ -51,6 +52,7 @@ export function RevisorChatModal({
   indkomstAar,
   indkomstAarListe,
   beregning,
+  jobs,
   aiKlar,
   onGemJob,
   onGemFradrag,
@@ -106,7 +108,10 @@ export function RevisorChatModal({
    */
   const kontekst = () => ({
     aar: beregning.aar,
+    bopaelsadresse: indkomstAar.hjemmeadresse || undefined,
+    hjemmeadresse: indkomstAar.hjemmeadresse || undefined,
     kommune: indkomstAar.kommune,
+    kendteHvervgivere: jobs ? Array.from(new Set(jobs.map((j) => j.hvervgiver).filter(Boolean))) : [],
     honorarerRubrik12: beregning.honorarerRubrik12,
     rubrik17: beregning.rubrik17Indkomst,
     amBidrag: beregning.amBidrag,
