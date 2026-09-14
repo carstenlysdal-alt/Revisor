@@ -1,0 +1,268 @@
+import React, { useState } from 'react';
+import type { BrugerProfil, TransportMiddel } from '../types';
+import { KOMMUNENAVNE, getKommuneSatser } from '../lib/tax/kommuner';
+import { AdresseInput } from './AdresseInput';
+import {
+  Afkrydsning,
+  Felt,
+  Knap,
+  Modal,
+  Tekstfelt,
+  Vaelger,
+} from './ui';
+
+interface Props {
+  aaben: boolean;
+  profil: BrugerProfil;
+  onLuk: () => void;
+  onGem: (profil: BrugerProfil) => Promise<unknown>;
+}
+
+export function ProfilModal({ aaben, profil: startProfil, onLuk, onGem }: Props) {
+  const [form, setForm] = useState<BrugerProfil>(() => ({
+    navn: startProfil.navn ?? '',
+    kunstnerNavn: startProfil.kunstnerNavn ?? '',
+    cprNummer: startProfil.cprNummer ?? '',
+    cvrNummer: startProfil.cvrNummer ?? '',
+    email: startProfil.email ?? '',
+    telefon: startProfil.telefon ?? '',
+    hjemmeadresse: startProfil.hjemmeadresse ?? '',
+    kommune: startProfil.kommune ?? '',
+    kommuneSkatteprocent: startProfil.kommuneSkatteprocent,
+    kirkeskatteprocent: startProfil.kirkeskatteprocent,
+    medlemFolkekirken: Boolean(startProfil.medlemFolkekirken),
+    standardTransportmiddel: startProfil.standardTransportmiddel ?? 'OWN_CAR_MC',
+    standardBilorMærke: startProfil.standardBilorMærke ?? '',
+    noter: startProfil.noter ?? '',
+  }));
+
+  const [gemmer, setGemmer] = useState(false);
+  const [fejl, setFejl] = useState<string | null>(null);
+  const [succes, setSucces] = useState(false);
+
+  const vaelgKommune = (kommuneNavn: string) => {
+    const satser = kommuneNavn ? getKommuneSatser(kommuneNavn, new Date().getFullYear()) : null;
+    setForm((prev) => ({
+      ...prev,
+      kommune: kommuneNavn,
+      kommuneSkatteprocent: satser?.kommuneskat ?? prev.kommuneSkatteprocent,
+      kirkeskatteprocent: satser?.kirkeskat ?? prev.kirkeskatteprocent,
+    }));
+  };
+
+  const haandterGem = async () => {
+    setGemmer(true);
+    setFejl(null);
+    setSucces(false);
+    try {
+      if (!form.navn.trim()) {
+        setFejl('Skriv venligst dit navn.');
+        setGemmer(false);
+        return;
+      }
+      await onGem(form);
+      setSucces(true);
+      setTimeout(() => {
+        onLuk();
+      }, 750);
+    } catch (err) {
+      setFejl(err instanceof Error ? err.message : 'Profilen kunne ikke gemmes.');
+    } finally {
+      setGemmer(false);
+    }
+  };
+
+  return (
+    <Modal
+      aaben={aaben}
+      titel="Min profil & faste stamdata"
+      onLuk={onLuk}
+      maxWidth="max-w-2xl"
+      bund={
+        <div className="flex w-full items-center justify-between">
+          <div>
+            {succes && <span className="text-xs font-medium text-positive">Profil gemt!</span>}
+            {fejl && <span className="text-xs text-negative">{fejl}</span>}
+          </div>
+          <div className="flex gap-2">
+            <Knap onClick={onLuk} disabled={gemmer}>
+              Luk
+            </Knap>
+            <Knap art="primaer" onClick={haandterGem} disabled={gemmer}>
+              {gemmer ? 'Gemmer…' : 'Gem profil'}
+            </Knap>
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-6">
+        <p className="text-xs text-ink-muted">
+          Dine faste oplysninger bruges som grundlag i hele appen. Revisor AI kender altid din
+          bopæl og dine kørselsvaner, så ruteberegninger automatisk regnes fra dit hjem.
+        </p>
+
+        {/* 1. Person & Virksomhed */}
+        <section className="space-y-3">
+          <h3 className="font-display text-sm font-semibold tracking-tight text-ink">
+            Personlige oplysninger
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Felt label="Fulde navn" paakraevet>
+              {(id) => (
+                <Tekstfelt
+                  id={id}
+                  value={form.navn}
+                  placeholder="F.eks. Carsten Lysdal"
+                  onChange={(e) => setForm({ ...form, navn: e.target.value })}
+                />
+              )}
+            </Felt>
+            <Felt label="Kunstnernavn / Alias" hjaelp="Valgfrit bandnavn eller alias">
+              {(id) => (
+                <Tekstfelt
+                  id={id}
+                  value={form.kunstnerNavn ?? ''}
+                  placeholder="F.eks. DJ / Musiker / Forfatter"
+                  onChange={(e) => setForm({ ...form, kunstnerNavn: e.target.value })}
+                />
+              )}
+            </Felt>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Felt label="E-mail" hjaelp="Valgfrit">
+              {(id) => (
+                <Tekstfelt
+                  id={id}
+                  type="email"
+                  value={form.email ?? ''}
+                  placeholder="navn@domæne.dk"
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                />
+              )}
+            </Felt>
+            <Felt label="Telefon" hjaelp="Valgfrit">
+              {(id) => (
+                <Tekstfelt
+                  id={id}
+                  type="tel"
+                  value={form.telefon ?? ''}
+                  placeholder="+45 12 34 56 78"
+                  onChange={(e) => setForm({ ...form, telefon: e.target.value })}
+                />
+              )}
+            </Felt>
+          </div>
+        </section>
+
+        {/* 2. Fast Bopæl & Skattekommune */}
+        <section className="space-y-3 border-t border-rule pt-4">
+          <h3 className="font-display text-sm font-semibold tracking-tight text-ink">
+            Fast bopæl & Skat
+          </h3>
+          <Felt
+            label="Fast bopælsadresse (Hjemmeadresse)"
+            hjaelp="Ruteberegning og Revisor AI starter altid automatisk herfra."
+          >
+            {(id) => (
+              <AdresseInput
+                id={id}
+                value={form.hjemmeadresse}
+                placeholder="F.eks. Stjernebakken 12, 4200 Slagelse"
+                onChange={(v) => setForm({ ...form, hjemmeadresse: v })}
+              />
+            )}
+          </Felt>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Felt label="Bopælskommune">
+              {(id) => (
+                <Vaelger
+                  id={id}
+                  value={form.kommune}
+                  onChange={(e) => vaelgKommune(e.target.value)}
+                >
+                  <option value="">Vælg kommune…</option>
+                  {KOMMUNENAVNE.map((k) => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </Vaelger>
+              )}
+            </Felt>
+            <div className="flex items-center pt-5">
+              <Afkrydsning
+                label="Medlem af Folkekirken"
+                checked={Boolean(form.medlemFolkekirken)}
+                onChange={(e) => setForm({ ...form, medlemFolkekirken: e.target.checked })}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* 3. Transport & Kørebog */}
+        <section className="space-y-3 border-t border-rule pt-4">
+          <h3 className="font-display text-sm font-semibold tracking-tight text-ink">
+            Transport & Kørselspræferencer
+          </h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Felt
+              label="Standard transportmiddel"
+              hjaelp="Brugt som standard for nye honorarjobs og kørsel."
+            >
+              {(id) => (
+                <Vaelger
+                  id={id}
+                  value={form.standardTransportmiddel || 'OWN_CAR_MC'}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      standardTransportmiddel: e.target.value as TransportMiddel,
+                    })
+                  }
+                >
+                  <option value="OWN_CAR_MC">Egen bil / MC, rubrik 29</option>
+                  <option value="OWN_BIKE">Egen cykel, rubrik 29</option>
+                  <option value="PASSENGER">Passager, rubrik 51</option>
+                  <option value="NONE">Ingen kørsel som udgangspunkt</option>
+                </Vaelger>
+              )}
+            </Felt>
+            <Felt
+              label="Køretøj / reg.nr. (valgfrit)"
+              hjaelp="Til dokumentation og kørebog."
+            >
+              {(id) => (
+                <Tekstfelt
+                  id={id}
+                  value={form.standardBilorMærke ?? ''}
+                  placeholder="F.eks. VW Golf (AB 12 345)"
+                  onChange={(e) => setForm({ ...form, standardBilorMærke: e.target.value })}
+                />
+              )}
+            </Felt>
+          </div>
+        </section>
+
+        {/* 4. Noter og faste instruktioner til Revisor AI */}
+        <section className="space-y-2 border-t border-rule pt-4">
+          <Felt
+            label="Faste noter til Revisor AI"
+            hjaelp="Særlige faste oplysninger du vil have at AI'en altid husker (f.eks. 'Jeg er musiker i et fast jazzorkester og spiller ofte i Jylland')"
+          >
+            {(id) => (
+              <textarea
+                id={id}
+                rows={2}
+                value={form.noter ?? ''}
+                placeholder="F.eks. særlige fradragsforhold, brancher eller faste spillesteder..."
+                onChange={(e) => setForm({ ...form, noter: e.target.value })}
+                className="w-full rounded-[4px] border border-rule-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint"
+              />
+            )}
+          </Felt>
+        </section>
+      </div>
+    </Modal>
+  );
+}

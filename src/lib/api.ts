@@ -1,6 +1,7 @@
 import type {
   Bilag,
   BilagsAnalyse,
+  BrugerProfil,
   Fradrag,
   IndkomstAar,
   Investering,
@@ -10,6 +11,7 @@ import type {
 } from '../types';
 
 export interface DataSnapshot {
+  profil?: BrugerProfil;
   indkomstAar: IndkomstAar[];
   jobs: Job[];
   fradrag: Fradrag[];
@@ -66,6 +68,12 @@ export const api = {
   logout: () => kald<{ loggetInd: boolean }>('/auth/logout', { method: 'POST' }),
 
   hentAlt: () => kald<DataSnapshot>('/data'),
+  hentProfil: () => kald<BrugerProfil>('/profil'),
+  gemProfil: (p: BrugerProfil) =>
+    kald<BrugerProfil>('/profil', {
+      method: 'PUT',
+      body: JSON.stringify(p),
+    }),
   aiStatus: () =>
     kald<{
       klar: boolean;

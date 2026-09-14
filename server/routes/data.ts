@@ -12,6 +12,24 @@ export function dataRoutes(repo: Repository, onAendring: () => void = () => unde
     }
   });
 
+  r.get('/profil', async (_req, res, next) => {
+    try {
+      res.json(await repo.hentProfil());
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  r.put('/profil', async (req, res, next) => {
+    try {
+      const gemt = await repo.gemProfil(req.body);
+      onAendring();
+      res.json(gemt);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   r.put('/indkomstaar/:id', async (req, res, next) => {
     try {
       const gemt = await repo.gemIndkomstAar({ ...req.body, id: req.params.id });

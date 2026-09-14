@@ -181,5 +181,42 @@ describe('beregnRuteDetaljer', () => {
     expect(rute.fundetAdresse).toBe('Spillestedet 3, 8000 Aarhus C');
     expect(rute.mellemstationer).toEqual(['Mellemstopvej 2, 5000 Odense C']);
   });
+
+  it('håndterer indlejret fra-adresse i destinationsstrengen uden fejl', async () => {
+    delete process.env.OPENROUTESERVICE_API_KEY;
+
+    const kald = vi.fn().mockImplementation(async (url: string) => {
+      if (url.includes('api.dataforsyningen.dk') && url.includes('Stjernebakken')) {
+        return jsonSvar([{ adressebetegnelse: 'Stjernebakken 10, 4200 Slagelse', adgangsadresse: { adgangspunkt: { koordinater: [11.35, 55.4] } } }]);
+      }
+      if (url.includes('api.dataforsyningen.dk') && url.includes('Comwell')) {
+        return jsonSvar([]);
+      }
+      if (url.includes('nominatim.openstreetmap.org') && url.includes('Comwell')) {
+        return jsonSvar([{ display_name: 'Comwell Kolding, Skovbrynet 1, 6000 Kolding', lat: '55.49', lon: '9.47' }]);
+      }
+      if (url.includes('router.project-osrm.org')) {
+        return jsonSvar({ routes: [{ distance: 130000 }] });
+      }
+      return jsonSvar({}, false, 404);
+    });
+    vi.stubGlobal('fetch', kald);
+
+    const { beregnRuteDetaljer, rensAdresseTekst } = await import('./openrouteservice');
+
+    expect(rensAdresseTekst('Comwell Kolding (fra Stjernebakken, Slagelse)')).toBe('Comwell Kolding');
+    expect(rensAdresseTekst('fra Slagelse til Comwell Kolding')).toBe('Comwell Kolding');
+
+    const rute = await beregnRuteDetaljer(
+      '', // Tom bopæl, men destinationen indeholder "(fra Stjernebakken, Slagelse)"
+      'Comwell Kolding (fra Stjernebakken, Slagelse)',
+      { turRetur: true }
+    );
+
+    expect(rute.fraAdresse).toBe('Stjernebakken 10, 4200 Slagelse');
+    expect(rute.fundetAdresse).toBe('Comwell Kolding, Skovbrynet 1, 6000 Kolding');
+    expect(rute.km).toBe(260);
+  });
 });
+
 

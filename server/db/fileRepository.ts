@@ -93,6 +93,31 @@ export class FileRepository implements Repository {
     return this.læs();
   }
 
+  async hentProfil(): Promise<BrugerProfil> {
+    const s = await this.læs();
+    return (
+      s.profil || {
+        navn: '',
+        hjemmeadresse: s.indkomstAar.find((a) => a.hjemmeadresse)?.hjemmeadresse || '',
+        kommune: s.indkomstAar.find((a) => a.kommune)?.kommune || '',
+      }
+    );
+  }
+
+  gemProfil(profil: BrugerProfil) {
+    return this.transaktion((s) => {
+      s.profil = { ...tomtProfil(), ...profil };
+      if (profil.hjemmeadresse) {
+        for (const aar of s.indkomstAar) {
+          if (!aar.hjemmeadresse) {
+            aar.hjemmeadresse = profil.hjemmeadresse;
+          }
+        }
+      }
+      return s.profil;
+    });
+  }
+
   gemIndkomstAar(aar: IndkomstAar) {
     return this.transaktion((s) => FileRepository.opsæt(s.indkomstAar, aar));
   }

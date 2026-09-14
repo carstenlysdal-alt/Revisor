@@ -1,6 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-import type { ChatBesked, Fradrag, IndkomstAar, Investering, Job, PosteringForslag } from '../types';
+import type {
+  BrugerProfil,
+  ChatBesked,
+  Fradrag,
+  IndkomstAar,
+  Investering,
+  Job,
+  PosteringForslag,
+} from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
 import { kr, pct } from '../lib/format';
 import { laesEventStroem } from '../lib/sse';
@@ -13,6 +21,7 @@ import { useDiktering } from '../hooks/useDiktering';
 interface Props {
   aaben: boolean;
   onLuk: () => void;
+  profil?: BrugerProfil;
   indkomstAar: IndkomstAar;
   indkomstAarListe: IndkomstAar[];
   beregning: SkatteBeregning;
@@ -49,6 +58,7 @@ const FORSLAG = [
 export function RevisorChatModal({
   aaben,
   onLuk,
+  profil,
   indkomstAar,
   indkomstAarListe,
   beregning,
@@ -108,9 +118,11 @@ export function RevisorChatModal({
    */
   const kontekst = () => ({
     aar: beregning.aar,
-    bopaelsadresse: indkomstAar.hjemmeadresse || undefined,
-    hjemmeadresse: indkomstAar.hjemmeadresse || undefined,
-    kommune: indkomstAar.kommune,
+    profil,
+    navn: profil?.navn,
+    bopaelsadresse: profil?.hjemmeadresse || indkomstAar.hjemmeadresse || undefined,
+    hjemmeadresse: profil?.hjemmeadresse || indkomstAar.hjemmeadresse || undefined,
+    kommune: profil?.kommune || indkomstAar.kommune,
     kendteHvervgivere: jobs ? Array.from(new Set(jobs.map((j) => j.hvervgiver).filter(Boolean))) : [],
     honorarerRubrik12: beregning.honorarerRubrik12,
     rubrik17: beregning.rubrik17Indkomst,

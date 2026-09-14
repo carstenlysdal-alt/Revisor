@@ -169,12 +169,20 @@ export async function geokodOsm(adresse: string): Promise<Placering | null> {
   return null;
 }
 
+export function rensAdresseTekst(tekst: string): string {
+  return tekst
+    .replace(/\(fra\s+[^)]+\)/gi, '')
+    .replace(/^fra\s+.+?\s+til\s+/gi, '')
+    .replace(/\s+-\s+fra\s+.+$/gi, '')
+    .trim();
+}
+
 /**
  * Finder koordinater og adresse for enten en gadeadresse eller et stednavn
  * (f.eks. "Kolding Bibliotek", "Vega", "Vestergade 10, Aarhus").
  */
 export async function findAdresse(adresse: string): Promise<Placering | null> {
-  const rent = adresse.trim();
+  const rent = rensAdresseTekst(adresse);
   if (!rent) return null;
 
   if (harOpenRouteServiceNoegle()) {
@@ -378,17 +386,30 @@ export async function beregnRuteDetaljer(
   options?: RuteValg
 ): Promise<RuteResultat> {
   const turRetur = options?.turRetur ?? true;
-  const [fra, til] = await Promise.all([findAdresse(hjemmeadresse), findAdresse(destinationAdresse)]);
+
+  let renFra = hjemmeadresse?.trim() || '';
+  let renTil = destinationAdresse?.trim() || '';
+
+  // Hvis destination indeholder f.eks. "(fra Stjernebakken, Slagelse)"
+  const fraMatch = renTil.match(/\(fra\s+([^)]+)\)/i);
+  if (fraMatch && fraMatch[1]) {
+    if (!renFra) {
+      renFra = fraMatch[1].trim();
+    }
+    renTil = rensAdresseTekst(renTil);
+  }
+
+  const [fra, til] = await Promise.all([findAdresse(renFra), findAdresse(renTil)]);
 
   if (!fra) {
     throw new OpenRouteServiceFejl(
-      `Hjemmeadressen "${hjemmeadresse}" kunne ikke genkendes.`,
+      `Hjemmeadressen "${renFra || hjemmeadresse}" kunne ikke genkendes.`,
       'IKKE_GEOKODET'
     );
   }
   if (!til) {
     throw new OpenRouteServiceFejl(
-      `Adressen "${destinationAdresse}" kunne ikke genkendes.`,
+      `Adressen "${renTil || destinationAdresse}" kunne ikke genkendes.`,
       'IKKE_GEOKODET'
     );
   }

@@ -3,6 +3,7 @@ import path from 'path';
 import { Pool, types } from 'pg';
 import type {
   Bilag,
+  BrugerProfil,
   Fradrag,
   IndkomstAar,
   Investering,
@@ -95,6 +96,7 @@ export class PostgresRepository implements Repository, BilagsLager {
     ]);
 
     const snapshot = tomtSnapshot();
+    snapshot.profil = await this.hentProfil();
 
     snapshot.indkomstAar = aar.rows.map(
       (r): IndkomstAar => ({
@@ -545,5 +547,80 @@ export class PostgresRepository implements Repository, BilagsLager {
       indhold: r.indhold,
       tidspunkt: r.tidspunkt instanceof Date ? r.tidspunkt.toISOString() : String(r.tidspunkt),
     }));
+  }
+
+  /* ------------------------------------------------------------------ Profil */
+
+  async hentProfil(): Promise<BrugerProfil> {
+    const { rows } = await this.pool.query('SELECT * FROM brugerprofil WHERE id = $1', ['standard']);
+    if (rows.length === 0) return tomtSnapshot().profil!;
+    const r = rows[0];
+    return {
+      navn: r.navn ?? '',
+      kunstnerNavn: r.kunstnernavn ?? undefined,
+      cprNummer: r.cpr_nummer ?? undefined,
+      cvrNummer: r.cvr_nummer ?? undefined,
+      email: r.email ?? undefined,
+      telefon: r.telefon ?? undefined,
+      hjemmeadresse: r.hjemmeadresse ?? '',
+      kommune: r.kommune ?? '',
+      kommuneSkatteprocent: r.kommune_skatteprocent !== null ? tal(r.kommune_skatteprocent) : undefined,
+      kirkeskatteprocent: r.kirkeskatteprocent !== null ? tal(r.kirkeskatteprocent) : undefined,
+      medlemFolkekirken: Boolean(r.medlem_folkekirken),
+      standardTransportmiddel: r.standard_transportmiddel ?? undefined,
+      standardBilorMærke: r.standard_bil_eller_maerke ?? undefined,
+      noter: r.noter ?? undefined,
+    };
+  }
+
+  async gemProfil(p: BrugerProfil): Promise<BrugerProfil> {
+    await this.pool.query(
+      `INSERT INTO brugerprofil (
+         id, navn, kunstnernavn, cpr_nummer, cvr_nummer, email, telefon,
+         hjemmeadresse, kommune, kommune_skatteprocent, kirkeskatteprocent,
+         medlem_folkekirken, standard_transportmiddel, standard_bil_eller_maerke, noter, opdateret
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,now())
+       ON CONFLICT (id) DO UPDATE SET
+         navn = EXCLUDED.navn,
+         kunstnernavn = EXCLUDED.kunstnernavn,
+         cpr_nummer = EXCLUDED.cpr_nummer,
+         cvr_nummer = EXCLUDED.cvr_nummer,
+         email = EXCLUDED.email,
+         telefon = EXCLUDED.telefon,
+         hjemmeadresse = EXCLUDED.hjemmeadresse,
+         kommune = EXCLUDED.kommune,
+         kommune_skatteprocent = EXCLUDED.kommune_skatteprocent,
+         kirkeskatteprocent = EXCLUDED.kirkeskatteprocent,
+         medlem_folkekirken = EXCLUDED.medlem_folkekirken,
+         standard_transportmiddel = EXCLUDED.standard_transportmiddel,
+         standard_bil_eller_maerke = EXCLUDED.standard_bil_eller_maerke,
+         noter = EXCLUDED.noter,
+         opdateret = now()`,
+      [
+        'standard',
+        p.navn || '',
+        p.kunstnerNavn || '',
+        p.cprNummer || '',
+        p.cvrNummer || '',
+        p.email || '',
+        p.telefon || '',
+        p.hjemmeadresse || '',
+        p.kommune || '',
+        p.kommuneSkatteprocent || 0,
+        p.kirkeskatteprocent || 0,
+        Boolean(p.medlemFolkekirken),
+        p.standardTransportmiddel || 'OWN_CAR_MC',
+        p.standardBilorMærke || '',
+        p.noter || '',
+      ]
+    );
+
+    if (p.hjemmeadresse) {
+      await this.pool.query(
+        `UPDATE indkomstaar SET hjemmeadresse = $1 WHERE hjemmeadresse = '' OR hjemmeadresse IS NULL`,
+        [p.hjemmeadresse]
+      );
+    }
+    return p;
   }
 }

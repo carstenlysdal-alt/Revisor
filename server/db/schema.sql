@@ -152,3 +152,22 @@ CREATE TABLE IF NOT EXISTS chat_historik (
 );
 
 CREATE INDEX IF NOT EXISTS chat_historik_tidspunkt_idx ON chat_historik (tidspunkt DESC);
+
+CREATE TABLE IF NOT EXISTS brugerprofil (
+  id                          text PRIMARY KEY DEFAULT 'standard',
+  navn                        text NOT NULL DEFAULT '',
+  kunstnernavn                text NOT NULL DEFAULT '',
+  cpr_nummer                  text NOT NULL DEFAULT '',
+  cvr_nummer                  text NOT NULL DEFAULT '',
+  email                       text NOT NULL DEFAULT '',
+  telefon                     text NOT NULL DEFAULT '',
+  hjemmeadresse               text NOT NULL DEFAULT '',
+  kommune                     text NOT NULL DEFAULT '',
+  kommune_skatteprocent       numeric(6,3) NOT NULL DEFAULT 0,
+  kirkeskatteprocent          numeric(6,3) NOT NULL DEFAULT 0,
+  medlem_folkekirken          boolean NOT NULL DEFAULT false,
+  standard_transportmiddel    text NOT NULL DEFAULT 'OWN_CAR_MC',
+  standard_bil_eller_maerke   text NOT NULL DEFAULT '',
+  noter                       text NOT NULL DEFAULT '',
+  opdateret                   timestamptz NOT NULL DEFAULT now()
+);

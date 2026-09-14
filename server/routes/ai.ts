@@ -117,11 +117,27 @@ export function aiRoutes(repo: Repository, arkiv: BilagsLager): Router {
         : [];
 
       const tidligereHistorik = await repo.hentChatHistorik(HISTORIK_TIL_HUKOMMELSE);
+      const profil = await repo.hentProfil();
+
+      const berigetBeregning = {
+        ...(typeof beregning === 'object' && beregning !== null ? beregning : {}),
+        profil,
+        navn: profil.navn || (beregning as Record<string, unknown>)?.navn,
+        bopaelsadresse:
+          profil.hjemmeadresse ||
+          (beregning as Record<string, unknown>)?.bopaelsadresse ||
+          (beregning as Record<string, unknown>)?.hjemmeadresse,
+        hjemmeadresse:
+          profil.hjemmeadresse ||
+          (beregning as Record<string, unknown>)?.hjemmeadresse ||
+          (beregning as Record<string, unknown>)?.bopaelsadresse,
+        kommune: profil.kommune || (beregning as Record<string, unknown>)?.kommune,
+      };
 
       const svar = await getUdbyder().chat(
         {
           beskeder: beskederListe,
-          beregning,
+          beregning: berigetBeregning,
           brugWebsoegning: Boolean(brugWebsoegning),
           aktivtForslag: aktivtForslag ?? null,
           tidligereHistorik,

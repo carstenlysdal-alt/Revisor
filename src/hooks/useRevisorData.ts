@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiFejl, api, type DataSnapshot } from '../lib/api';
 import type {
+  BrugerProfil,
   Fradrag,
   IndkomstAar,
   Investering,
@@ -54,6 +55,18 @@ export function useRevisorData(aktiv: boolean) {
     kopi[i] = post;
     return kopi;
   };
+
+  const gemProfil = useCallback(async (profil: BrugerProfil) => {
+    const gemt = await api.gemProfil(profil);
+    setData((d) => ({
+      ...d,
+      profil: gemt,
+      indkomstAar: d.indkomstAar.map((a) =>
+        !a.hjemmeadresse && gemt.hjemmeadresse ? { ...a, hjemmeadresse: gemt.hjemmeadresse } : a
+      ),
+    }));
+    return gemt;
+  }, []);
 
   const gemIndkomstAar = useCallback(async (aar: IndkomstAar) => {
     const gemt = await api.gemIndkomstAar(aar);
@@ -130,6 +143,7 @@ export function useRevisorData(aktiv: boolean) {
     tilstand,
     fejl,
     hentIgen: hent,
+    gemProfil,
     gemIndkomstAar,
     sletIndkomstAar,
     gemJob,

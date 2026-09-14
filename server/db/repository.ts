@@ -1,5 +1,6 @@
 import type {
   Bilag,
+  BrugerProfil,
   Fradrag,
   IndkomstAar,
   Investering,
@@ -8,6 +9,7 @@ import type {
 } from '../../src/types';
 
 export interface DataSnapshot {
+  profil?: BrugerProfil;
   indkomstAar: IndkomstAar[];
   jobs: Job[];
   fradrag: Fradrag[];
@@ -16,7 +18,14 @@ export interface DataSnapshot {
   bilag: Bilag[];
 }
 
+export const tomtProfil = (): BrugerProfil => ({
+  navn: '',
+  hjemmeadresse: '',
+  kommune: '',
+});
+
 export const tomtSnapshot = (): DataSnapshot => ({
+  profil: tomtProfil(),
   indkomstAar: [],
   jobs: [],
   fradrag: [],
@@ -56,6 +65,9 @@ export interface ChatHistorikPost {
  */
 export interface Repository {
   hentAlt(): Promise<DataSnapshot>;
+
+  hentProfil(): Promise<BrugerProfil>;
+  gemProfil(profil: BrugerProfil): Promise<BrugerProfil>;
 
   gemIndkomstAar(aar: IndkomstAar): Promise<IndkomstAar>;
   sletIndkomstAar(id: string): Promise<void>;

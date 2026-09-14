@@ -8,6 +8,7 @@ import {
 } from '../lib/tax/kommuner';
 import { TILGAENGELIGE_AAR } from '../lib/tax/satser';
 import { kr, talFraFelt } from '../lib/format';
+import { AdresseInput } from './AdresseInput';
 import {
   Advarsel,
   Afkrydsning,
@@ -380,12 +381,12 @@ export function IndkomstAarModule({
               hjaelp="Bruges som udgangspunkt, når du regner kørsel ud."
             >
               {(id) => (
-                <Tekstfelt
+                <AdresseInput
                   id={id}
                   value={redigerer.hjemmeadresse}
                   placeholder="Vejnavn og nummer, postnummer og by"
-                  onChange={(e) =>
-                    setRedigerer({ ...redigerer, hjemmeadresse: e.target.value })
+                  onChange={(vaerdi) =>
+                    setRedigerer({ ...redigerer, hjemmeadresse: vaerdi })
                   }
                 />
               )}

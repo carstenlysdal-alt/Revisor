@@ -20,6 +20,7 @@ import { Forside } from './components/Forside';
 import { GlobalSidebar } from './components/GlobalSidebar';
 import { AiBilagScannerModal } from './components/AiBilagScannerModal';
 import { RevisorChatModal } from './components/RevisorChatModal';
+import { ProfilModal } from './components/ProfilModal';
 import {
   BarChart2,
   Briefcase,
@@ -31,6 +32,7 @@ import {
   Home,
   Receipt,
   Sparkles,
+  User,
 } from 'lucide-react';
 import { Advarsel, Knap, RevisorMaerke } from './components/ui';
 import { kr } from './lib/format';
@@ -150,6 +152,7 @@ export default function App() {
   const [chatStartBesked, setChatStartBesked] = useState<string | null>(null);
   const [besked, setBesked] = useState<string | null>(null);
   const [handlingsfejl, setHandlingsfejl] = useState<string | null>(null);
+  const [profilAaben, setProfilAaben] = useState(false);
 
   /** Forsidens spørgeboks åbner chatten og sender teksten med det samme. */
   const stilSpoergsmaal = (tekst: string) => {
@@ -328,7 +331,20 @@ export default function App() {
             <span className="tal text-2xs text-ink-faint">B-indkomst</span>
           </button>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <button
+              type="button"
+              onClick={() => setProfilAaben(true)}
+              className="overgang flex items-center gap-1.5 rounded-[4px] border border-rule-strong bg-surface px-2.5 py-1 text-xs text-ink hover:bg-sunk"
+              title="Rediger din profil og faste stamdata (bopæl, skat, kørselspræferencer)"
+            >
+              <User className="h-3.5 w-3.5 text-ink-muted" />
+              <span className="hidden sm:inline">
+                {d.data.profil?.navn ? d.data.profil.navn : 'Min profil'}
+              </span>
+              <span className="sm:hidden">Profil</span>
+            </button>
+
             {aarListe.length > 0 && (
             <div className="flex items-center gap-2">
               <label htmlFor="aar-vaelger" className="text-2xs text-ink-muted">
@@ -567,18 +583,20 @@ export default function App() {
             {visSidebar && beregning && (
               <div className="hidden lg:block">
                 <GlobalSidebar
-                indkomstAar={aktivtAar}
-                beregning={beregning}
-                opsparing={
-                  d.data.opsparing[aktivtAar.id] ?? {
-                    indbetaltTilSkat: 0,
-                    opsparetPrivat: 0,
+                  indkomstAar={aktivtAar}
+                  beregning={beregning}
+                  opsparing={
+                    d.data.opsparing[aktivtAar.id] ?? {
+                      indbetaltTilSkat: 0,
+                      opsparetPrivat: 0,
+                    }
                   }
-                }
-                aiKlar={aiKlar}
-                aiUdbyder={ai.udbyder}
-                aiModel={ai.modeller?.tekst ?? null}
-                onAabnScanner={() => setScannerAaben(true)}
+                  aiKlar={aiKlar}
+                  aiUdbyder={ai.udbyder}
+                  aiModel={ai.modeller?.tekst ?? null}
+                  profil={d.data.profil}
+                  onAabnProfil={() => setProfilAaben(true)}
+                  onAabnScanner={() => setScannerAaben(true)}
                   onGaaTil={(fane) => naviger({ fane })}
                   antalJobs={aaretsJobs.length}
                   investeringerIAlt={aaretsInvesteringer.reduce((s, i) => s + i.beloeb, 0)}
@@ -640,10 +658,27 @@ export default function App() {
         />
       )}
 
+      <ProfilModal
+        aaben={profilAaben}
+        onLuk={() => setProfilAaben(false)}
+        profil={
+          d.data.profil || {
+            navn: '',
+            hjemmeadresse: aktivtAar?.hjemmeadresse || '',
+            kommune: aktivtAar?.kommune || '',
+          }
+        }
+        onGem={async (p) => {
+          await d.gemProfil(p);
+          visBesked('Din profil og faste stamdata er gemt.');
+        }}
+      />
+
       {aktivtAar && beregning && (
         <RevisorChatModal
           aaben={chatAaben}
           onLuk={() => setChatAaben(false)}
+          profil={d.data.profil}
           indkomstAar={aktivtAar}
           indkomstAarListe={aarListe}
           beregning={beregning}

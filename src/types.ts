@@ -2,6 +2,23 @@ import type { TransportMiddel } from './lib/tax/koersel';
 
 export type { TransportMiddel };
 
+export interface BrugerProfil {
+  navn: string;
+  kunstnerNavn?: string;
+  cprNummer?: string;
+  cvrNummer?: string;
+  email?: string;
+  telefon?: string;
+  hjemmeadresse: string;
+  kommune: string;
+  kommuneSkatteprocent?: number;
+  kirkeskatteprocent?: number;
+  medlemFolkekirken?: boolean;
+  standardTransportmiddel?: TransportMiddel;
+  standardBilorMærke?: string;
+  noter?: string;
+}
+
 export interface IndkomstAar {
   id: string;
   aar: number;

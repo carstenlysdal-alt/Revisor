@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { IndkomstAar, OpsparingsTracker } from '../types';
+import type { BrugerProfil, IndkomstAar, OpsparingsTracker } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
 import { kr, pct } from '../lib/format';
 import { api } from '../lib/api';
@@ -16,6 +16,8 @@ interface Props {
   aiKlar: boolean;
   aiUdbyder: string | null;
   aiModel: string | null;
+  profil?: BrugerProfil;
+  onAabnProfil?: () => void;
   onAabnScanner: () => void;
   onGaaTil: (fane: string) => void;
   /** Kun sat fra Forsiden. */
@@ -170,6 +172,8 @@ export function GlobalSidebar({
   aiKlar,
   aiUdbyder,
   aiModel,
+  profil,
+  onAabnProfil,
   onAabnScanner,
   onGaaTil,
   antalJobs,
@@ -182,6 +186,43 @@ export function GlobalSidebar({
   return (
     <aside className="ikke-print w-full shrink-0 lg:w-72">
       <div className="lg:sticky lg:top-24">
+        {profil && (
+          <div className="mb-4 pb-3 border-b border-rule">
+            <div className="flex items-center justify-between">
+              <div className="min-w-0 pr-2">
+                <p className="text-2xs uppercase tracking-wide text-ink-faint">Profil</p>
+                <p className="font-semibold text-sm text-ink truncate">
+                  {profil.navn || profil.kunstnerNavn || 'Brugerprofil'}
+                </p>
+              </div>
+              {onAabnProfil && (
+                <button
+                  type="button"
+                  onClick={onAabnProfil}
+                  className="shrink-0 text-2xs text-ink-muted underline underline-offset-2 hover:text-ink cursor-pointer"
+                >
+                  Rediger
+                </button>
+              )}
+            </div>
+            {profil.hjemmeadresse ? (
+              <p className="text-2xs text-ink-muted truncate mt-0.5" title={profil.hjemmeadresse}>
+                📍 {profil.hjemmeadresse}
+              </p>
+            ) : (
+              onAabnProfil && (
+                <button
+                  type="button"
+                  onClick={onAabnProfil}
+                  className="text-2xs text-amber-800 dark:text-amber-400 underline underline-offset-2 mt-0.5 text-left block"
+                >
+                  + Tilføj fast bopælsadresse
+                </button>
+              )
+            )}
+          </div>
+        )}
+
         <h2 className="border-b border-rule-strong pb-1.5 font-display text-sm font-bold text-ink">
           Dit overblik i {beregning.aar}
         </h2>
