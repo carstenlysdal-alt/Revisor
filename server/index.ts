@@ -1,5 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import path from 'path';
+import fs from 'fs';
 import dotenv from 'dotenv';
 import { FileRepository } from './db/fileRepository';
 import { PostgresRepository } from './db/postgresRepository';
@@ -117,7 +118,8 @@ async function start() {
     const vite = await createServer({ server: { middlewareMode: true }, appType: 'spa' });
     app.use(vite.middlewares);
   } else {
-    const dist = path.join(process.cwd(), 'dist');
+    const clientDist = path.join(process.cwd(), 'dist', 'client');
+    const dist = fs.existsSync(clientDist) ? clientDist : path.join(process.cwd(), 'dist');
     app.use(express.static(dist));
     app.get('*', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
   }
