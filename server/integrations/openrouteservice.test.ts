@@ -117,4 +117,69 @@ describe('beregnAfstandMellemAdresser', () => {
     expect(km).toBe(15);
     expect(kald).toHaveBeenCalledTimes(3);
   });
+
+  it('falder tilbage til DAWA, OSM og OSRM hvis OpenRouteService-nøgle mangler', async () => {
+    delete process.env.OPENROUTESERVICE_API_KEY;
+
+    // 1. DAWA for hjemme
+    // 2. DAWA for destination (finder ikke) -> OSM for destination (finder Kolding Bibliotek)
+    // 3. OSRM ruteberegning
+    const kald = vi.fn().mockImplementation(async (url: string) => {
+      if (url.includes('api.dataforsyningen.dk') && url.includes('Bop%C3%A6l')) {
+        return jsonSvar([{ adressebetegnelse: 'Bopæl 1, 1000 København', adgangsadresse: { adgangspunkt: { koordinater: [12.5, 55.6] } } }]);
+      }
+      if (url.includes('api.dataforsyningen.dk') && url.includes('Kolding')) {
+        return jsonSvar([]);
+      }
+      if (url.includes('nominatim.openstreetmap.org')) {
+        return jsonSvar([{ display_name: 'Kolding Bibliotek, 6000 Kolding', lat: '55.49', lon: '9.48' }]);
+      }
+      if (url.includes('router.project-osrm.org')) {
+        return jsonSvar({ routes: [{ distance: 228000 }] });
+      }
+      return jsonSvar({}, false, 404);
+    });
+    vi.stubGlobal('fetch', kald);
+
+    const km = await beregnAfstandMellemAdresser('Bopæl', 'Kolding Bibliotek');
+    expect(km).toBe(228);
+  });
 });
+
+describe('beregnRuteDetaljer', () => {
+  it('beregner tur/retur som standard og medtager mellemstationer', async () => {
+    delete process.env.OPENROUTESERVICE_API_KEY;
+
+    const kald = vi.fn().mockImplementation(async (url: string) => {
+      if (url.includes('api.dataforsyningen.dk') && url.includes('Bop%C3%A6l')) {
+        return jsonSvar([{ adressebetegnelse: 'Bopæl 1, 1000 København K', adgangsadresse: { adgangspunkt: { koordinater: [12.5, 55.6] } } }]);
+      }
+      if (url.includes('api.dataforsyningen.dk') && url.includes('Mellemstop')) {
+        return jsonSvar([{ adressebetegnelse: 'Mellemstopvej 2, 5000 Odense C', adgangsadresse: { adgangspunkt: { koordinater: [10.4, 55.4] } } }]);
+      }
+      if (url.includes('api.dataforsyningen.dk') && url.includes('Spillested')) {
+        return jsonSvar([{ adressebetegnelse: 'Spillestedet 3, 8000 Aarhus C', adgangsadresse: { adgangspunkt: { koordinater: [10.2, 56.1] } } }]);
+      }
+      if (url.includes('router.project-osrm.org')) {
+        // Multi-point route: Bopæl -> Mellemstop -> Spillested -> Mellemstop -> Bopæl
+        return jsonSvar({ routes: [{ distance: 600000 }] });
+      }
+      return jsonSvar({}, false, 404);
+    });
+    vi.stubGlobal('fetch', kald);
+
+    const rute = await import('./openrouteservice').then((m) =>
+      m.beregnRuteDetaljer('Bopæl', 'Spillested', {
+        mellemstationer: ['Mellemstop'],
+        turRetur: true,
+      })
+    );
+
+    expect(rute.turRetur).toBe(true);
+    expect(rute.km).toBe(600);
+    expect(rute.fraAdresse).toBe('Bopæl 1, 1000 København K');
+    expect(rute.fundetAdresse).toBe('Spillestedet 3, 8000 Aarhus C');
+    expect(rute.mellemstationer).toEqual(['Mellemstopvej 2, 5000 Odense C']);
+  });
+});
+

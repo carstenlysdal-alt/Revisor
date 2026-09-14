@@ -34,6 +34,7 @@ import {
   Tekstfelt,
   Vaelger,
 } from './ui';
+import { AdresseInput } from './AdresseInput';
 
 interface Props {
   aaben: boolean;
@@ -497,11 +498,12 @@ export function AiBilagScannerModal({
               <div className="grid gap-4 sm:grid-cols-[2fr_1fr_1fr]">
                 <Felt label="Adresse for jobbet">
                   {(id) => (
-                    <Tekstfelt
+                    <AdresseInput
                       id={id}
                       value={tekst.destinationAdresse ?? ''}
-                      onChange={(e) =>
-                        setTekst({ ...tekst, destinationAdresse: e.target.value })
+                      placeholder="Spillested, øvelokale eller adresse"
+                      onChange={(vaerdi) =>
+                        setTekst({ ...tekst, destinationAdresse: vaerdi })
                       }
                     />
                   )}

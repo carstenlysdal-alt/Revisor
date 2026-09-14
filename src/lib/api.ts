@@ -106,8 +106,32 @@ export const api = {
 
   rutestatus: () => kald<{ klar: boolean }>('/ruter/status'),
 
-  beregnAfstand: (fra: string, til: string) =>
-    kald<{ km: number }>(`/ruter/afstand?${new URLSearchParams({ fra, til }).toString()}`),
+  beregnAfstand: (
+    fra: string,
+    til: string,
+    valg?: { mellemstationer?: string[]; turRetur?: boolean }
+  ) => {
+    const params = new URLSearchParams({ fra, til });
+    if (valg?.mellemstationer?.length) {
+      params.set('mellemstationer', valg.mellemstationer.join(';'));
+    }
+    if (valg?.turRetur !== undefined) {
+      params.set('turRetur', String(valg.turRetur));
+    }
+    return kald<{
+      km: number;
+      enkeltTurKm?: number;
+      turRetur?: boolean;
+      fundetAdresse?: string;
+      fraAdresse?: string;
+      mellemstationer?: string[];
+    }>(`/ruter/afstand?${params.toString()}`);
+  },
+
+  soegAdresse: (q: string) =>
+    kald<{ tekst: string; type: 'adresse' | 'sted' }[]>(
+      `/ruter/soeg?${new URLSearchParams({ q }).toString()}`
+    ),
 
   googleDriveStatus: () =>
     kald<{

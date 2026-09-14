@@ -1,38 +1,66 @@
 import { Router } from 'express';
 import {
   OpenRouteServiceFejl,
-  beregnAfstandMellemAdresser,
-  harOpenRouteServiceNoegle,
+  beregnRuteDetaljer,
+  soegAdresse,
 } from '../integrations/openrouteservice';
 
 /**
- * Ruteberegning. Et rent forslag til km-feltet — aldrig en tavs overskrivning
- * af noget, brugeren selv har tastet. Alle fejlveje falder tilbage til manuel
- * indtastning, ikke til at blokere jobbet.
+ * Ruteberegning og adressesøgning.
+ * Standard er tur/retur og understøtter valgfri mellemstationer.
  */
 export function ruterRoutes(): Router {
   const r = Router();
 
   r.get('/ruter/status', (_req, res) => {
-    res.json({ klar: harOpenRouteServiceNoegle() });
+    res.json({ klar: true });
   });
 
-  r.get('/ruter/afstand', async (req, res) => {
-    const fra = String(req.query.fra ?? '').trim();
-    const til = String(req.query.til ?? '').trim();
+  r.get('/ruter/soeg', async (req, res) => {
+    const q = String(req.query.q ?? '').trim();
+    if (!q) return res.json([]);
+    try {
+      const forslag = await soegAdresse(q);
+      res.json(forslag);
+    } catch {
+      res.json([]);
+    }
+  });
 
-    if (!fra) {
+  const haandterAfstand = async (
+    fra: string,
+    til: string,
+    mellemRaw: unknown,
+    turReturRaw: unknown,
+    res: any
+  ) => {
+    const rentFra = String(fra ?? '').trim();
+    const rentTil = String(til ?? '').trim();
+
+    if (!rentFra) {
       return res.status(400).json({
         fejl: 'Sæt en hjemmeadresse på indkomståret først, så afstanden kan beregnes derfra.',
       });
     }
-    if (!til) {
-      return res.status(400).json({ fejl: 'Skriv en adresse for jobbet først.' });
+    if (!rentTil) {
+      return res.status(400).json({ fejl: 'Skriv en adresse eller et sted for kørslen først.' });
     }
 
+    const mellemstationer: string[] = Array.isArray(mellemRaw)
+      ? (mellemRaw as string[]).map(String)
+      : typeof mellemRaw === 'string' && mellemRaw.trim()
+        ? mellemRaw.split(/[;,]/).map((s) => s.trim()).filter(Boolean)
+        : [];
+
+    // Standard er tur/retur = true, medmindre eksplicit sat til false
+    const turRetur =
+      turReturRaw === undefined || turReturRaw === null
+        ? true
+        : turReturRaw !== 'false' && turReturRaw !== false;
+
     try {
-      const km = await beregnAfstandMellemAdresser(fra, til);
-      res.json({ km });
+      const rute = await beregnRuteDetaljer(rentFra, rentTil, { mellemstationer, turRetur });
+      res.json(rute);
     } catch (err) {
       if (err instanceof OpenRouteServiceFejl) {
         const status =
@@ -42,6 +70,26 @@ export function ruterRoutes(): Router {
       console.error('Afstandsberegning fejlede:', err);
       res.status(500).json({ fejl: 'Afstanden kunne ikke beregnes. Tast den manuelt i stedet.' });
     }
+  };
+
+  r.get('/ruter/afstand', async (req, res) => {
+    await haandterAfstand(
+      String(req.query.fra ?? ''),
+      String(req.query.til ?? ''),
+      req.query.mellemstationer,
+      req.query.turRetur,
+      res
+    );
+  });
+
+  r.post('/ruter/afstand', async (req, res) => {
+    await haandterAfstand(
+      String(req.body?.fra ?? ''),
+      String(req.body?.til ?? ''),
+      req.body?.mellemstationer,
+      req.body?.turRetur,
+      res
+    );
   });
 
   return r;

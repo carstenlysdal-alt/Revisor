@@ -46,6 +46,7 @@ export function kladdeFraUdtraek(grupper: {
     if (!kilde) return;
     for (const [navn, felt] of Object.entries(kilde)) {
       if (typeof felt?.vaerdi === 'boolean') flag[navn] = felt.vaerdi;
+      else if (Array.isArray(felt?.vaerdi)) tekst[navn] = felt.vaerdi.join('; ');
       else tekst[navn] = felt?.vaerdi == null ? '' : String(felt.vaerdi);
     }
   };
@@ -102,6 +103,10 @@ export function byggJobFraKladde(
     antalKm,
     antalTure: Math.max(0, Math.round(kladdeTal(tekst, 'antalTure'))) || (antalKm ? 1 : 0),
     destinationAdresse: tekst.destinationAdresse || '',
+    mellemstationer: tekst.mellemstationer
+      ? tekst.mellemstationer.split(';').map((s) => s.trim()).filter(Boolean)
+      : undefined,
+    turRetur: flag.turRetur !== undefined ? flag.turRetur : true,
     amBidragFritaget: Boolean(flag.amBidragFritaget),
     erRubrik17: Boolean(flag.erRubrik17),
     erBestyrelseshverv: Boolean(flag.erBestyrelseshverv),

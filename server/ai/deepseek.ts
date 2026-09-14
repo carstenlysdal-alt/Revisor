@@ -9,7 +9,7 @@ import {
   PosteringForslagSkema,
   SKEMABESKRIVELSE,
 } from './skema';
-import { rensAnalyse, rensPosteringForslag, fletForslag } from './normaliser';
+import { rensAnalyse, rensPosteringForslag, fletForslag, enrichForslagMedAfstand } from './normaliser';
 import { udtraekPdfTekst, PdfUdenTekstError } from './pdf';
 import { soeg, type Kilde } from './soegning';
 import {
@@ -182,7 +182,8 @@ export function opretDeepseekUdbyder(): AiUdbyder {
           const flettet = indgang.aktivtForslag
             ? fletForslag(indgang.aktivtForslag, forslag)
             : forslag;
-          return { tekst: flettet.besked, kilder: kilder ?? [], forslag: flettet };
+          const beriget = await enrichForslagMedAfstand(flettet, indgang.beregning);
+          return { tekst: beriget.besked, kilder: kilder ?? [], forslag: beriget };
         } catch (err) {
           console.error('foreslaaPostering: udkastet kunne ikke læses.', err);
           if (indgang.aktivtForslag) {

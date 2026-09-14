@@ -22,6 +22,8 @@ import {
   type KladdeTekst,
 } from '../lib/posteringKladde';
 import { Afkrydsning, BeloebFelt, Datofelt, Felt, Knap, Tekstfelt, Vaelger } from './ui';
+import { AdresseInput } from './AdresseInput';
+import { api } from '../lib/api';
 
 interface Props {
   forslag: PosteringForslag;
@@ -98,8 +100,58 @@ export function PosteringForslagKort({
       indkomstAarId
     )
   );
+  const valgtIndkomstAar = useMemo(
+    () => indkomstAarListe.find((a) => a.id === valgtIndkomstAarId),
+    [indkomstAarListe, valgtIndkomstAarId]
+  );
+  const [turRetur, setTurRetur] = useState(
+    flag.turRetur !== undefined ? flag.turRetur : true
+  );
+  const [mellemstationer, setMellemstationer] = useState<string[]>(() =>
+    tekst.mellemstationer
+      ? tekst.mellemstationer.split(';').map((s) => s.trim()).filter(Boolean)
+      : []
+  );
+  const [beregnerAfstand, setBeregnerAfstand] = useState(false);
+  const [afstandFejl, setAfstandFejl] = useState<string | null>(null);
+  const [afstandBesked, setAfstandBesked] = useState<string | null>(null);
   const [gemmer, setGemmer] = useState(false);
   const [fejl, setFejl] = useState<string | null>(null);
+
+  const beregnAfstand = async () => {
+    if (!tekst.destinationAdresse?.trim()) return;
+    setAfstandFejl(null);
+    setAfstandBesked(null);
+    setBeregnerAfstand(true);
+    try {
+      const stops = mellemstationer.map((s) => s.trim()).filter(Boolean);
+      const res = await api.beregnAfstand(
+        valgtIndkomstAar?.hjemmeadresse || '',
+        tekst.destinationAdresse,
+        {
+          mellemstationer: stops,
+          turRetur,
+        }
+      );
+      setTekst((prev) => ({
+        ...prev,
+        antalKm: String(res.km),
+        destinationAdresse: res.fundetAdresse || prev.destinationAdresse,
+      }));
+      const stopInfo =
+        stops.length > 0
+          ? ` (via ${stops.length} mellemstation${stops.length > 1 ? 'er' : ''})`
+          : '';
+      const besked = turRetur
+        ? `Beregnet: ${res.km} km tur/retur${res.enkeltTurKm ? ` (${res.enkeltTurKm} km hver vej)` : ''}${stopInfo}`
+        : `Beregnet: ${res.km} km enkelt tur${stopInfo}`;
+      setAfstandBesked(besked);
+    } catch (err) {
+      setAfstandFejl(err instanceof Error ? err.message : 'Afstanden kunne ikke beregnes.');
+    } finally {
+      setBeregnerAfstand(false);
+    }
+  };
 
   const kanGemme = kanGemmeKladde(forslag.klassifikation, tekst);
 
@@ -236,27 +288,129 @@ export function PosteringForslagKort({
             </Felt>
           </div>
           {tekst.transportmiddel && tekst.transportmiddel !== 'NONE' && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Felt label="Kilometer pr. tur">
+            <div className="space-y-3 border-t border-rule pt-3">
+              <Felt
+                label="Destination / arbejdssted"
+                hjaelp={
+                  !valgtIndkomstAar?.hjemmeadresse
+                    ? 'Sæt en hjemmeadresse på indkomståret for at kunne beregne afstanden automatisk.'
+                    : undefined
+                }
+              >
                 {(id) => (
-                  <BeloebFelt
-                    id={id}
-                    vaerdi={tekst.antalKm ?? ''}
-                    onVaerdi={(v) => setTekst({ ...tekst, antalKm: v })}
-                    suffiks="km"
-                  />
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <AdresseInput
+                        id={id}
+                        value={tekst.destinationAdresse ?? ''}
+                        placeholder="Spillested, øvelokale eller adresse"
+                        onChange={(v) => setTekst({ ...tekst, destinationAdresse: v })}
+                      />
+                    </div>
+                    <Knap
+                      onClick={beregnAfstand}
+                      disabled={
+                        beregnerAfstand ||
+                        !valgtIndkomstAar?.hjemmeadresse ||
+                        !tekst.destinationAdresse?.trim()
+                      }
+                      title="Beregner køreafstand via DAWA/OSRM ud fra bopæl og destination."
+                    >
+                      {beregnerAfstand ? 'Beregner…' : 'Beregn km'}
+                    </Knap>
+                  </div>
                 )}
               </Felt>
-              <Felt label="Antal ture">
-                {(id) => (
-                  <BeloebFelt
-                    id={id}
-                    vaerdi={tekst.antalTure ?? '1'}
-                    onVaerdi={(v) => setTekst({ ...tekst, antalTure: v })}
-                    suffiks=""
-                  />
-                )}
-              </Felt>
+
+              {mellemstationer.length > 0 && (
+                <div className="space-y-2 border-l-2 border-rule-strong pl-3">
+                  <span className="text-2xs font-medium text-ink-muted">
+                    Mellemstationer undervejs:
+                  </span>
+                  {mellemstationer.map((stop, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <AdresseInput
+                          value={stop}
+                          placeholder={`Mellemstation ${idx + 1} (f.eks. øvelokale eller opsamling)`}
+                          onChange={(v) => {
+                            const kopi = [...mellemstationer];
+                            kopi[idx] = v;
+                            setMellemstationer(kopi);
+                            setTekst({ ...tekst, mellemstationer: kopi.join('; ') });
+                          }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const kopi = mellemstationer.filter((_, i) => i !== idx);
+                          setMellemstationer(kopi);
+                          setTekst({ ...tekst, mellemstationer: kopi.join('; ') });
+                        }}
+                        className="text-xs text-ink-faint hover:text-negative"
+                        title="Fjern mellemstation"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Afkrydsning
+                  label="Tur/retur (retur til bopæl)"
+                  checked={turRetur}
+                  onChange={(e) => {
+                    setTurRetur(e.target.checked);
+                    setFlag({ ...flag, turRetur: e.target.checked });
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const kopi = [...mellemstationer, ''];
+                    setMellemstationer(kopi);
+                  }}
+                  className="text-2xs text-ink-muted underline underline-offset-4 hover:text-ink"
+                >
+                  + Tilføj mellemstation
+                </button>
+              </div>
+
+              {afstandBesked && (
+                <p className="text-2xs font-medium text-positive">{afstandBesked}</p>
+              )}
+              {afstandFejl && (
+                <p className="text-2xs text-negative">{afstandFejl}</p>
+              )}
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Felt
+                  label="Kilometer pr. tur"
+                  hjaelp={turRetur ? 'Hele turen (tur/retur)' : 'Enkelt tur'}
+                >
+                  {(id) => (
+                    <BeloebFelt
+                      id={id}
+                      vaerdi={tekst.antalKm ?? ''}
+                      onVaerdi={(v) => setTekst({ ...tekst, antalKm: v })}
+                      suffiks="km"
+                    />
+                  )}
+                </Felt>
+                <Felt label="Antal ture">
+                  {(id) => (
+                    <BeloebFelt
+                      id={id}
+                      vaerdi={tekst.antalTure ?? '1'}
+                      onVaerdi={(v) => setTekst({ ...tekst, antalTure: v })}
+                      suffiks=""
+                    />
+                  )}
+                </Felt>
+              </div>
             </div>
           )}
           <Afkrydsning

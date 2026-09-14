@@ -29,6 +29,7 @@ import {
   TomTilstand,
   Vaelger,
 } from './ui';
+import { AdresseInput } from './AdresseInput';
 
 interface Props {
   jobs: Job[];
@@ -141,6 +142,9 @@ export function JobsModule({
   const [rutestatusKlar, setRutestatusKlar] = useState(false);
   const [beregnerAfstand, setBeregnerAfstand] = useState(false);
   const [afstandFejl, setAfstandFejl] = useState<string | null>(null);
+  const [beregnetInfo, setBeregnetInfo] = useState<string | null>(null);
+  const [turRetur, setTurRetur] = useState(true);
+  const [mellemstationer, setMellemstationer] = useState<string[]>([]);
 
   useEffect(() => {
     api
@@ -152,13 +156,30 @@ export function JobsModule({
   const beregnAfstand = async () => {
     if (!redigerer) return;
     setAfstandFejl(null);
+    setBeregnetInfo(null);
     setBeregnerAfstand(true);
     try {
-      const { km: nyKm } = await api.beregnAfstand(
+      const stops = mellemstationer.map((s) => s.trim()).filter(Boolean);
+      const res = await api.beregnAfstand(
         indkomstAar.hjemmeadresse,
-        redigerer.destinationAdresse ?? ''
+        redigerer.destinationAdresse ?? '',
+        {
+          mellemstationer: stops,
+          turRetur,
+        }
       );
-      setKm(String(nyKm));
+      setKm(String(res.km));
+      if (res.fundetAdresse && res.fundetAdresse !== redigerer.destinationAdresse) {
+        setRedigerer({ ...redigerer, destinationAdresse: res.fundetAdresse });
+      }
+      const stopsTxt =
+        stops.length > 0
+          ? ` (via ${stops.length} mellemstation${stops.length > 1 ? 'er' : ''})`
+          : '';
+      const turTxt = turRetur
+        ? `Beregnet: ${res.km} km tur/retur${res.enkeltTurKm ? ` (${res.enkeltTurKm} km hver vej)` : ''}${stopsTxt}`
+        : `Beregnet: ${res.km} km enkelt tur${stopsTxt}`;
+      setBeregnetInfo(turTxt);
     } catch (err) {
       setAfstandFejl(err instanceof Error ? err.message : 'Afstanden kunne ikke beregnes.');
     } finally {
@@ -186,6 +207,8 @@ export function JobsModule({
 
   const aabn = (job: Job, kopi = false) => {
     setFejl(null);
+    setAfstandFejl(null);
+    setBeregnetInfo(null);
     const post = kopi
       ? { ...job, id: `job-${Date.now()}`, bilagIds: [], betalingsDato: '' }
       : job;
@@ -196,6 +219,8 @@ export function JobsModule({
     setTimerJob(post.timerJob ? String(post.timerJob) : '');
     setTimerTransport(post.timerTransportForberedelse ? String(post.timerTransportForberedelse) : '');
     setVisMere(Boolean(post.type || post.timerJob || post.amBidragFritaget || post.erRubrik17));
+    setTurRetur(post.turRetur !== undefined ? post.turRetur : true);
+    setMellemstationer(post.mellemstationer ? [...post.mellemstationer] : []);
   };
 
   const kladdensKoersel = useMemo(() => {
@@ -258,6 +283,8 @@ export function JobsModule({
         antalTure: Math.max(0, Math.round(talFraFelt(ture))),
         timerJob: talFraFelt(timerJob) || undefined,
         timerTransportForberedelse: talFraFelt(timerTransport) || undefined,
+        mellemstationer: mellemstationer.map((s) => s.trim()).filter(Boolean),
+        turRetur,
       });
       setRedigerer(null);
     } catch (err) {
@@ -836,23 +863,125 @@ export function JobsModule({
               </Felt>
 
               {redigerer.transportmiddel !== 'NONE' && (
-                <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_1fr_auto]">
-                  <Felt label="Kilometer pr. tur" hjaelp="Hele strækningen, som den køres.">
-                    {(id) => <BeloebFelt id={id} vaerdi={km} onVaerdi={setKm} suffiks="km" />}
+                <div className="mt-4 space-y-3 border-t border-rule pt-4">
+                  <Felt
+                    label={visning === 'koersel' ? 'Adresse for kørslen' : 'Adresse for jobbet'}
+                    hjaelp={
+                      !indkomstAar.hjemmeadresse
+                        ? 'Sæt en hjemmeadresse på indkomståret for at kunne beregne afstanden herfra.'
+                        : undefined
+                    }
+                  >
+                    {(id) => (
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <AdresseInput
+                            id={id}
+                            value={redigerer.destinationAdresse ?? ''}
+                            placeholder={
+                              visning === 'koersel'
+                                ? 'Øvelokale, spillested eller adresse'
+                                : 'Spillested, øvelokale eller adresse'
+                            }
+                            onChange={(vaerdi) =>
+                              setRedigerer({ ...redigerer, destinationAdresse: vaerdi })
+                            }
+                          />
+                        </div>
+                        {rutestatusKlar && (
+                          <Knap
+                            onClick={beregnAfstand}
+                            disabled={
+                              beregnerAfstand ||
+                              !indkomstAar.hjemmeadresse ||
+                              !redigerer.destinationAdresse?.trim()
+                            }
+                            title="Foreslår kilometertallet ud fra bopæl og destination. Du kan altid rette det bagefter."
+                          >
+                            {beregnerAfstand ? 'Beregner…' : 'Beregn afstand'}
+                          </Knap>
+                        )}
+                      </div>
+                    )}
                   </Felt>
-                  <Felt label="Antal ture">
-                    {(id) => <BeloebFelt id={id} vaerdi={ture} onVaerdi={setTure} suffiks="" />}
-                  </Felt>
-                  <div className="flex flex-col justify-end pb-1">
-                    <span className="text-2xs text-ink-muted">
-                      Fradrag, rubrik{' '}
-                      {redigerer.transportmiddel === 'PASSENGER' || redigerer.erBestyrelseshverv
-                        ? 51
-                        : 29}
-                    </span>
-                    <span className="tal text-lg font-semibold text-ink">
-                      {kr(kladdensKoersel)} kr.
-                    </span>
+
+                  {mellemstationer.length > 0 && (
+                    <div className="space-y-2 border-l-2 border-rule-strong pl-3">
+                      <span className="text-2xs font-medium text-ink-muted">
+                        Mellemstationer undervejs:
+                      </span>
+                      {mellemstationer.map((stop, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <div className="flex-1">
+                            <AdresseInput
+                              value={stop}
+                              placeholder={`Mellemstation ${idx + 1} (f.eks. øvelokale eller opsamling)`}
+                              onChange={(vaerdi) => {
+                                const kopi = [...mellemstationer];
+                                kopi[idx] = vaerdi;
+                                setMellemstationer(kopi);
+                              }}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const kopi = mellemstationer.filter((_, i) => i !== idx);
+                              setMellemstationer(kopi);
+                            }}
+                            className="text-xs text-ink-faint hover:text-negative"
+                            title="Fjern mellemstation"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Afkrydsning
+                      label="Tur/retur (retur til bopæl)"
+                      checked={turRetur}
+                      onChange={(e) => setTurRetur(e.target.checked)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setMellemstationer([...mellemstationer, ''])}
+                      className="text-2xs text-ink-muted underline underline-offset-4 hover:text-ink"
+                    >
+                      + Tilføj mellemstation
+                    </button>
+                  </div>
+
+                  {beregnetInfo && (
+                    <p className="text-2xs font-medium text-positive">{beregnetInfo}</p>
+                  )}
+                  {afstandFejl && (
+                    <p className="text-2xs text-negative">{afstandFejl}</p>
+                  )}
+
+                  <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto]">
+                    <Felt
+                      label="Kilometer pr. tur"
+                      hjaelp={turRetur ? 'Hele strækningen (tur/retur).' : 'Enkelt tur.'}
+                    >
+                      {(id) => <BeloebFelt id={id} vaerdi={km} onVaerdi={setKm} suffiks="km" />}
+                    </Felt>
+                    <Felt label="Antal ture">
+                      {(id) => <BeloebFelt id={id} vaerdi={ture} onVaerdi={setTure} suffiks="" />}
+                    </Felt>
+                    <div className="flex flex-col justify-end pb-1">
+                      <span className="text-2xs text-ink-muted">
+                        Fradrag, rubrik{' '}
+                        {redigerer.transportmiddel === 'PASSENGER' || redigerer.erBestyrelseshverv
+                          ? 51
+                          : 29}
+                      </span>
+                      <span className="tal text-lg font-semibold text-ink">
+                        {kr(kladdensKoersel)} kr.
+                      </span>
+                    </div>
                   </div>
                 </div>
               )}
@@ -868,54 +997,6 @@ export function JobsModule({
                       setRedigerer({ ...redigerer, erBestyrelseshverv: e.target.checked })
                     }
                   />
-                </div>
-              )}
-
-              {redigerer.transportmiddel !== 'NONE' && (
-                <div className="mt-4">
-                  <Felt
-                    label={visning === 'koersel' ? 'Adresse for kørslen' : 'Adresse for jobbet'}
-                    hjaelp={
-                      !indkomstAar.hjemmeadresse
-                        ? 'Sæt en hjemmeadresse på indkomståret for at kunne beregne afstanden herfra.'
-                        : undefined
-                    }
-                  >
-                    {(id) => (
-                      <div className="flex gap-2">
-                        <div className="flex-1">
-                          <Tekstfelt
-                            id={id}
-                            value={redigerer.destinationAdresse ?? ''}
-                            placeholder={
-                              visning === 'koersel'
-                                ? 'Øvelokale, spillested eller mødested'
-                                : 'Spillested eller mødested'
-                            }
-                            onChange={(e) =>
-                              setRedigerer({ ...redigerer, destinationAdresse: e.target.value })
-                            }
-                          />
-                        </div>
-                        {rutestatusKlar && (
-                          <Knap
-                            onClick={beregnAfstand}
-                            disabled={
-                              beregnerAfstand ||
-                              !indkomstAar.hjemmeadresse ||
-                              !redigerer.destinationAdresse?.trim()
-                            }
-                            title="Foreslår kilometertallet ud fra de to adresser. Du kan altid rette det bagefter."
-                          >
-                            {beregnerAfstand ? 'Beregner…' : 'Beregn afstand'}
-                          </Knap>
-                        )}
-                      </div>
-                    )}
-                  </Felt>
-                  {afstandFejl && (
-                    <p className="mt-1.5 text-2xs text-negative">{afstandFejl}</p>
-                  )}
                 </div>
               )}
             </div>

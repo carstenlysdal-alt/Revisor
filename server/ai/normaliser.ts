@@ -85,3 +85,54 @@ export function fletForslag(
     investering: fletGruppe(eksisterende.investering, nyt.investering),
   };
 }
+
+/**
+ * Beriger et forslag til et honorarjob med automatisk beregnet afstand tur/retur,
+ * hvis transportmiddel er sat og bopæl/destination er kendt.
+ */
+export async function enrichForslagMedAfstand(
+  forslag: PosteringForslag,
+  beregningKontekst: unknown
+): Promise<PosteringForslag> {
+  if (forslag.klassifikation !== 'JOB' || !forslag.job) {
+    return forslag;
+  }
+
+  const transport = forslag.job.transportmiddel?.vaerdi;
+  if (!transport || transport === 'NONE') {
+    return forslag;
+  }
+
+  const bopael =
+    (beregningKontekst as Record<string, unknown>)?.hjemmeadresse ||
+    (beregningKontekst as Record<string, unknown>)?.bopaelsadresse;
+  const destination =
+    forslag.job.destinationAdresse?.vaerdi || forslag.job.hvervgiver?.vaerdi;
+
+  if (!bopael || typeof bopael !== 'string' || !destination || typeof destination !== 'string') {
+    return forslag;
+  }
+
+  const nuvaerendeKm = Number(forslag.job.antalKm?.vaerdi);
+  if (!nuvaerendeKm || nuvaerendeKm <= 0) {
+    try {
+      const { beregnRuteDetaljer } = await import('../integrations/openrouteservice');
+      const rute = await beregnRuteDetaljer(bopael, destination, { turRetur: true });
+      if (rute.km > 0) {
+        forslag.job.antalKm = { vaerdi: rute.km, sikkerhed: 0.95 };
+        if (rute.fundetAdresse && !forslag.job.destinationAdresse?.vaerdi) {
+          forslag.job.destinationAdresse = { vaerdi: rute.fundetAdresse, sikkerhed: 0.9 };
+        } else if (!forslag.job.destinationAdresse?.vaerdi) {
+          forslag.job.destinationAdresse = { vaerdi: destination, sikkerhed: 0.8 };
+        }
+        if (!forslag.job.antalTure?.vaerdi) {
+          forslag.job.antalTure = { vaerdi: 1, sikkerhed: 0.9 };
+        }
+      }
+    } catch {
+      // Ignorer fejl så chat-svar aldrig blokeres
+    }
+  }
+
+  return forslag;
+}

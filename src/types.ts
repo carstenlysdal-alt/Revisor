@@ -36,6 +36,8 @@ export interface Job {
   antalKm: number;
   antalTure: number;
   destinationAdresse?: string;
+  mellemstationer?: string[];
+  turRetur?: boolean;
   amBidragFritaget: boolean;
   /** Rubrik 17 i stedet for rubrik 12: legater, gruppeliv, visse personalegoder. */
   erRubrik17?: boolean;
@@ -126,6 +128,8 @@ export interface JobUdtraek {
   slutDato: UdtruktFelt<string>;
   betalingsDato: UdtruktFelt<string>;
   destinationAdresse: UdtruktFelt<string>;
+  mellemstationer?: UdtruktFelt<string[]>;
+  turRetur?: UdtruktFelt<boolean>;
   transportmiddel: UdtruktFelt<TransportMiddel>;
   antalKm: UdtruktFelt<number>;
   antalTure: UdtruktFelt<number>;
