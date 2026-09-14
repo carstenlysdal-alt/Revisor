@@ -492,3 +492,30 @@ describe('bestyrelseshverv uden godtgørelse bruger befordringsfradraget, ikke �
     );
   });
 });
+
+describe('enkeltstående kørsel uden job / honorar (fx en øver)', () => {
+  const beregning = beregnSkat(
+    aar(),
+    [
+      job({
+        hvervgiver: 'Øver i øvelokale',
+        honorar: 0,
+        transportmiddel: 'OWN_CAR_MC',
+        antalKm: 25,
+        antalTure: 4,
+      }),
+    ],
+    []
+  );
+
+  it('beregner kørselsfradrag i rubrik 29', () => {
+    expect(beregning.koerselsFradragRubrik29).toBe(Math.round(100 * 3.94));
+    expect(beregning.oevrigeFradragRubrik29).toBe(beregning.koerselsFradragRubrik29);
+  });
+
+  it('tilføjer 0 kr til rubrik 12 og 0 kr i AM-bidrag', () => {
+    expect(beregning.honorarerRubrik12).toBe(0);
+    expect(beregning.amBidrag).toBe(0);
+  });
+});
+

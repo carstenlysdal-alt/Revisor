@@ -71,24 +71,53 @@ const TRANSPORT: { vaerdi: TransportMiddel; navn: string; hjaelp: string }[] = [
   },
 ];
 
-const nytJob = (indkomstAarId: string, aar: number): Job => ({
-  id: `job-${Date.now()}`,
-  indkomstAarId,
-  hvervgiver: '',
-  honorar: 0,
-  startDato: `${aar}-01-01`,
-  slutDato: `${aar}-01-01`,
-  betalingsDato: '',
-  transportmiddel: 'NONE',
-  antalKm: 0,
-  antalTure: 1,
-  destinationAdresse: '',
-  amBidragFritaget: false,
-  erRubrik17: false,
-  type: '',
-  bilagIds: [],
-  noter: '',
-});
+const nyKoersel = (indkomstAarId: string, aar: number): Job => {
+  const dag = idag();
+  const d = dag.startsWith(String(aar)) ? dag : `${aar}-01-01`;
+  return {
+    id: `koersel-${Date.now()}`,
+    indkomstAarId,
+    hvervgiver: '',
+    tilknyttetJob: '',
+    honorar: 0,
+    startDato: d,
+    slutDato: d,
+    betalingsDato: '',
+    transportmiddel: 'OWN_CAR_MC',
+    antalKm: 0,
+    antalTure: 1,
+    destinationAdresse: '',
+    amBidragFritaget: false,
+    erRubrik17: false,
+    type: '',
+    bilagIds: [],
+    noter: '',
+  };
+};
+
+const nytJob = (indkomstAarId: string, aar: number): Job => {
+  const dag = idag();
+  const d = dag.startsWith(String(aar)) ? dag : `${aar}-01-01`;
+  return {
+    id: `job-${Date.now()}`,
+    indkomstAarId,
+    hvervgiver: '',
+    tilknyttetJob: '',
+    honorar: 0,
+    startDato: d,
+    slutDato: d,
+    betalingsDato: '',
+    transportmiddel: 'NONE',
+    antalKm: 0,
+    antalTure: 1,
+    destinationAdresse: '',
+    amBidragFritaget: false,
+    erRubrik17: false,
+    type: '',
+    bilagIds: [],
+    noter: '',
+  };
+};
 
 export function JobsModule({
   jobs,
@@ -139,6 +168,15 @@ export function JobsModule({
     }
   };
 
+  const unikkeJobNavne = useMemo(() => {
+    const navne = new Set<string>();
+    for (const j of jobs) {
+      if (j.tilknyttetJob?.trim()) navne.add(j.tilknyttetJob.trim());
+      if (j.honorar > 0 && j.hvervgiver?.trim()) navne.add(j.hvervgiver.trim());
+    }
+    return Array.from(navne);
+  }, [jobs]);
+
   const bilagIndeks = useMemo(
     () => new Map(bilag.map((b) => [b.id, b])),
     [bilag]
@@ -186,17 +224,28 @@ export function JobsModule({
     if (!redigerer) return;
     setFejl(null);
 
-    if (!redigerer.hvervgiver.trim()) {
-      setFejl('Skriv hvem der har hyret dig. Uden hvervgiver kan posten ikke dokumenteres.');
-      return;
+    const erKoersel = visning === 'koersel';
+
+    if (erKoersel) {
+      if (!redigerer.hvervgiver.trim()) {
+        setFejl('Skriv en anledning eller et formål med kørslen (f.eks. Øver).');
+        return;
+      }
+    } else {
+      if (!redigerer.hvervgiver.trim()) {
+        setFejl('Skriv hvem der har hyret dig. Uden hvervgiver kan posten ikke dokumenteres.');
+        return;
+      }
     }
+
     if (redigerer.slutDato < redigerer.startDato) {
       setFejl('Slutdatoen ligger før startdatoen.');
       return;
     }
-    if (Number((redigerer.slutDato || redigerer.startDato).slice(0, 4)) !== indkomstAar.aar) {
+    const relevantDato = redigerer.slutDato || redigerer.startDato;
+    if (Number(relevantDato.slice(0, 4)) !== indkomstAar.aar) {
       setFejl(
-        `Slutdatoen ligger i ${(redigerer.slutDato || redigerer.startDato).slice(0, 4)}, men du står i indkomståret ${indkomstAar.aar}. For et almindeligt afsluttet job bruges slutåret som udgangspunkt for året, hvor du fik endelig ret til honoraret.`
+        `Datoen ligger i ${relevantDato.slice(0, 4)}, men du står i indkomståret ${indkomstAar.aar}.`
       );
       return;
     }
@@ -205,6 +254,7 @@ export function JobsModule({
     try {
       await onGem({
         ...redigerer,
+        tilknyttetJob: redigerer.tilknyttetJob?.trim() || undefined,
         honorar: talFraFelt(honorar),
         antalKm: talFraFelt(km),
         antalTure: Math.max(0, Math.round(talFraFelt(ture))),
@@ -213,7 +263,13 @@ export function JobsModule({
       });
       setRedigerer(null);
     } catch (err) {
-      setFejl(err instanceof Error ? err.message : 'Jobbet kunne ikke gemmes.');
+      setFejl(
+        err instanceof Error
+          ? err.message
+          : erKoersel
+            ? 'Kørslen kunne ikke gemmes.'
+            : 'Jobbet kunne ikke gemmes.'
+      );
     } finally {
       setGemmer(false);
     }
@@ -225,12 +281,22 @@ export function JobsModule({
   const koerselRubrik = (job: Job): 29 | 51 =>
     job.transportmiddel === 'PASSENGER' || job.erBestyrelseshverv ? 51 : 29;
   const koerselJobs = jobs.filter((j) => j.transportmiddel !== 'NONE');
-  const visteJobs = visning === 'koersel' ? koerselJobs : jobs;
-  const nytJobKnap = (
-    <Knap art="primaer" onClick={() => aabn(nytJob(indkomstAar.id, indkomstAar.aar))}>
-      Nyt job
-    </Knap>
+  const indtaegterJobs = jobs.filter(
+    (j) => (j.honorar && j.honorar > 0) || j.erRubrik17 || j.transportmiddel === 'NONE'
   );
+  const visteJobs = visning === 'koersel' ? koerselJobs : indtaegterJobs;
+
+  const handlingKnap =
+    visning === 'koersel' ? (
+      <Knap art="primaer" onClick={() => aabn(nyKoersel(indkomstAar.id, indkomstAar.aar))}>
+        Opret kørsel
+      </Knap>
+    ) : (
+      <Knap art="primaer" onClick={() => aabn(nytJob(indkomstAar.id, indkomstAar.aar))}>
+        Nyt job
+      </Knap>
+    );
+
   const læsBilagKnap = (
     <Knap onClick={onAabnScanner} className="hidden lg:inline-flex">
       Læs et bilag
@@ -242,19 +308,19 @@ export function JobsModule({
       titel={visning === 'koersel' ? 'Kørsel' : 'Indtægter'}
       beskrivelse={
         visning === 'koersel'
-          ? `Kørsel i egen bil eller på egen cykel til et honorarjob havner i rubrik 29 — næsten altid en bedre skatteværdi end befordringsfradraget i rubrik 51. Bestyrelseshverv uden kørselsgodtgørelse bruger i stedet rubrik 51. Adressen er altid din egen hjemmeadresse, sat under Indkomstår. Kørsel hører til det job, den er en del af, og oprettes derfor sammen med det.`
+          ? `Kørsel i egen bil eller på egen cykel til jobs, øvere eller andre erhvervsmæssige aktiviteter havner i rubrik 29 — næsten altid en bedre skatteværdi end befordringsfradraget i rubrik 51. Bestyrelseshverv uden kørselsgodtgørelse bruger i stedet rubrik 51. Adressen tager udgangspunkt i din egen hjemmeadresse, sat under Indkomstår.`
           : `Honorarer havner normalt i rubrik 12 på årsopgørelsen. Satserne for ${beregning.satser.aar} bruges automatisk.`
       }
-      handling={laast ? null : <>{læsBilagKnap}{nytJobKnap}</>}
+      handling={laast ? null : <>{læsBilagKnap}{handlingKnap}</>}
     >
       {visteJobs.length === 0 ? (
         <TomTilstand
           besked={
             visning === 'koersel'
-              ? 'Der er ikke registreret kørsel endnu. Kørsel sættes på det job, den hører til — opret jobbet, eller rediger et eksisterende og sæt et transportmiddel.'
+              ? 'Der er ikke registreret kørsel endnu. Opret en kørsel for at registrere ture til f.eks. øvere, prøver, møder eller jobs.'
               : 'Der er ingen jobs i året endnu. Opret det første, eller læg en honorarkontrakt ind og lad den blive læst.'
           }
-          handling={laast ? undefined : <>{nytJobKnap}{læsBilagKnap}</>}
+          handling={laast ? undefined : <>{handlingKnap}{læsBilagKnap}</>}
         />
       ) : visning === 'koersel' ? (
         <Responsiv
@@ -263,7 +329,7 @@ export function JobsModule({
               <thead>
                 <tr>
                   <Th bredde="2.5rem" />
-                  <Th>Hvervgiver</Th>
+                  <Th>Anledning / Job</Th>
                   <Th>Transportmiddel</Th>
                   <Th bredde="9rem">Adresse</Th>
                   <Th hoejre bredde="6rem">Km i alt</Th>
@@ -281,7 +347,14 @@ export function JobsModule({
                       </Td>
                       <Td>
                         <span className="font-medium text-ink">{job.hvervgiver}</span>
-                        <span className="block text-2xs text-ink-faint">{dato(job.startDato)}</span>
+                        <span className="block text-2xs text-ink-faint">
+                          {[
+                            job.tilknyttetJob ? `Job: ${job.tilknyttetJob}` : null,
+                            dato(job.startDato),
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
                       </Td>
                       <Td>{TRANSPORT.find((t) => t.vaerdi === job.transportmiddel)?.navn}</Td>
                       <Td className="text-2xs text-ink-muted">{job.destinationAdresse || '–'}</Td>
@@ -294,6 +367,9 @@ export function JobsModule({
                           <div className="ikke-print flex justify-end gap-1">
                             <Knap art="tekst" onClick={() => aabn(job)}>
                               Rediger
+                            </Knap>
+                            <Knap art="tekst" onClick={() => setSletter(job)}>
+                              Slet
                             </Knap>
                           </div>
                         )}
@@ -338,6 +414,7 @@ export function JobsModule({
                     titel={job.hvervgiver}
                     undertitel={
                       <>
+                        {job.tilknyttetJob && `${job.tilknyttetJob} · `}
                         {TRANSPORT.find((t) => t.vaerdi === job.transportmiddel)?.navn}
                         {job.destinationAdresse && ` · ${job.destinationAdresse}`}
                       </>
@@ -346,13 +423,22 @@ export function JobsModule({
                     beloebNote={linje ? `${linje.kmIAlt.toLocaleString('da-DK')} km` : undefined}
                     handlinger={
                       laast ? undefined : (
-                        <button
-                          type="button"
-                          onClick={() => aabn(job)}
-                          className="text-2xs text-ink-muted underline underline-offset-4"
-                        >
-                          Rediger
-                        </button>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => aabn(job)}
+                            className="text-2xs text-ink-muted underline underline-offset-4"
+                          >
+                            Rediger
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSletter(job)}
+                            className="text-2xs text-negative underline underline-offset-4"
+                          >
+                            Slet
+                          </button>
+                        </div>
                       )
                     }
                   />
@@ -525,86 +611,171 @@ export function JobsModule({
       <Modal
         aaben={Boolean(redigerer)}
         onLuk={() => setRedigerer(null)}
-        titel={jobs.some((j) => j.id === redigerer?.id) ? 'Rediger job' : 'Nyt job'}
+        titel={
+          jobs.some((j) => j.id === redigerer?.id)
+            ? visning === 'koersel'
+              ? 'Rediger kørsel'
+              : 'Rediger job'
+            : visning === 'koersel'
+              ? 'Opret kørsel'
+              : 'Nyt job'
+        }
         bund={
           <>
             <Knap onClick={() => setRedigerer(null)}>Annullér</Knap>
             <Knap art="primaer" onClick={gem} disabled={gemmer}>
-              {gemmer ? 'Gemmer' : 'Gem job'}
+              {gemmer ? 'Gemmer' : visning === 'koersel' ? 'Gem kørsel' : 'Gem job'}
             </Knap>
           </>
         }
       >
         {redigerer && (
           <div className="space-y-5">
-            {fejl && <Advarsel titel="Jobbet blev ikke gemt">{fejl}</Advarsel>}
-
-            <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
-              <Felt label="Hvervgiver" paakraevet>
-                {(id) => (
-                  <Tekstfelt
-                    id={id}
-                    value={redigerer.hvervgiver}
-                    placeholder="Hvem har hyret dig"
-                    onChange={(e) => setRedigerer({ ...redigerer, hvervgiver: e.target.value })}
-                  />
-                )}
-              </Felt>
-              <Felt label="Honorar" paakraevet hjaelp="Beløbet før AM-bidrag og skat.">
-                {(id) => <BeloebFelt id={id} vaerdi={honorar} onVaerdi={setHonorar} />}
-              </Felt>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-3">
-              <Felt label="Startdato" paakraevet>
-                {(id) => (
-                  <Datofelt
-                    id={id}
-                    value={redigerer.startDato}
-                    onChange={(e) => {
-                      const startDato = e.target.value;
-                      setRedigerer({
-                        ...redigerer,
-                        startDato,
-                        slutDato:
-                          redigerer.slutDato < startDato ? startDato : redigerer.slutDato,
-                      });
-                    }}
-                  />
-                )}
-              </Felt>
-              <Felt
-                label="Slutdato"
-                paakraevet
-                hjaelp="Bruges som standard for retserhvervelsesåret ved et almindeligt afsluttet job."
-              >
-                {(id) => (
-                  <Datofelt
-                    id={id}
-                    value={redigerer.slutDato}
-                    onChange={(e) => setRedigerer({ ...redigerer, slutDato: e.target.value })}
-                  />
-                )}
-              </Felt>
-              <Felt label="Betalingsdato" hjaelp="Hvornår pengene faktisk kommer ind.">
-                {(id) => (
-                  <Datofelt
-                    id={id}
-                    value={redigerer.betalingsDato}
-                    onChange={(e) =>
-                      setRedigerer({ ...redigerer, betalingsDato: e.target.value })
-                    }
-                  />
-                )}
-              </Felt>
-            </div>
-
-            {betalingKrydserAarsskifte(redigerer) && (
-              <Advarsel art="neutral" titel="Betalingen falder i et andet år">
-                Betalingsdatoen afgør ikke i sig selv indkomståret. Som udgangspunkt bruges
-                året, hvor du fik endelig ret til honoraret; for et almindeligt afsluttet job
-                vil det normalt være slutåret.
+            {fejl && (
+              <Advarsel titel={visning === 'koersel' ? 'Kørslen blev ikke gemt' : 'Jobbet blev ikke gemt'}>
+                {fejl}
               </Advarsel>
+            )}
+
+            {visning === 'koersel' ? (
+              <>
+                <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
+                  <Felt
+                    label="Anledning / formål"
+                    paakraevet
+                    hjaelp="Hvad kørte du til? F.eks. en øver, bandprøve eller et spillested."
+                  >
+                    {(id) => (
+                      <Tekstfelt
+                        id={id}
+                        value={redigerer.hvervgiver}
+                        placeholder="F.eks. Øver, bandprøve, møde eller spillested"
+                        onChange={(e) => setRedigerer({ ...redigerer, hvervgiver: e.target.value })}
+                      />
+                    )}
+                  </Felt>
+                  <Felt
+                    label="Job"
+                    hjaelp="Ikke obligatorisk. Udfyld hvis kørslen hører til et bestemt job."
+                  >
+                    {(id) => (
+                      <>
+                        <Tekstfelt
+                          id={id}
+                          value={redigerer.tilknyttetJob ?? ''}
+                          placeholder="F.eks. Vega Musikhus (valgfrit)"
+                          list="eksisterende-jobs-liste"
+                          onChange={(e) =>
+                            setRedigerer({ ...redigerer, tilknyttetJob: e.target.value })
+                          }
+                        />
+                        {unikkeJobNavne.length > 0 && (
+                          <datalist id="eksisterende-jobs-liste">
+                            {unikkeJobNavne.map((navn) => (
+                              <option key={navn} value={navn} />
+                            ))}
+                          </datalist>
+                        )}
+                      </>
+                    )}
+                  </Felt>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Felt label="Dato for kørslen" paakraevet>
+                    {(id) => (
+                      <Datofelt
+                        id={id}
+                        value={redigerer.startDato}
+                        onChange={(e) => {
+                          const d = e.target.value;
+                          setRedigerer({
+                            ...redigerer,
+                            startDato: d,
+                            slutDato: d,
+                          });
+                        }}
+                      />
+                    )}
+                  </Felt>
+                  <Felt
+                    label="Honorar (valgfrit)"
+                    hjaelp="Udfyldes kun, hvis du modtager særskilt honorar for denne kørsel."
+                  >
+                    {(id) => <BeloebFelt id={id} vaerdi={honorar} onVaerdi={setHonorar} />}
+                  </Felt>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
+                  <Felt label="Hvervgiver" paakraevet>
+                    {(id) => (
+                      <Tekstfelt
+                        id={id}
+                        value={redigerer.hvervgiver}
+                        placeholder="Hvem har hyret dig"
+                        onChange={(e) => setRedigerer({ ...redigerer, hvervgiver: e.target.value })}
+                      />
+                    )}
+                  </Felt>
+                  <Felt label="Honorar" paakraevet hjaelp="Beløbet før AM-bidrag og skat.">
+                    {(id) => <BeloebFelt id={id} vaerdi={honorar} onVaerdi={setHonorar} />}
+                  </Felt>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <Felt label="Startdato" paakraevet>
+                    {(id) => (
+                      <Datofelt
+                        id={id}
+                        value={redigerer.startDato}
+                        onChange={(e) => {
+                          const startDato = e.target.value;
+                          setRedigerer({
+                            ...redigerer,
+                            startDato,
+                            slutDato:
+                              redigerer.slutDato < startDato ? startDato : redigerer.slutDato,
+                          });
+                        }}
+                      />
+                    )}
+                  </Felt>
+                  <Felt
+                    label="Slutdato"
+                    paakraevet
+                    hjaelp="Bruges som standard for retserhvervelsesåret ved et almindeligt afsluttet job."
+                  >
+                    {(id) => (
+                      <Datofelt
+                        id={id}
+                        value={redigerer.slutDato}
+                        onChange={(e) => setRedigerer({ ...redigerer, slutDato: e.target.value })}
+                      />
+                    )}
+                  </Felt>
+                  <Felt label="Betalingsdato" hjaelp="Hvornår pengene faktisk kommer ind.">
+                    {(id) => (
+                      <Datofelt
+                        id={id}
+                        value={redigerer.betalingsDato}
+                        onChange={(e) =>
+                          setRedigerer({ ...redigerer, betalingsDato: e.target.value })
+                        }
+                      />
+                    )}
+                  </Felt>
+                </div>
+
+                {betalingKrydserAarsskifte(redigerer) && (
+                  <Advarsel art="neutral" titel="Betalingen falder i et andet år">
+                    Betalingsdatoen afgør ikke i sig selv indkomståret. Som udgangspunkt bruges
+                    året, hvor du fik endelig ret til honoraret; for et almindeligt afsluttet job
+                    vil det normalt være slutåret.
+                  </Advarsel>
+                )}
+              </>
             )}
 
             <div className="border-t border-rule pt-4">
@@ -668,7 +839,7 @@ export function JobsModule({
               {redigerer.transportmiddel !== 'NONE' && (
                 <div className="mt-4">
                   <Felt
-                    label="Adresse for jobbet"
+                    label={visning === 'koersel' ? 'Adresse for kørslen' : 'Adresse for jobbet'}
                     hjaelp={
                       !indkomstAar.hjemmeadresse
                         ? 'Sæt en hjemmeadresse på indkomståret for at kunne beregne afstanden herfra.'
@@ -681,7 +852,11 @@ export function JobsModule({
                           <Tekstfelt
                             id={id}
                             value={redigerer.destinationAdresse ?? ''}
-                            placeholder="Spillested eller mødested"
+                            placeholder={
+                              visning === 'koersel'
+                                ? 'Øvelokale, spillested eller mødested'
+                                : 'Spillested eller mødested'
+                            }
                             onChange={(e) =>
                               setRedigerer({ ...redigerer, destinationAdresse: e.target.value })
                             }
@@ -801,7 +976,7 @@ export function JobsModule({
       <Modal
         aaben={Boolean(sletter)}
         onLuk={() => setSletter(null)}
-        titel="Slet jobbet?"
+        titel={visning === 'koersel' ? 'Slet kørslen?' : 'Slet jobbet?'}
         bredde="max-w-lg"
         bund={
           <>
@@ -813,15 +988,24 @@ export function JobsModule({
                 setSletter(null);
               }}
             >
-              Slet jobbet
+              {visning === 'koersel' ? 'Slet kørslen' : 'Slet jobbet'}
             </Knap>
           </>
         }
       >
         <p className="text-xs text-ink-muted">
-          {sletter?.hvervgiver} på {kr(sletter?.honorar ?? 0)} kr. forsvinder fra rubrik{' '}
-          {sletter?.erRubrik17 ? 17 : 12} og fra skatteberegningen. Bilag bliver liggende i
-          arkivet.
+          {visning === 'koersel' ? (
+            <>
+              Kørslen &quot;{sletter?.hvervgiver}&quot; fjernes fra kørselsopgørelsen og
+              skatteberegningen. Bilag bliver liggende i arkivet.
+            </>
+          ) : (
+            <>
+              {sletter?.hvervgiver} på {kr(sletter?.honorar ?? 0)} kr. forsvinder fra rubrik{' '}
+              {sletter?.erRubrik17 ? 17 : 12} og fra skatteberegningen. Bilag bliver liggende i
+              arkivet.
+            </>
+          )}
         </p>
       </Modal>
     </Sektion>

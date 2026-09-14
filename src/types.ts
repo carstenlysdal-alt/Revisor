@@ -24,6 +24,8 @@ export interface Job {
   id: string;
   indkomstAarId: string;
   hvervgiver: string;
+  /** Valgfri tilknytning til et job for en kørselspost (f.eks. ved en øver eller prøve knyttet til et job). */
+  tilknyttetJob?: string;
   honorar: number;
   /** YYYY-MM-DD. Sammen med slutdatoen dokumenterer arbejdsperioden. */
   startDato: string;

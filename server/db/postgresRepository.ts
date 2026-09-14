@@ -121,6 +121,7 @@ export class PostgresRepository implements Repository, BilagsLager {
         id: r.id,
         indkomstAarId: r.indkomstaar_id,
         hvervgiver: r.hvervgiver ?? '',
+        tilknyttetJob: r.tilknyttet_job ?? undefined,
         honorar: tal(r.honorar),
         startDato: dato(r.start_dato),
         slutDato: dato(r.slut_dato),
@@ -258,14 +259,15 @@ export class PostgresRepository implements Repository, BilagsLager {
 
   async gemJob(j: Job): Promise<Job> {
     await this.pool.query(
-      `INSERT INTO job (id, indkomstaar_id, hvervgiver, honorar, start_dato, slut_dato,
+      `INSERT INTO job (id, indkomstaar_id, hvervgiver, tilknyttet_job, honorar, start_dato, slut_dato,
          betalings_dato, transportmiddel, antal_km, antal_ture, destination_adresse,
          am_bidrag_fritaget, er_rubrik17, er_bestyrelseshverv, timer_job,
          timer_transport_forberedelse, type, noter, er_eksempel)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
        ON CONFLICT (id) DO UPDATE SET
          indkomstaar_id = EXCLUDED.indkomstaar_id,
          hvervgiver = EXCLUDED.hvervgiver,
+         tilknyttet_job = EXCLUDED.tilknyttet_job,
          honorar = EXCLUDED.honorar,
          start_dato = EXCLUDED.start_dato,
          slut_dato = EXCLUDED.slut_dato,
@@ -283,7 +285,7 @@ export class PostgresRepository implements Repository, BilagsLager {
          noter = EXCLUDED.noter,
          er_eksempel = EXCLUDED.er_eksempel`,
       [
-        j.id, j.indkomstAarId, j.hvervgiver, j.honorar, j.startDato, j.slutDato,
+        j.id, j.indkomstAarId, j.hvervgiver, j.tilknyttetJob ?? null, j.honorar, j.startDato, j.slutDato,
         j.betalingsDato || null, j.transportmiddel, j.antalKm, j.antalTure,
         j.destinationAdresse ?? null, j.amBidragFritaget, Boolean(j.erRubrik17),
         Boolean(j.erBestyrelseshverv), j.timerJob ?? null,

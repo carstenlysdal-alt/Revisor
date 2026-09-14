@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS job (
   id                            text PRIMARY KEY,
   indkomstaar_id                text NOT NULL REFERENCES indkomstaar(id) ON DELETE CASCADE,
   hvervgiver                    text NOT NULL DEFAULT '',
+  tilknyttet_job                text,
   honorar                       numeric(14,2) NOT NULL DEFAULT 0,
   start_dato                    date NOT NULL,
   slut_dato                     date NOT NULL,
@@ -137,6 +138,7 @@ ALTER TABLE indkomstaar ADD COLUMN IF NOT EXISTS forventet_dagpenge numeric(14,2
 ALTER TABLE indkomstaar ADD COLUMN IF NOT EXISTS seniorfradrag_berettiget boolean NOT NULL DEFAULT false;
 ALTER TABLE indkomstaar ADD COLUMN IF NOT EXISTS bor_paa_udpeget_smaaoe boolean NOT NULL DEFAULT false;
 ALTER TABLE job ADD COLUMN IF NOT EXISTS er_bestyrelseshverv boolean NOT NULL DEFAULT false;
+ALTER TABLE job ADD COLUMN IF NOT EXISTS tilknyttet_job text;
 
 -- Revisor-chattens hukommelse på tværs af sessioner. Selve chatvinduet
 -- nulstiller sin visning ved hver åbning, men modellen skal stadig kunne
