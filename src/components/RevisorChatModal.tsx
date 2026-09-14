@@ -33,6 +33,7 @@ interface Props {
   /** Sat når chatten åbnes fra forsidens spørgeboks, med teksten der skal sendes med det samme. */
   startBesked?: string | null;
   onStartBeskedForbrugt?: () => void;
+  onGaaTil?: (fane: string) => void;
 }
 
 /** Faser vi faktisk kan skelne, fordi serveren melder dem fra strømmen. */
@@ -69,6 +70,7 @@ export function RevisorChatModal({
   onGemInvestering,
   startBesked,
   onStartBeskedForbrugt,
+  onGaaTil,
 }: Props) {
   const [beskeder, setBeskeder] = useState<ChatBesked[]>([]);
   const [input, setInput] = useState('');
@@ -316,6 +318,20 @@ export function RevisorChatModal({
                         </ul>
                       )}
 
+                      {b.handling && (
+                        <div className="mt-3 border-t border-rule pt-2.5">
+                          <Knap
+                            art="sekundaer"
+                            onClick={() => {
+                              onLuk();
+                              onGaaTil?.(b.handling!.fane);
+                            }}
+                          >
+                            {b.handling.tekst} →
+                          </Knap>
+                        </div>
+                      )}
+
                       {b.forslag && i === aktivtForslagIndeks && (
                         <PosteringForslagKort
                           forslag={b.forslag}
@@ -325,7 +341,36 @@ export function RevisorChatModal({
                           onGemFradrag={onGemFradrag}
                           onGemInvestering={onGemInvestering}
                           bekraeftSignal={bekraeftSignal}
-                          onGemt={() => setAktivtForslagIndeks(null)}
+                          onGemt={(info) => {
+                            setAktivtForslagIndeks(null);
+                            const klassifikation =
+                              info?.klassifikation || b.forslag?.klassifikation || 'JOB';
+                            const titel = info?.titel || b.forslag?.titel || '';
+                            const fane =
+                              klassifikation === 'JOB'
+                                ? 'indtaegter'
+                                : klassifikation === 'FRADRAG'
+                                  ? 'fradrag'
+                                  : 'investeringer';
+                            const faneTekst =
+                              klassifikation === 'JOB'
+                                ? 'Gå til jobs'
+                                : klassifikation === 'FRADRAG'
+                                  ? 'Gå til udgifter & fradrag'
+                                  : 'Gå til investeringer';
+
+                            setBeskeder((prev) => [
+                              ...prev,
+                              {
+                                rolle: 'assistent',
+                                indhold: `Tak! ${titel ? `"${titel}"` : 'Posteringen'} er nu oprettet.`,
+                                handling: {
+                                  tekst: faneTekst,
+                                  fane,
+                                },
+                              },
+                            ]);
+                          }}
                           onForkast={() => setAktivtForslagIndeks(null)}
                         />
                       )}

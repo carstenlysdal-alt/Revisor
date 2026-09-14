@@ -689,6 +689,7 @@ export default function App() {
           onGemInvestering={medFejlhaandtering(d.gemInvestering)}
           startBesked={chatStartBesked}
           onStartBeskedForbrugt={() => setChatStartBesked(null)}
+          onGaaTil={(fane) => naviger({ fane })}
         />
       )}
     </div>

@@ -32,8 +32,8 @@ interface Props {
   onGemJob: (job: Job) => Promise<unknown>;
   onGemFradrag: (fradrag: Fradrag) => Promise<unknown>;
   onGemInvestering: (inv: Investering) => Promise<unknown>;
-  /** Kaldes efter en vellykket gemning, så den overordnede chat kan rydde op. */
-  onGemt: () => void;
+  /** Kaldes efter en vellykket gemning med info om posten, så chatten kan kvittere og give genvej. */
+  onGemt: (info?: { klassifikation: PosteringForslag['klassifikation']; titel: string }) => void;
   onForkast: () => void;
   /**
    * Øges af chatten, når modellen tolker brugerens seneste besked som en
@@ -218,17 +218,21 @@ export function PosteringForslagKort({
     setGemmer(true);
     setFejl(null);
     try {
+      let gemtTitel = forslag.titel;
       if (forslag.klassifikation === 'JOB') {
         const nyt = byggJobFraKladde(tekst, flag, valgtIndkomstAarId, []);
+        gemtTitel = nyt.hvervgiver || gemtTitel;
         await onGemJob({ id: `job-${Date.now()}`, ...nyt });
       } else if (forslag.klassifikation === 'FRADRAG') {
         const nyt = byggFradragFraKladde(tekst, valgtIndkomstAarId, []);
+        gemtTitel = nyt.beskrivelse || gemtTitel;
         await onGemFradrag({ id: `fradrag-${Date.now()}`, ...nyt });
       } else {
         const nyt = byggInvesteringFraKladde(tekst, valgtIndkomstAarId, []);
+        gemtTitel = nyt.beskrivelse || gemtTitel;
         await onGemInvestering({ id: `inv-${Date.now()}`, ...nyt });
       }
-      onGemt();
+      onGemt({ klassifikation: forslag.klassifikation, titel: gemtTitel });
     } catch (err) {
       setFejl(err instanceof Error ? err.message : 'Posten kunne ikke gemmes.');
     } finally {

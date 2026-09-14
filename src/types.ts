@@ -214,4 +214,9 @@ export interface ChatBesked {
   kilder?: { titel: string; url: string }[];
   /** Et endnu ikke godkendt forslag, hængt på denne besked. */
   forslag?: PosteringForslag;
+  /** Handling efter oprettelse, f.eks. gå til den oprettede fane */
+  handling?: {
+    tekst: string;
+    fane: string;
+  };
 }
