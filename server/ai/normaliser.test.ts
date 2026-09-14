@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rensAnalyse, rensPosteringForslag } from './normaliser';
+import { rensAnalyse, rensPosteringForslag, fletForslag } from './normaliser';
 import { BilagsAnalyseSkema, PosteringForslagSkema } from './skema';
 
 describe('rensPosteringForslag', () => {
@@ -47,6 +47,41 @@ describe('rensPosteringForslag', () => {
     const rent = rensPosteringForslag(raa);
     expect(rent.job?.honorar.vaerdi).toBe(5000);
     expect(rent.job?.amBidragFritaget.vaerdi).toBe(true);
+  });
+});
+
+describe('fletForslag', () => {
+  it('fletter et nyt forslag over et eksisterende, så eksisterende felter ikke overskrives med tomme felter', () => {
+    const gammelt = rensPosteringForslag(
+      PosteringForslagSkema.parse({
+        klassifikation: 'JOB',
+        besked: 'Opretter job for Kolding Bibliotek',
+        job: {
+          hvervgiver: 'Kolding Bibliotek',
+          honorar: 2000,
+          amBidragFritaget: true,
+        },
+      })
+    );
+
+    const nyt = rensPosteringForslag(
+      PosteringForslagSkema.parse({
+        klassifikation: 'JOB',
+        besked: 'Tilføjede dato og kørsel',
+        job: {
+          startDato: '2026-09-13',
+          transportmiddel: 'OWN_CAR_MC',
+        },
+      })
+    );
+
+    const flettet = fletForslag(gammelt, nyt);
+
+    expect(flettet.job?.hvervgiver.vaerdi).toBe('Kolding Bibliotek');
+    expect(flettet.job?.honorar.vaerdi).toBe(2000);
+    expect(flettet.job?.amBidragFritaget.vaerdi).toBe(true);
+    expect(flettet.job?.startDato.vaerdi).toBe('2026-09-13');
+    expect(flettet.job?.transportmiddel.vaerdi).toBe('OWN_CAR_MC');
   });
 });
 

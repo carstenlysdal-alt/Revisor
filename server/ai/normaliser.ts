@@ -46,3 +46,42 @@ export function rensPosteringForslag(raa: RaaPosteringForslag): PosteringForslag
     investering: rensGruppe(raa.investering),
   } as PosteringForslag;
 }
+
+/**
+ * Fletter et nyt forslag ind over et eksisterende aktivt forslag.
+ * Hvis modellen kun returnerer de felter, brugeren lige har rettet/tilføjet,
+ * bevares de eksisterende felter (fx hvervgiver og honorar).
+ */
+export function fletForslag(
+  eksisterende: PosteringForslag | null | undefined,
+  nyt: PosteringForslag
+): PosteringForslag {
+  if (!eksisterende || eksisterende.klassifikation !== nyt.klassifikation) {
+    return nyt;
+  }
+
+  const fletGruppe = <
+    T extends Record<string, { vaerdi: unknown; sikkerhed: number } | undefined>
+  >(
+    gamle?: T,
+    nye?: T
+  ): T | undefined => {
+    if (!gamle) return nye;
+    if (!nye) return gamle;
+    const resultat = { ...gamle } as Record<string, { vaerdi: unknown; sikkerhed: number }>;
+    for (const [felt, nyV] of Object.entries(nye)) {
+      if (nyV && nyV.vaerdi !== null && nyV.vaerdi !== undefined && nyV.vaerdi !== '') {
+        resultat[felt] = nyV;
+      }
+    }
+    return resultat as T;
+  };
+
+  return {
+    klassifikation: nyt.klassifikation,
+    besked: nyt.besked || eksisterende.besked,
+    job: fletGruppe(eksisterende.job, nyt.job),
+    fradrag: fletGruppe(eksisterende.fradrag, nyt.fradrag),
+    investering: fletGruppe(eksisterende.investering, nyt.investering),
+  };
+}

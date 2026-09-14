@@ -9,7 +9,7 @@ import {
   PosteringForslagSkema,
   SKEMABESKRIVELSE,
 } from './skema';
-import { rensAnalyse, rensPosteringForslag } from './normaliser';
+import { rensAnalyse, rensPosteringForslag, fletForslag } from './normaliser';
 import { udtraekPdfTekst, PdfUdenTekstError } from './pdf';
 import { soeg, type Kilde } from './soegning';
 import {
@@ -179,7 +179,10 @@ export function opretDeepseekUdbyder(): AiUdbyder {
         try {
           const raa: unknown = JSON.parse(kald.function.arguments || '{}');
           const forslag = rensPosteringForslag(PosteringForslagSkema.parse(raa));
-          return { tekst: forslag.besked, kilder: kilder ?? [], forslag };
+          const flettet = indgang.aktivtForslag
+            ? fletForslag(indgang.aktivtForslag, forslag)
+            : forslag;
+          return { tekst: flettet.besked, kilder: kilder ?? [], forslag: flettet };
         } catch (err) {
           // Modellen kaldte værktøjet, men leverede et udkast, der ikke kunne
           // læses — typisk en besked med flere fakta på én gang. Bedre at

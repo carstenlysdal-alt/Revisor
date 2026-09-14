@@ -3,7 +3,7 @@ import type { FunctionDeclaration } from '@google/genai';
 import type { BilagsAnalyse } from '../../src/types';
 import { ANALYSE_SYSTEMPROMPT, chatSystemprompt } from './prompts';
 import { BilagsAnalyseSkema, PosteringForslagSkema } from './skema';
-import { rensAnalyse, rensPosteringForslag } from './normaliser';
+import { rensAnalyse, rensPosteringForslag, fletForslag } from './normaliser';
 import { soeg, type Kilde } from './soegning';
 import {
   HISTORIK_VINDUE,
@@ -87,7 +87,18 @@ const JOB_FELTER = {
   slutDato: felt(Type.STRING),
   betalingsDato: felt(Type.STRING),
   destinationAdresse: felt(Type.STRING),
-  transportmiddel: felt(Type.STRING),
+  transportmiddel: {
+    type: Type.OBJECT,
+    nullable: true,
+    properties: {
+      vaerdi: {
+        type: Type.STRING,
+        enum: ['NONE', 'OWN_CAR_MC', 'OWN_BIKE', 'PASSENGER'],
+        nullable: true,
+      },
+      sikkerhed: { type: Type.NUMBER, nullable: true },
+    },
+  },
   antalKm: felt(Type.NUMBER),
   antalTure: felt(Type.NUMBER),
   amBidragFritaget: felt(Type.BOOLEAN),
@@ -237,13 +248,16 @@ export function opretGeminiUdbyder(): AiUdbyder {
       if (kald?.name === 'foreslaaPostering') {
         try {
           const forslag = rensPosteringForslag(PosteringForslagSkema.parse(kald.args ?? {}));
-          return { tekst: forslag.besked, kilder: kilder ?? [], forslag };
+          const flettet = indgang.aktivtForslag
+            ? fletForslag(indgang.aktivtForslag, forslag)
+            : forslag;
+          return { tekst: flettet.besked, kilder: kilder ?? [], forslag: flettet };
         } catch (err) {
           // Modellen kaldte værktøjet, men leverede et udkast, der ikke kunne
           // læses — typisk en besked med flere fakta på én gang. Bedre at
           // bede brugeren dele det op end at kaste en fejl, der intet siger
           // om hvad der gik galt.
-          console.error('foreslaaPostering: udkastet kunne ikke læses.', err);
+          console.error('foreslaaPostering: udkastet kunne ikke læses.', err, kald.args);
           return {
             tekst:
               'Jeg fangede ikke det hele i den besked. Prøv at dele den op — fx hvervgiver og beløb først, kørslen bagefter.',

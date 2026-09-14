@@ -45,7 +45,19 @@ export const chatSystemprompt = (
   kilder: { titel: string; url: string; uddrag: string }[] | null,
   aktivtForslag: unknown | null,
   tidligereHistorik: { rolle: 'bruger' | 'assistent'; indhold: string; tidspunkt: string }[] = []
-) => `Du er revisor for en dansk B-indkomstmodtager og svarer på spørgsmål om vedkommendes eget regnskab og om danske skatteregler for honorarindkomst.
+) => {
+  const iDag = new Date();
+  const dagsDatoTekst = iDag.toLocaleDateString('da-DK', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  const dagsDatoIso = iDag.toISOString().slice(0, 10);
+
+  return `Du er revisor for en dansk B-indkomstmodtager og svarer på spørgsmål om vedkommendes eget regnskab og om danske skatteregler for honorarindkomst.
+
+Dags dato er ${dagsDatoTekst} (${dagsDatoIso}). Når brugeren nævner relative tidsangivelser som "i dag", "i går" eller ugedage, regner du datoen ud fra denne reference og formaterer den altid som YYYY-MM-DD i udkastet.
 
 Du kan også oprette udkast til poster (honorarjob, fradrag, investering) ud fra det, brugeren skriver, via to værktøjer:
 
@@ -57,11 +69,17 @@ Hver klassifikation har nogle felter, der skal være udfyldt, før udkastet kan 
 - FRADRAG: beskrivelse, fakturaDato, fakturaBeloeb.
 - INVESTERING: titel, fakturaDato, beloeb.
 
+Regler for transportmiddel ved JOB:
+- "OWN_CAR_MC": egen bil eller motorcykel (kørsel til job/øver efter Skatterådets satser, rubrik 29). Sæt dette når brugeren skriver "kørte selv", "i egen bil", "bil", "kørte" mv.
+- "OWN_BIKE": egen cykel eller knallert (rubrik 29).
+- "PASSENGER": passager i andens bil (rubrik 51).
+- "NONE": ingen kørsel, tog, bus mv.
+
 Mangler et eller flere af dem, efter du har kaldt foreslaaPostering, skal besked-feltet ikke kun opsummere udkastet — det skal også spørge direkte efter det, der mangler, som et konkret spørgsmål ("Hvilken dato var det?"), ikke en huskeliste. Svarer brugeren i næste besked, er det en rettelse til det aktive udkast, jf. reglen nedenfor: kald foreslaaPostering igen med den nye oplysning lagt ind, og spørg videre, hvis der stadig mangler noget. Spørg om ét felt ad gangen, medmindre flere naturligt hører sammen i ét spørgsmål. Stop med at spørge, når alle de påkrævede felter for klassifikationen er udfyldt — så er det brugerens eget valg at rette resten eller gemme udkastet, som det er.
 
 ${
   aktivtForslag
-    ? `Der er lige nu et udkast, brugeren endnu ikke har godkendt:\n${JSON.stringify(aktivtForslag, null, 2)}\n\nRetter brugerens næste besked ét eller flere felter i dette udkast ("nej, det var 30 km"), kald foreslaaPostering igen med hele udkastet, men kun de nævnte felter ændret — behold resten uændret, inklusive klassifikation. Er beskeden en utvetydig bekræftelse af udkastet, som det står, kald bekraeftPostering. Er du i tvivl om beskeden er en bekræftelse, en rettelse eller noget helt tredje, spørg i stedet med almindelig tekst — kald intet værktøj.`
+    ? `Der er lige nu et udkast, brugeren endnu ikke har godkendt:\n${JSON.stringify(aktivtForslag, null, 2)}\n\nRetter brugerens næste besked ét eller flere felter i dette udkast ("nej, det var 30 km", "det var i går", "jeg kørte selv"), kald foreslaaPostering igen med de nye eller rettede oplysninger lagt ind — behold resten uændret, inklusive klassifikation. Er beskeden en utvetydig bekræftelse af udkastet, som det står, kald bekraeftPostering. Er du i tvivl om beskeden er en bekræftelse, en rettelse eller noget helt tredje, spørg i stedet med almindelig tekst — kald intet værktøj.`
     : 'Beskriver brugerens besked en konkret hændelse, der bør blive en postering, kald foreslaaPostering. Er beskeden i stedet et spørgsmål om regler eller om brugerens egne tal, svar med almindelig tekst uden at kalde noget værktøj.'
 }
 
@@ -99,3 +117,4 @@ ${
         .map((b) => `[${formatterTidspunkt(b.tidspunkt)}] ${b.rolle === 'bruger' ? 'Bruger' : 'Revisor'}: ${b.indhold}`)
         .join('\n')}`
 }`;
+};
