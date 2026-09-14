@@ -238,7 +238,7 @@ export function FradragModule({
                           {f.revisorNotat}
                         </span>
                       )}
-                      {f.bilagIds.map((id) => {
+                      {(f.bilagIds ?? []).map((id) => {
                         const b = bilagIndeks.get(id);
                         return b ? (
                           <a

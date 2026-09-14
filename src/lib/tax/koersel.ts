@@ -86,7 +86,7 @@ export function beregnAaretsKoersel(
   const { bilMcFoerste20000, bilMcOver20000, cykelKnallert, kmGraense } =
     satser.erhvervsKoersel;
 
-  const sorteret = [...jobs].sort((a, b) => a.startDato.localeCompare(b.startDato));
+  const sorteret = [...jobs].sort((a, b) => (a.startDato || '').localeCompare(b.startDato || ''));
   const bilKmPrHvervgiver = new Map<string, number>();
   let erhvervsKmIAlt = 0;
 

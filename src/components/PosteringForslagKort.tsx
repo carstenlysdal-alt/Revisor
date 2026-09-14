@@ -9,7 +9,7 @@ import type {
   TransportMiddel,
 } from '../types';
 import { SIKKERHEDSTAERSKEL } from '../types';
-import { kr } from '../lib/format';
+import { kr, talFraFelt } from '../lib/format';
 import {
   byggFradragFraKladde,
   byggInvesteringFraKladde,
@@ -146,8 +146,8 @@ export function PosteringForslagKort({
         destinationAdresse: res.fundetAdresse || prev.destinationAdresse,
       }));
       sidsteBeregningRef.current = {
-        enkeltTurKm: res.enkeltTurKm,
-        turReturKm: aktivTurRetur ? res.km : Math.round(res.enkeltTurKm * 2 * 10) / 10,
+        enkeltTurKm: res.enkeltTurKm ?? (aktivTurRetur ? Math.round((res.km / 2) * 10) / 10 : res.km),
+        turReturKm: aktivTurRetur ? res.km : Math.round((res.enkeltTurKm ?? res.km) * 2 * 10) / 10,
       };
       const stopInfo =
         stops.length > 0
@@ -365,10 +365,10 @@ export function PosteringForslagKort({
                       />
                     </div>
                     <Knap
-                      onClick={beregnAfstand}
+                      onClick={() => beregnAfstand()}
                       disabled={
                         beregnerAfstand ||
-                        !valgtIndkomstAar?.hjemmeadresse ||
+                        !(profil?.hjemmeadresse?.trim() || valgtIndkomstAar?.hjemmeadresse?.trim()) ||
                         !tekst.destinationAdresse?.trim()
                       }
                       title="Beregner køreafstand via DAWA/OSRM ud fra bopæl og destination."

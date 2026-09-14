@@ -146,7 +146,7 @@ export function InvesteringerModule({
                   {inv.noter && (
                     <span className="block text-2xs text-ink-faint">{inv.noter}</span>
                   )}
-                  {inv.bilagIds.map((id) => {
+                  {(inv.bilagIds ?? []).map((id) => {
                     const b = bilagIndeks.get(id);
                     return b ? (
                       <a

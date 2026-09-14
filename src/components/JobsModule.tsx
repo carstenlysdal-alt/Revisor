@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { Bilag, BrugerProfil, IndkomstAar, Job, TransportMiddel } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
 import { betalingKrydserAarsskifte } from '../lib/tax/beregn';
@@ -94,13 +94,13 @@ const nyKoersel = (indkomstAarId: string, aar: number): Job => {
   };
 };
 
-const nytJob = (indkomstAarId: string, aar: number): Job => {
+const nytJob = (indkomstAarId: string, aar: number, standardHvervgiver?: string): Job => {
   const dag = idag();
   const d = dag.startsWith(String(aar)) ? dag : `${aar}-01-01`;
   return {
     id: `job-${Date.now()}`,
     indkomstAarId,
-    hvervgiver: '',
+    hvervgiver: standardHvervgiver?.trim() || '',
     tilknyttetJob: '',
     honorar: 0,
     startDato: d,
@@ -130,6 +130,7 @@ export function JobsModule({
   onAabnChat,
   visning = 'indtaegter',
 }: Props) {
+  const bopael = profil?.hjemmeadresse?.trim() || indkomstAar.hjemmeadresse?.trim() || '';
   const [redigerer, setRedigerer] = useState<Job | null>(null);
   const [gemmer, setGemmer] = useState(false);
   const [fejl, setFejl] = useState<string | null>(null);
@@ -164,7 +165,6 @@ export function JobsModule({
     setBeregnerAfstand(true);
     try {
       const stops = mellemstationer.map((s) => s.trim()).filter(Boolean);
-      const bopael = profil?.hjemmeadresse?.trim() || indkomstAar.hjemmeadresse?.trim() || '';
       const res = await api.beregnAfstand(
         bopael,
         redigerer.destinationAdresse ?? '',
@@ -175,8 +175,8 @@ export function JobsModule({
       );
       setKm(String(res.km));
       sidsteBeregningRef.current = {
-        enkeltTurKm: res.enkeltTurKm,
-        turReturKm: aktivTurRetur ? res.km : Math.round(res.enkeltTurKm * 2 * 10) / 10,
+        enkeltTurKm: res.enkeltTurKm ?? (aktivTurRetur ? Math.round((res.km / 2) * 10) / 10 : res.km),
+        turReturKm: aktivTurRetur ? res.km : Math.round((res.enkeltTurKm ?? res.km) * 2 * 10) / 10,
       };
       if (res.fundetAdresse && res.fundetAdresse !== redigerer.destinationAdresse) {
         setRedigerer({ ...redigerer, destinationAdresse: res.fundetAdresse });
@@ -261,7 +261,7 @@ export function JobsModule({
     setBeregnetInfo(null);
     const post = kopi
       ? { ...job, id: `job-${Date.now()}`, bilagIds: [], betalingsDato: '' }
-      : job;
+      : { ...job, bilagIds: job.bilagIds ?? [] };
     setRedigerer(post);
     setHonorar(post.honorar ? String(post.honorar) : '');
     setKm(post.antalKm ? String(post.antalKm) : '');
@@ -335,6 +335,7 @@ export function JobsModule({
         timerTransportForberedelse: talFraFelt(timerTransport) || undefined,
         mellemstationer: mellemstationer.map((s) => s.trim()).filter(Boolean),
         turRetur,
+        bilagIds: redigerer.bilagIds ?? [],
       });
       setRedigerer(null);
     } catch (err) {
@@ -367,7 +368,7 @@ export function JobsModule({
         Opret kørsel
       </Knap>
     ) : (
-      <Knap art="primaer" onClick={() => aabn(nytJob(indkomstAar.id, indkomstAar.aar))}>
+      <Knap art="primaer" onClick={() => aabn(nytJob(indkomstAar.id, indkomstAar.aar, profil?.fastHvervgiver))}>
         Nyt job
       </Knap>
     );
@@ -578,9 +579,9 @@ export function JobsModule({
                         .filter(Boolean)
                         .join(' · ')}
                     </span>
-                    {job.bilagIds.length > 0 && (
+                    {(job.bilagIds?.length ?? 0) > 0 && (
                       <span className="mt-0.5 block text-2xs">
-                        {job.bilagIds.map((id) => {
+                        {(job.bilagIds ?? []).map((id) => {
                           const b = bilagIndeks.get(id);
                           return b ? (
                             <a
@@ -917,8 +918,8 @@ export function JobsModule({
                   <Felt
                     label={visning === 'koersel' ? 'Adresse for kørslen' : 'Adresse for jobbet'}
                     hjaelp={
-                      !indkomstAar.hjemmeadresse
-                        ? 'Sæt en hjemmeadresse på indkomståret for at kunne beregne afstanden herfra.'
+                      !bopael
+                        ? 'Sæt en hjemmeadresse i din profil for at kunne beregne afstanden herfra.'
                         : undefined
                     }
                   >
@@ -940,10 +941,10 @@ export function JobsModule({
                         </div>
                         {rutestatusKlar && (
                           <Knap
-                            onClick={beregnAfstand}
+                            onClick={() => beregnAfstand()}
                             disabled={
                               beregnerAfstand ||
-                              !indkomstAar.hjemmeadresse ||
+                              !bopael ||
                               !redigerer.destinationAdresse?.trim()
                             }
                             title="Foreslår kilometertallet ud fra bopæl og destination. Du kan altid rette det bagefter."

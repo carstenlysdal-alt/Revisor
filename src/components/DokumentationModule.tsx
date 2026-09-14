@@ -158,7 +158,7 @@ function AarsRapport({
                   <td style={tal}>{kr(j.honorar)}</td>
                   <td style={tal}>{linje && linje.fradrag > 0 ? kr(linje.fradrag) : '–'}</td>
                   <td style={{ ...td, fontSize: '7.5pt', color: 'var(--color-ink-faint)' }}>
-                    {j.bilagIds.length > 0 ? `${j.bilagIds.length} vedhæftet` : '–'}
+                    {(j.bilagIds?.length ?? 0) > 0 ? `${j.bilagIds.length} vedhæftet` : '–'}
                   </td>
                 </tr>
               );

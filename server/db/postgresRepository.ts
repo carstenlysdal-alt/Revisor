@@ -206,13 +206,14 @@ export class PostgresRepository implements Repository, BilagsLager {
   private async saetBilagstilknytning(
     type: Postype,
     postId: string,
-    bilagIds: string[]
+    bilagIds?: string[]
   ): Promise<void> {
     await this.pool.query(
       'DELETE FROM bilag_tilknytning WHERE post_type = $1 AND post_id = $2',
       [type, postId]
     );
-    for (const bilagId of bilagIds) {
+    const idListe = Array.isArray(bilagIds) ? bilagIds : [];
+    for (const bilagId of idListe) {
       await this.pool.query(
         `INSERT INTO bilag_tilknytning (bilag_id, post_type, post_id)
          VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,

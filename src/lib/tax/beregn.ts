@@ -442,7 +442,7 @@ export function beregnSkat(
  * andet retserhvervelsestidspunkt.
  */
 export function indkomstAarForJob(job: { startDato: string; slutDato?: string }): number {
-  return Number((job.slutDato || job.startDato).slice(0, 4));
+  return Number((job.slutDato || job.startDato || '').slice(0, 4)) || new Date().getFullYear();
 }
 
 export function betalingKrydserAarsskifte(job: {

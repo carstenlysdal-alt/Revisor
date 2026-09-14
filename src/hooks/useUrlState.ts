@@ -29,10 +29,25 @@ export function normaliserFane(fane: string | null | undefined, standardFane = '
   return ren || standardFane;
 }
 
+const KENDTE_FANER = new Set([
+  'forside',
+  'indtaegter',
+  'koersel',
+  'fradrag',
+  'overblik',
+  'aarsopgoerelse',
+  'opsparing',
+  'statistik',
+  'investeringer',
+  'dokumentation',
+]);
+
 const læsFraUrl = (standardFane: string): Visning => {
   const p = new URLSearchParams(window.location.search);
+  const qFane = p.get('fane');
   const pathSegment = window.location.pathname.replace(/^\/+/, '').split('/')[0];
-  const raaFane = p.get('fane') || (pathSegment ? pathSegment : standardFane);
+  const normaliseretPath = normaliserFane(pathSegment, '');
+  const raaFane = qFane || (KENDTE_FANER.has(normaliseretPath) ? normaliseretPath : standardFane);
   return { fane: normaliserFane(raaFane, standardFane), aar: p.get('aar') };
 };
 
@@ -63,7 +78,7 @@ export function useUrlState(standardFane: string) {
         const p = new URLSearchParams();
         p.set('fane', samlet.fane);
         if (samlet.aar) p.set('aar', samlet.aar);
-        const url = `${window.location.pathname}?${p.toString()}`;
+        const url = `/?${p.toString()}`;
         if (erstat) window.history.replaceState({}, '', url);
         else window.history.pushState({}, '', url);
         return samlet;
