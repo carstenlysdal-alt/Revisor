@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import type { Bilag, IndkomstAar, Job, TransportMiddel } from '../types';
+import type { Bilag, BrugerProfil, IndkomstAar, Job, TransportMiddel } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
 import { betalingKrydserAarsskifte } from '../lib/tax/beregn';
 import { beregnKoerselForJob } from '../lib/tax/koersel';
@@ -35,6 +35,7 @@ interface Props {
   jobs: Job[];
   bilag: Bilag[];
   indkomstAar: IndkomstAar;
+  profil?: BrugerProfil;
   beregning: SkatteBeregning;
   onGem: (job: Job) => Promise<unknown>;
   onSlet: (id: string) => Promise<unknown>;
@@ -121,6 +122,7 @@ export function JobsModule({
   jobs,
   bilag,
   indkomstAar,
+  profil,
   beregning,
   onGem,
   onSlet,
@@ -162,8 +164,9 @@ export function JobsModule({
     setBeregnerAfstand(true);
     try {
       const stops = mellemstationer.map((s) => s.trim()).filter(Boolean);
+      const bopael = profil?.hjemmeadresse?.trim() || indkomstAar.hjemmeadresse?.trim() || '';
       const res = await api.beregnAfstand(
-        indkomstAar.hjemmeadresse,
+        bopael,
         redigerer.destinationAdresse ?? '',
         {
           mellemstationer: stops,

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { Repository } from '../db/repository';
 import {
   OpenRouteServiceFejl,
   beregnRuteDetaljer,
@@ -9,7 +10,7 @@ import {
  * Ruteberegning og adressesøgning.
  * Standard er tur/retur og understøtter valgfri mellemstationer.
  */
-export function ruterRoutes(): Router {
+export function ruterRoutes(repo?: Repository): Router {
   const r = Router();
 
   r.get('/ruter/status', (_req, res) => {
@@ -37,9 +38,24 @@ export function ruterRoutes(): Router {
     const rentFra = String(fra ?? '').trim();
     const rentTil = String(til ?? '').trim();
 
-    if (!rentFra) {
+    let effektivFra = rentFra;
+    if (repo) {
+      try {
+        const profil = await repo.hentProfil();
+        if (profil?.hjemmeadresse?.trim()) {
+          // Hvis fra mangler eller indeholder standard-dummyadressen fra eksempeldata, brug brugerens profilbopæl
+          if (!effektivFra || effektivFra.includes('Vesterbrogade 42')) {
+            effektivFra = profil.hjemmeadresse.trim();
+          }
+        }
+      } catch {
+        // ignorer
+      }
+    }
+
+    if (!effektivFra) {
       return res.status(400).json({
-        fejl: 'Sæt en hjemmeadresse på indkomståret først, så afstanden kan beregnes derfra.',
+        fejl: 'Sæt en hjemmeadresse på din profil eller indkomståret først, så afstanden kan beregnes derfra.',
       });
     }
     if (!rentTil) {
@@ -59,7 +75,7 @@ export function ruterRoutes(): Router {
         : turReturRaw !== 'false' && turReturRaw !== false;
 
     try {
-      const rute = await beregnRuteDetaljer(rentFra, rentTil, { mellemstationer, turRetur });
+      const rute = await beregnRuteDetaljer(effektivFra, rentTil, { mellemstationer, turRetur });
       res.json(rute);
     } catch (err) {
       if (err instanceof OpenRouteServiceFejl) {

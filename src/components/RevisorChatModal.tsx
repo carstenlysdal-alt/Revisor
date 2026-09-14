@@ -286,16 +286,56 @@ export function RevisorChatModal({
                           code: ({ children }) => (
                             <code className="tal bg-sunk px-1">{children}</code>
                           ),
-                          a: ({ children, href }) => (
-                            <a
-                              href={href}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="underline underline-offset-2"
-                            >
-                              {children}
-                            </a>
-                          ),
+                          a: ({ children, href }) => {
+                            const linkTekst = typeof children === 'string' ? children : String(children ?? '');
+                            const erEksternUrl = Boolean(href && /^https?:\/\//i.test(href));
+
+                            if (erEksternUrl) {
+                              return (
+                                <a
+                                  href={href}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="underline underline-offset-2 hover:text-ink font-medium"
+                                >
+                                  {children}
+                                </a>
+                              );
+                            }
+
+                            // Intern henvisning / genvej i stedet for hvid skærm
+                            const samlet = `${linkTekst} ${href ?? ''}`.toLowerCase();
+                            let maalfane = 'indtaegter';
+                            if (samlet.includes('fradrag') || samlet.includes('udgift')) {
+                              maalfane = 'fradrag';
+                            } else if (samlet.includes('kørsel') || samlet.includes('koersel') || samlet.includes('bil')) {
+                              maalfane = 'koersel';
+                            } else if (samlet.includes('opsparing')) {
+                              maalfane = 'opsparing';
+                            } else if (samlet.includes('overblik') || samlet.includes('skat')) {
+                              maalfane = 'overblik';
+                            } else if (samlet.includes('profil') || samlet.includes('bopæl')) {
+                              maalfane = 'profil';
+                            } else if (samlet.includes('investering')) {
+                              maalfane = 'investeringer';
+                            } else if (samlet.includes('job') || samlet.includes('honorar') || samlet.includes('indtægt')) {
+                              maalfane = 'indtaegter';
+                            }
+
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  onLuk();
+                                  onGaaTil?.(maalfane);
+                                }}
+                                className="inline-flex items-center gap-0.5 font-medium underline underline-offset-2 text-ink hover:text-ink-muted cursor-pointer"
+                                title={`Gå til ${maalfane}`}
+                              >
+                                {children} →
+                              </button>
+                            );
+                          },
                         }}
                       >
                         {b.indhold}
@@ -337,6 +377,7 @@ export function RevisorChatModal({
                           forslag={b.forslag}
                           indkomstAarId={indkomstAar.id}
                           indkomstAarListe={indkomstAarListe}
+                          profil={profil}
                           onGemJob={onGemJob}
                           onGemFradrag={onGemFradrag}
                           onGemInvestering={onGemInvestering}

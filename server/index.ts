@@ -104,7 +104,7 @@ async function start() {
       vinduMs: 60_000,
       besked: 'Der er sendt mange ruteopslag på kort tid.',
     }),
-    ruterRoutes()
+    ruterRoutes(repo)
   );
   app.use('/api', integrationerRoutes(repo, driveBackup.planlaeg));
 

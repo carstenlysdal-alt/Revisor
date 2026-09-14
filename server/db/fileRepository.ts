@@ -109,7 +109,7 @@ export class FileRepository implements Repository {
       s.profil = { ...tomtProfil(), ...profil };
       if (profil.hjemmeadresse) {
         for (const aar of s.indkomstAar) {
-          if (!aar.hjemmeadresse) {
+          if (!aar.laast && (!aar.hjemmeadresse || aar.hjemmeadresse.includes('Vesterbrogade 42'))) {
             aar.hjemmeadresse = profil.hjemmeadresse;
           }
         }

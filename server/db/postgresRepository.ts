@@ -620,7 +620,10 @@ export class PostgresRepository implements Repository, BilagsLager {
 
     if (p.hjemmeadresse) {
       await this.pool.query(
-        `UPDATE indkomstaar SET hjemmeadresse = $1 WHERE hjemmeadresse = '' OR hjemmeadresse IS NULL`,
+        `UPDATE indkomstaar 
+         SET hjemmeadresse = $1 
+         WHERE (laast = false OR laast IS NULL) 
+           AND (hjemmeadresse = '' OR hjemmeadresse IS NULL OR hjemmeadresse LIKE '%Vesterbrogade 42%')`,
         [p.hjemmeadresse]
       );
     }

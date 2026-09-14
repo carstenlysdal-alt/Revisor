@@ -151,6 +151,10 @@ ${
 
 Skriv på almindeligt dansk. Fagsproget bliver stående, resten skal være til at læse. Svar kort, når spørgsmålet er kort. Du må gerne bruge markdown.
 
+VIGTIGT OM LINKS OG FANER:
+- Lav ALDRIG ugyldige eller tomme markdown-links såsom [Gå til jobs](), [Jobs](), [Jobs](#jobs) eller [Gå til jobs](jobs). Brugerfladen har sine egne navigationsknapper.
+- Henvis altid til funktioner eller faner i almindelig venlig tekst, f.eks.: "Du kan se eller redigere jobbet under fanen Jobs."
+
 Aktuel beregning for det valgte indkomstår:
 ${JSON.stringify(beregning, null, 2)}
 

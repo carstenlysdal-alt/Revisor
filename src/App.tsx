@@ -166,6 +166,15 @@ export default function App() {
     setScannerAaben(true);
   };
 
+  const gaaTilFane = (fane: string) => {
+    const ren = fane.toLowerCase().replace(/^[#/]+/, '').trim();
+    if (ren === 'profil' || ren === 'min-profil' || ren === 'stamdata') {
+      setProfilAaben(true);
+      return;
+    }
+    naviger({ fane: ren });
+  };
+
   useEffect(() => {
     // Statustjekket ligger bag login. Køres det kun ved allerførste mount, når
     // brugeren endnu ikke er logget ind, fejler kaldet med 401 og bliver aldrig
@@ -438,7 +447,7 @@ export default function App() {
                     (d.data.opsparing[aktivtAar.id]?.indbetaltTilSkat ?? 0) +
                     (d.data.opsparing[aktivtAar.id]?.opsparetPrivat ?? 0)
                   }
-                  onGaaTil={(fane) => naviger({ fane })}
+                  onGaaTil={gaaTilFane}
                 />
               )}
 
@@ -473,7 +482,7 @@ export default function App() {
                       onStilSpoergsmaal={stilSpoergsmaal}
                       onDropFil={traekBilagInd}
                       onAabnScanner={() => setScannerAaben(true)}
-                      onGaaTil={(fane) => naviger({ fane })}
+                      onGaaTil={gaaTilFane}
                       jobs={aaretsJobs}
                       fradragListe={aaretsFradrag}
                       investeringer={aaretsInvesteringer}
@@ -486,6 +495,7 @@ export default function App() {
                       jobs={aaretsJobs}
                       bilag={d.data.bilag}
                       indkomstAar={aktivtAar}
+                      profil={d.data.profil}
                       beregning={beregning}
                       onGem={medFejlhaandtering(d.gemJob)}
                       onSlet={medFejlhaandtering(d.sletJob)}
@@ -500,6 +510,7 @@ export default function App() {
                       jobs={aaretsJobs}
                       bilag={d.data.bilag}
                       indkomstAar={aktivtAar}
+                      profil={d.data.profil}
                       beregning={beregning}
                       onGem={medFejlhaandtering(d.gemJob)}
                       onSlet={medFejlhaandtering(d.sletJob)}
@@ -576,6 +587,19 @@ export default function App() {
                       onAabnChat={stilSpoergsmaal}
                     />
                   )}
+
+                  {!['forside', 'indtaegter', 'koersel', 'fradrag', 'overblik', 'aarsopgoerelse', 'opsparing', 'statistik', 'investeringer', 'dokumentation'].includes(visning.fane) && (
+                    <Forside
+                      aiKlar={aiKlar}
+                      onStilSpoergsmaal={stilSpoergsmaal}
+                      onDropFil={traekBilagInd}
+                      onAabnScanner={() => setScannerAaben(true)}
+                      onGaaTil={gaaTilFane}
+                      jobs={aaretsJobs}
+                      fradragListe={aaretsFradrag}
+                      investeringer={aaretsInvesteringer}
+                    />
+                  )}
                 </>
               )}
             </div>
@@ -597,7 +621,7 @@ export default function App() {
                   profil={d.data.profil}
                   onAabnProfil={() => setProfilAaben(true)}
                   onAabnScanner={() => setScannerAaben(true)}
-                  onGaaTil={(fane) => naviger({ fane })}
+                  onGaaTil={gaaTilFane}
                   antalJobs={aaretsJobs.length}
                   investeringerIAlt={aaretsInvesteringer.reduce((s, i) => s + i.beloeb, 0)}
                   visForklaring={visning.fane === 'forside'}
@@ -689,7 +713,7 @@ export default function App() {
           onGemInvestering={medFejlhaandtering(d.gemInvestering)}
           startBesked={chatStartBesked}
           onStartBeskedForbrugt={() => setChatStartBesked(null)}
-          onGaaTil={(fane) => naviger({ fane })}
+          onGaaTil={gaaTilFane}
         />
       )}
     </div>

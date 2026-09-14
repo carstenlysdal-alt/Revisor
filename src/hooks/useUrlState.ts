@@ -5,9 +5,35 @@ export interface Visning {
   aar: string | null;
 }
 
+export function normaliserFane(fane: string | null | undefined, standardFane = 'forside'): string {
+  if (!fane) return standardFane;
+  const ren = fane.toLowerCase().replace(/^[#/]+/, '').trim();
+  if (ren === 'jobs' || ren === 'job' || ren === 'indkomst' || ren === 'indkomster' || ren === 'honorar') {
+    return 'indtaegter';
+  }
+  if (ren === 'udgifter' || ren === 'udgift') {
+    return 'fradrag';
+  }
+  if (ren === 'kørsel' || ren === 'bil' || ren === 'transport') {
+    return 'koersel';
+  }
+  if (ren === 'investering' || ren === 'anlæg') {
+    return 'investeringer';
+  }
+  if (ren === 'skat' || ren === 'skatteoverblik') {
+    return 'overblik';
+  }
+  if (ren === 'årsopgørelse') {
+    return 'aarsopgoerelse';
+  }
+  return ren || standardFane;
+}
+
 const læsFraUrl = (standardFane: string): Visning => {
   const p = new URLSearchParams(window.location.search);
-  return { fane: p.get('fane') || standardFane, aar: p.get('aar') };
+  const pathSegment = window.location.pathname.replace(/^\/+/, '').split('/')[0];
+  const raaFane = p.get('fane') || (pathSegment ? pathSegment : standardFane);
+  return { fane: normaliserFane(raaFane, standardFane), aar: p.get('aar') };
 };
 
 /**
@@ -29,7 +55,11 @@ export function useUrlState(standardFane: string) {
   const naviger = useCallback(
     (næste: Partial<Visning>, erstat = false) => {
       setVisning((forrige) => {
-        const samlet = { ...forrige, ...næste };
+        const samlet = {
+          ...forrige,
+          ...næste,
+          ...(næste.fane ? { fane: normaliserFane(næste.fane, standardFane) } : {}),
+        };
         const p = new URLSearchParams();
         p.set('fane', samlet.fane);
         if (samlet.aar) p.set('aar', samlet.aar);
@@ -39,8 +69,9 @@ export function useUrlState(standardFane: string) {
         return samlet;
       });
     },
-    []
+    [standardFane]
   );
 
   return { visning, naviger };
 }
+

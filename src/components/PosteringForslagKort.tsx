@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type {
+  BrugerProfil,
   Fradrag,
   IndkomstAar,
   Investering,
@@ -29,6 +30,7 @@ interface Props {
   forslag: PosteringForslag;
   indkomstAarId: string;
   indkomstAarListe: IndkomstAar[];
+  profil?: BrugerProfil;
   onGemJob: (job: Job) => Promise<unknown>;
   onGemFradrag: (fradrag: Fradrag) => Promise<unknown>;
   onGemInvestering: (inv: Investering) => Promise<unknown>;
@@ -73,6 +75,7 @@ export function PosteringForslagKort({
   forslag,
   indkomstAarId,
   indkomstAarListe,
+  profil,
   onGemJob,
   onGemFradrag,
   onGemInvestering,
@@ -127,8 +130,10 @@ export function PosteringForslagKort({
     setBeregnerAfstand(true);
     try {
       const stops = mellemstationer.map((s) => s.trim()).filter(Boolean);
+      const bopael =
+        profil?.hjemmeadresse?.trim() || valgtIndkomstAar?.hjemmeadresse?.trim() || '';
       const res = await api.beregnAfstand(
-        valgtIndkomstAar?.hjemmeadresse || '',
+        bopael,
         tekst.destinationAdresse,
         {
           mellemstationer: stops,
