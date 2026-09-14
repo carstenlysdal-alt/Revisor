@@ -1,258 +1,394 @@
-import React, { useState, useRef, useEffect } from 'react';
-import {
-  X,
-  Send,
-  Bot,
-  User,
-  Loader2,
-  Mic,
-  MicOff
-} from 'lucide-react';
-import { IndkomstAar, Job, SkatteBeregningResultat } from '../types';
-import { useDictation } from '../hooks/useDictation';
-import { useModal } from '../hooks/useModal';
-
-interface Message {
-  id: string;
-  role: 'user' | 'model';
-  content: string;
-}
+import React, { useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import type { ChatBesked, Fradrag, IndkomstAar, Investering, Job, PosteringForslag } from '../types';
+import type { SkatteBeregning } from '../lib/tax/beregn';
+import { kr, pct } from '../lib/format';
+import { laesEventStroem } from '../lib/sse';
+import { KineticLoader } from './KineticLoader';
+import { PosteringForslagKort } from './PosteringForslagKort';
+import { Advarsel, Knap, Modal, Notatfelt, RevisorMaerke } from './ui';
+import { Mic, MicOff } from 'lucide-react';
+import { useDiktering } from '../hooks/useDiktering';
 
 interface Props {
-  isOpen: boolean;
-  onClose: () => void;
+  aaben: boolean;
+  onLuk: () => void;
   indkomstAar: IndkomstAar;
-  jobs: Job[];
-  skatteBeregning: SkatteBeregningResultat;
+  indkomstAarListe: IndkomstAar[];
+  beregning: SkatteBeregning;
+  aiKlar: boolean;
+  onGemJob: (job: Job) => Promise<unknown>;
+  onGemFradrag: (fradrag: Fradrag) => Promise<unknown>;
+  onGemInvestering: (inv: Investering) => Promise<unknown>;
+  /** Sat når chatten åbnes fra forsidens spørgeboks, med teksten der skal sendes med det samme. */
+  startBesked?: string | null;
+  onStartBeskedForbrugt?: () => void;
 }
 
-function createWelcomeMessage(
-  indkomstAar: IndkomstAar,
-  jobs: Job[],
-  skatteBeregning: SkatteBeregningResultat,
-): Message {
-  return {
-    id: crypto.randomUUID(),
-    role: 'model',
-    content: `Hej! Jeg kan forklare appens vejledende estimat for ${indkomstAar.aar}: ${jobs.length} poster, ${skatteBeregning.honorarerAlt.toLocaleString('da-DK')} DKK i rubrik 12 og ${skatteBeregning.anvendtFradragRubrik29.toLocaleString('da-DK')} DKK anvendt som rubrik 29-fradrag. Hvad vil du undersøge?`,
-  };
-}
+/** Faser vi faktisk kan skelne, fordi serveren melder dem fra strømmen. */
+const FASETEKST: Record<string, string> = {
+  laeser: 'Læser dine posteringer…',
+  soeger: 'Søger på skat.dk…',
+  laeser_kilder: 'Læser kilderne…',
+  skriver: 'Skriver svaret…',
+};
 
-export const RevisorChatModal: React.FC<Props> = ({
-  isOpen,
-  onClose,
+const FASER_UDEN_SOEGNING = [
+  'Læser dine posteringer…',
+  'Slår reglen op i beregningen…',
+  'Skriver svaret…',
+];
+
+const FORSLAG = [
+  'Hvor meget skal jeg sætte til side af min næste udbetaling?',
+  'Hvorfor tæller mit kørselsfradrag ikke fuldt med?',
+  'Hvad er forskellen på rubrik 29 og rubrik 51 for mig?',
+];
+
+export function RevisorChatModal({
+  aaben,
+  onLuk,
   indkomstAar,
-  jobs,
-  skatteBeregning,
-}) => {
-  const [messages, setMessages] = useState<Message[]>([
-    createWelcomeMessage(indkomstAar, jobs, skatteBeregning),
-  ]);
+  indkomstAarListe,
+  beregning,
+  aiKlar,
+  onGemJob,
+  onGemFradrag,
+  onGemInvestering,
+  startBesked,
+  onStartBeskedForbrugt,
+}: Props) {
+  const [beskeder, setBeskeder] = useState<ChatBesked[]>([]);
   const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const dictation = useDictation(input, setInput);
-  const closeModal = () => {
-    dictation.stopDictation();
-    onClose();
-  };
-  useModal(isOpen, closeModal);
+  const [arbejder, setArbejder] = useState(false);
+  const [fase, setFase] = useState<string | null>(null);
+  const [fejl, setFejl] = useState<string | null>(null);
+  const [soegning, setSoegning] = useState(true);
+  const diktering = useDiktering(input, setInput);
+  /**
+   * Kun det seneste, endnu ikke godkendte udkast er interaktivt. Et ældre
+   * udkast, der er blevet erstattet af en rettelse, vises stadig som en
+   * almindelig chatboble, men uden knapper — der er kun ét gyldigt kort ad
+   * gangen, ellers bliver det uklart, hvilket der bekræftes.
+   */
+  const [aktivtForslagIndeks, setAktivtForslagIndeks] = useState<number | null>(null);
+  /** Øges hver gang modellen tolker en besked som en bekræftelse af kortet. */
+  const [bekraeftSignal, setBekraeftSignal] = useState(0);
+  const bund = useRef<HTMLDivElement>(null);
+
+  const aktivtForslag =
+    aktivtForslagIndeks !== null ? beskeder[aktivtForslagIndeks]?.forslag ?? null : null;
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ block: 'end' });
-  }, [messages]);
+    // Uden behavior: smooth. Ældre Safari understøtter det ikke.
+    bund.current?.scrollIntoView({ block: 'end' });
+  }, [beskeder, arbejder]);
 
   useEffect(() => {
-    if (!isOpen) return;
-    setMessages([createWelcomeMessage(indkomstAar, jobs, skatteBeregning)]);
+    if (aaben) return;
+    diktering.stop();
+    // Samtalen skal ikke ligge og vente, næste gang chatten åbnes — hver
+    // åbning er en frisk samtale, ikke en fortsættelse af den forrige.
+    setBeskeder([]);
     setInput('');
-    setErrorMessage(null);
-  }, [isOpen, indkomstAar.id]);
+    setFejl(null);
+    setAktivtForslagIndeks(null);
+    setBekraeftSignal(0);
+    setFase(null);
+    // Hookens stop-funktion ændrer identitet ved render; modaltilstanden er
+    // den eneste ændring, der skal styre denne oprydning.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aaben]);
 
-  if (!isOpen) return null;
+  /**
+   * Beregningen sendes med, så modellen kan gengive tallene i stedet for at
+   * regne dem. Kun de felter, der giver mening at svare ud fra.
+   */
+  const kontekst = () => ({
+    aar: beregning.aar,
+    kommune: indkomstAar.kommune,
+    honorarerRubrik12: beregning.honorarerRubrik12,
+    rubrik17: beregning.rubrik17Indkomst,
+    amBidrag: beregning.amBidrag,
+    fradragRubrik29: beregning.oevrigeFradragRubrik29,
+    anvendtFradragRubrik29: beregning.anvendtFradragRubrik29,
+    loftRubrik29: beregning.maksTilladtFradragRubrik29,
+    loftOverskredet: beregning.rubrik29LoftOverskredet,
+    befordringRubrik51: beregning.befordringsFradragRubrik51,
+    personligIndkomst: beregning.personligIndkomst,
+    beregnetSkat: beregning.beregnetSkatIAlt,
+    samletSkatOgAM: beregning.samletSkatOgAM,
+    tilbageEfterSkat: beregning.indtaegtEfterSkat,
+    effektivSkatteprocent: beregning.effektivSkatteprocent,
+    marginalskatProcent: beregning.marginalskatProcent,
+    skattelinjer: beregning.skat,
+  });
 
-  const handleSend = async (textToSend?: string) => {
-    const q = textToSend || input;
-    if (!q.trim() || isLoading) return;
-    dictation.stopDictation();
+  const send = async (tekst: string) => {
+    const spørgsmål = tekst.trim();
+    if (!spørgsmål || arbejder) return;
+    diktering.stop();
 
-    const newMsgs: Message[] = [...messages, { id: crypto.randomUUID(), role: 'user', content: q }];
-    setMessages(newMsgs);
+    const historik: ChatBesked[] = [...beskeder, { rolle: 'bruger', indhold: spørgsmål }];
+    setBeskeder(historik);
     setInput('');
-    setIsLoading(true);
-    setErrorMessage(null);
+    setFejl(null);
+    setArbejder(true);
+    setFase(null);
 
     try {
-      const response = await fetch('/api/gemini/revisor-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: newMsgs,
-          contextData: {
-            aar: indkomstAar.aar,
-            kommune: indkomstAar.kommune,
-            honorarerTotal: skatteBeregning.honorarerAlt,
-            amBidrag: skatteBeregning.amBidrag,
-            rubrik29Total: skatteBeregning.oevrigeFradragRubrik29,
-            samletSkatOgAM: skatteBeregning.samletSkatOgAM,
-            indtaegtEfterSkat: skatteBeregning.indtaegtEfterSkat,
-            effektivSkatteprocent: skatteBeregning.effektivSkatteprocent,
-            rubrik29LoftOverskredet: skatteBeregning.rubrik29LoftOverskredet,
-          },
-        }),
-      });
-
-      if (!response.ok) {
-        const details = await response.json().catch(() => ({}));
-        throw new Error(details.error || 'AI-chatten kunne ikke svare.');
-      }
-
-      const data: unknown = await response.json();
-      const reply = data && typeof data === 'object' && 'reply' in data && typeof data.reply === 'string'
-        ? data.reply
-        : undefined;
-      if (!reply) throw new Error('AI-chatten returnerede et ugyldigt svar.');
-      setMessages([...newMsgs, { id: crypto.randomUUID(), role: 'model', content: reply }]);
-    } catch (error: unknown) {
-      setErrorMessage(error instanceof Error ? error.message : 'AI-chatten kunne ikke svare.');
+      await laesEventStroem(
+        '/api/ai/chat',
+        {
+          beskeder: historik.map((b) => ({ rolle: b.rolle, indhold: b.indhold })),
+          beregning: kontekst(),
+          brugWebsoegning: soegning,
+          aktivtForslag,
+        },
+        (type, data) => {
+          const d = data as Record<string, unknown>;
+          if (type === 'status') {
+            setFase(FASETEKST[String(d.fase)] ?? null);
+          } else if (type === 'faerdig') {
+            setBeskeder((b) => [
+              ...b,
+              {
+                rolle: 'assistent',
+                indhold: String(d.tekst ?? ''),
+                kilder: (d.kilder as ChatBesked['kilder']) ?? undefined,
+              },
+            ]);
+          } else if (type === 'forslag') {
+            const forslag = d.forslag as PosteringForslag;
+            setBeskeder((b) => {
+              const næste = [...b, { rolle: 'assistent' as const, indhold: String(d.besked ?? forslag.besked), forslag }];
+              setAktivtForslagIndeks(næste.length - 1);
+              return næste;
+            });
+          } else if (type === 'bekraeft') {
+            // Kun et signal fra modellen. Kortet gemmer det, der faktisk står
+            // i det lige nu — inklusive eventuelle rettelser brugeren har
+            // lavet direkte i felterne, ikke nødvendigvis det oprindelige
+            // AI-forslag.
+            setBekraeftSignal((n) => n + 1);
+          } else if (type === 'fejl') {
+            setFejl(String(d.fejl));
+          }
+        }
+      );
+    } catch (err) {
+      setFejl(
+        err instanceof Error
+          ? err.message
+          : 'Der kom ikke noget svar tilbage. Prøv igen.'
+      );
     } finally {
-      setIsLoading(false);
+      setArbejder(false);
+      setFase(null);
     }
   };
 
-  const sampleQuestions = [
-    'Hvor meget skal jeg sætte til side til skat af min næste udbetaling?',
-    'Hvorfor havner min bilkørsel i Rubrik 29 og ikke i Rubrik 51?',
-    'Hvad er reglen om Rubrik 29-loftet for B-indkomst?',
-    'Må jeg trække min computer eller telefon fra?',
-  ];
+  useEffect(() => {
+    // Forsidens spørgeboks åbner chatten og leverer teksten i samme
+    // handling. Forbruget nulstiller den hos App, så den ikke sendes igen,
+    // hvis modalen lukkes og åbnes uden en ny forespørgsel.
+    if (aaben && startBesked) {
+      void send(startBesked);
+      onStartBeskedForbrugt?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aaben, startBesked]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-xs p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="revisor-chat-title">
-      <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-2xl shadow-xl overflow-hidden my-6 flex flex-col h-[640px] max-h-[90vh]">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 bg-stone-50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-stone-900 text-white flex items-center justify-center">
-              <Bot className="w-4 h-4 text-amber-300" />
-            </div>
-            <div>
-              <h3 id="revisor-chat-title" className="font-bold text-stone-900 text-sm">
-                Revisor AI Rådgiver — {indkomstAar.aar}
-              </h3>
-              <p className="text-[11px] text-stone-500">
-                Forklarer appens estimat — kontrollér altid i TastSelv
-              </p>
+    <Modal
+      aaben={aaben}
+      onLuk={onLuk}
+      titel={
+        <span className="flex items-center gap-2.5">
+          <RevisorMaerke stoerrelse="sm" />
+          Revisor
+        </span>
+      }
+      beskrivelse={`Svarer ud fra dine egne tal for ${beregning.aar}. Beregningen kommer fra regelmotoren, ikke fra modellen.`}
+      bredde="max-w-3xl"
+    >
+      {!aiKlar ? (
+        <Advarsel titel="Chatten er slået fra">
+          Der er ingen AI-nøgle på serveren. Sæt GEMINI_API_KEY eller DEEPSEEK_API_KEY i
+          .env og start serveren igen, så virker både chatten og bilagslæsningen.
+        </Advarsel>
+      ) : (
+        <div className="flex h-[60vh] flex-col">
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            {beskeder.length === 0 && !arbejder && (
+              <div className="py-6">
+                <p className="mb-4 max-w-[60ch] text-xs text-ink-muted">
+                  Spørg om dine egne tal eller om reglerne. Året står på{' '}
+                  {kr(beregning.samletSkatOgAM)} kr. i skat og AM-bidrag, og den næste krone
+                  honorar beskattes med {pct(beregning.marginalskatProcent)}.
+                </p>
+                <ul className="space-y-1.5">
+                  {FORSLAG.map((f) => (
+                    <li key={f}>
+                      <button
+                        type="button"
+                        onClick={() => send(f)}
+                        className="overgang text-left text-xs text-ink-muted underline decoration-rule-strong underline-offset-4 hover:text-ink"
+                      >
+                        {f}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="space-y-5 py-2">
+              {beskeder.map((b, i) => (
+                <div key={i} className={b.rolle === 'bruger' ? 'ml-auto max-w-[80%]' : undefined}>
+                  {b.rolle === 'bruger' ? (
+                    <p className="whitespace-pre-wrap text-right text-sm text-ink-muted">
+                      {b.indhold}
+                    </p>
+                  ) : (
+                    <div className="max-w-[68ch] text-sm text-ink">
+                      <ReactMarkdown
+                        components={{
+                          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                          ul: ({ children }) => (
+                            <ul className="mb-2 list-disc space-y-0.5 pl-5">{children}</ul>
+                          ),
+                          ol: ({ children }) => (
+                            <ol className="mb-2 list-decimal space-y-0.5 pl-5">{children}</ol>
+                          ),
+                          strong: ({ children }) => (
+                            <strong className="font-semibold">{children}</strong>
+                          ),
+                          code: ({ children }) => (
+                            <code className="tal bg-sunk px-1">{children}</code>
+                          ),
+                          a: ({ children, href }) => (
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline underline-offset-2"
+                            >
+                              {children}
+                            </a>
+                          ),
+                        }}
+                      >
+                        {b.indhold}
+                      </ReactMarkdown>
+
+                      {b.kilder && b.kilder.length > 0 && (
+                        <ul className="mt-2 space-y-0.5 border-t border-rule pt-2">
+                          {b.kilder.map((k) => (
+                            <li key={k.url} className="text-2xs">
+                              <a
+                                href={k.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-ink-muted underline underline-offset-2 hover:text-ink"
+                              >
+                                {k.titel}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {b.forslag && i === aktivtForslagIndeks && (
+                        <PosteringForslagKort
+                          forslag={b.forslag}
+                          indkomstAarId={indkomstAar.id}
+                          indkomstAarListe={indkomstAarListe}
+                          onGemJob={onGemJob}
+                          onGemFradrag={onGemFradrag}
+                          onGemInvestering={onGemInvestering}
+                          bekraeftSignal={bekraeftSignal}
+                          onGemt={() => setAktivtForslagIndeks(null)}
+                          onForkast={() => setAktivtForslagIndeks(null)}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {arbejder && (
+                <KineticLoader
+                  faser={soegning ? Object.values(FASETEKST) : FASER_UDEN_SOEGNING}
+                  aktivFase={fase}
+                />
+              )}
+
+              {fejl && <Advarsel titel="Svaret kom ikke igennem">{fejl}</Advarsel>}
+              <div ref={bund} />
             </div>
           </div>
-          <button
-            onClick={closeModal}
-            type="button"
-            aria-label="Luk AI-chat"
-            className="p-1 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-200/60"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
 
-        {/* Message Thread */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {messages.map((m) => (
-            <div
-              key={m.id}
-              className={`flex gap-3 text-xs leading-relaxed ${
-                m.role === 'user' ? 'justify-end' : 'justify-start'
-              }`}
+          <div className="border-t border-rule pt-3">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void send(input);
+              }}
             >
-              {m.role === 'model' && (
-                <div className="w-6 h-6 rounded-full bg-stone-900 text-white flex items-center justify-center shrink-0 mt-0.5">
-                  <Bot className="w-3 h-3 text-amber-300" />
-                </div>
-              )}
-              <div
-                className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                  m.role === 'user'
-                    ? 'bg-stone-900 text-white rounded-tr-xs'
-                    : 'bg-stone-100 text-stone-800 rounded-tl-xs border border-stone-200/60'
-                }`}
-              >
-                <div className="whitespace-pre-wrap">{m.content}</div>
+              <label htmlFor="chat-input" className="sr-only">
+                Spørgsmål til revisoren
+              </label>
+              <Notatfelt
+                id="chat-input"
+                vaerdi={input}
+                onVaerdi={setInput}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    void send(input);
+                  }
+                }}
+                placeholder="Skriv dit spørgsmål"
+              />
+              <div className="mt-2.5 flex items-center justify-between gap-2">
+                {diktering.understøttet ? (
+                  <Knap
+                    type="button"
+                    onClick={diktering.lytter ? diktering.stop : diktering.start}
+                    aria-pressed={diktering.lytter}
+                    className={diktering.lytter ? 'text-negative' : ''}
+                  >
+                    {diktering.lytter ? (
+                      <MicOff className="h-3.5 w-3.5" />
+                    ) : (
+                      <Mic className="h-3.5 w-3.5" />
+                    )}
+                    {diktering.lytter ? 'Stop' : 'Diktér'}
+                  </Knap>
+                ) : (
+                  <span />
+                )}
+                <Knap art="primaer" type="submit" disabled={arbejder || !input.trim()}>
+                  Send
+                </Knap>
               </div>
-              {m.role === 'user' && (
-                <div className="w-6 h-6 rounded-full bg-stone-200 text-stone-700 flex items-center justify-center shrink-0 mt-0.5">
-                  <User className="w-3 h-3" />
-                </div>
-              )}
-            </div>
-          ))}
+            </form>
 
-          {isLoading && (
-            <div className="flex gap-2 text-xs text-stone-500 items-center">
-              <Loader2 className="w-4 h-4 animate-spin text-stone-700" />
-              Revisor AI tænker og konsulterer skatteregler...
-            </div>
-          )}
+            {diktering.fejl && <p role="alert" className="mt-2 text-2xs text-negative">{diktering.fejl}</p>}
 
-          <div ref={messagesEndRef} />
+            <label className="mt-2 flex items-center gap-2 text-2xs text-ink-muted">
+              <input
+                type="checkbox"
+                checked={soegning}
+                onChange={(e) => setSoegning(e.target.checked)}
+                className="h-3.5 w-3.5 accent-[oklch(0.21_0.008_75)]"
+              />
+              Slå regler op på skat.dk og retsinformation.dk, når spørgsmålet kræver det
+            </label>
+          </div>
         </div>
-
-        {/* Quick prompt chips */}
-        <div className="px-6 py-2 border-t border-stone-100 bg-stone-50/50 flex gap-2 overflow-x-auto">
-          {sampleQuestions.map((sq) => (
-            <button
-              key={sq}
-              type="button"
-              onClick={() => handleSend(sq)}
-              className="text-[11px] px-2.5 py-1 rounded-full border border-stone-200 bg-white hover:bg-stone-100 text-stone-600 whitespace-nowrap transition shrink-0"
-            >
-              {sq}
-            </button>
-          ))}
-        </div>
-
-        {errorMessage && <div role="alert" className="mx-4 mb-2 p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-800">{errorMessage} Du kan fortsat bruge appens manuelle registrering og beregning.</div>}
-
-        {/* Input bar */}
-        <div className="p-4 border-t border-stone-200 bg-white">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSend();
-            }}
-            className="flex items-center gap-2"
-          >
-            {dictation.isSupported && (
-              <button
-                type="button"
-                onClick={dictation.isListening ? dictation.stopDictation : dictation.startDictation}
-                aria-label={dictation.isListening ? 'Stop diktering' : 'Diktér besked på dansk'}
-                aria-pressed={dictation.isListening}
-                className={`p-2.5 rounded-xl border transition ${dictation.isListening ? 'border-red-300 bg-red-50 text-red-700' : 'border-stone-300 text-stone-600 hover:bg-stone-100'}`}
-              >
-                {dictation.isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              </button>
-            )}
-            <input
-              aria-label="Besked til AI-chat"
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Spørg om fradrag, kørsel, satser eller årsopgørelse..."
-              className="flex-1 px-3.5 py-2.5 border border-stone-300 rounded-xl text-xs focus:ring-1 focus:ring-stone-800"
-            />
-            <button
-              type="submit"
-              aria-label="Send besked"
-              disabled={!input.trim() || isLoading}
-              className="p-2.5 rounded-xl bg-stone-900 text-white hover:bg-stone-800 disabled:opacity-50 transition"
-            >
-              <Send className="w-4 h-4" />
-            </button>
-          </form>
-          {dictation.dictationError && <p role="alert" className="mt-2 text-xs text-red-700">{dictation.dictationError}</p>}
-        </div>
-      </div>
-    </div>
+      )}
+    </Modal>
   );
-};
+}

@@ -1,305 +1,725 @@
-import React, { useEffect, useRef, useState } from 'react';
-import {
-  AlertCircle, Briefcase, CheckCircle2, DollarSign, Loader2,
-  Mic, MicOff, Receipt, Send, UploadCloud, X,
-} from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 import type {
-  AiExtractionResult, AiFradragSuggestion, AiInvesteringSuggestion,
-  AiJobSuggestion, IndkomstAar,
+  Bilag,
+  BilagsAnalyse,
+  Bilagsklassifikation,
+  Fradrag,
+  IndkomstAar,
+  Investering,
+  Job,
+  TransportMiddel,
 } from '../types';
-import { useDictation } from '../hooks/useDictation';
-import { useModal } from '../hooks/useModal';
-import { getAiSuggestionYear, isCompleteAiSuggestion } from '../utils/aiValidation';
+import { SIKKERHEDSTAERSKEL } from '../types';
+import { api, filTilBase64 } from '../lib/api';
+import { datoLang, kr } from '../lib/format';
+import {
+  byggFradragFraKladde,
+  byggInvesteringFraKladde,
+  byggJobFraKladde,
+  findIndkomstAarTilKladde,
+  kanGemmeKladde,
+  kladdeFraUdtraek,
+  kladdeTal,
+  usikkertFelt,
+} from '../lib/posteringKladde';
+import { KineticLoader } from './KineticLoader';
+import {
+  Advarsel,
+  BeloebFelt,
+  Datofelt,
+  Felt,
+  Knap,
+  Modal,
+  Notatfelt,
+  Tekstfelt,
+  Vaelger,
+} from './ui';
 
 interface Props {
-  isOpen: boolean;
-  onClose: () => void;
-  activeIndkomstAar: IndkomstAar;
-  indkomstAarList: IndkomstAar[];
-  onApplyResult: (result: AiExtractionResult, file: File | undefined, yearId: string, sourceText: string | undefined) => Promise<void>;
+  aaben: boolean;
+  onLuk: () => void;
+  indkomstAar: IndkomstAar;
+  indkomstAarListe: IndkomstAar[];
+  aiKlar: boolean;
+  onGemJob: (job: Job) => Promise<unknown>;
+  onGemFradrag: (fradrag: Fradrag) => Promise<unknown>;
+  onGemInvestering: (inv: Investering) => Promise<unknown>;
+  onNytBilag: (bilag: Bilag) => void;
+  /** Sat når et bilag er trukket direkte ind på forsiden, og skal læses med det samme. */
+  startFil?: File | null;
+  onStartFilForbrugt?: () => void;
 }
 
-interface AnalysisPayload {
-  fileData?: string;
-  mimeType?: string;
-  fileName: string;
-  textContent?: string;
+type Trin = 'vaelg' | 'dublet' | 'laeser' | 'kladde' | 'gemt' | 'fejl';
+
+const FASER = [
+  'Læser bilaget…',
+  'Finder beløb og datoer…',
+  'Vurderer hvilken rubrik posten hører til…',
+];
+
+/** Sikkerheden pr. felt afgør, om feltet skal fremhæves til manuel kontrol. */
+const usikkert = (sikkerhed: number | undefined) =>
+  usikkertFelt(sikkerhed, SIKKERHEDSTAERSKEL);
+
+function UsikkerMarkering({ sikkerhed }: { sikkerhed: number | undefined }) {
+  if (!usikkert(sikkerhed)) return null;
+  return (
+    <span className="ml-1.5 text-2xs font-normal text-negative">
+      usikker aflæsning, kontrollér
+    </span>
+  );
 }
 
-const ALLOWED_FILE_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/heic', 'image/heif']);
-const MAX_FILE_SIZE = 15 * 1024 * 1024;
+export function AiBilagScannerModal({
+  aaben,
+  onLuk,
+  indkomstAar,
+  indkomstAarListe,
+  aiKlar,
+  onGemJob,
+  onGemFradrag,
+  onGemInvestering,
+  onNytBilag,
+  startFil,
+  onStartFilForbrugt,
+}: Props) {
+  const [trin, setTrin] = useState<Trin>('vaelg');
+  const [fejl, setFejl] = useState<string | null>(null);
+  const [bilag, setBilag] = useState<Bilag | null>(null);
+  const [dublet, setDublet] = useState<{ filnavn: string; uploadet: string } | null>(null);
+  const [analyse, setAnalyse] = useState<BilagsAnalyse | null>(null);
+  const [valgtType, setValgtType] = useState<Bilagsklassifikation>('UKENDT');
+  const [valgtIndkomstAarId, setValgtIndkomstAarId] = useState(indkomstAar.id);
+  const [gemmer, setGemmer] = useState(false);
+  const [landede, setLandede] = useState<{
+    hvor: string;
+    rubrik: string;
+    beloeb: string;
+    aar: number;
+  } | null>(null);
 
-export const AiBilagScannerModal: React.FC<Props> = ({ isOpen, onClose, activeIndkomstAar, indkomstAarList, onApplyResult }) => {
-  const [file, setFile] = useState<File | null>(null);
-  const [sourceName, setSourceName] = useState('');
-  const [noteText, setNoteText] = useState('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<AiExtractionResult | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successNotice, setSuccessNotice] = useState<string | null>(null);
-  const [targetYearId, setTargetYearId] = useState(activeIndkomstAar.id);
-  const [unavailableYear, setUnavailableYear] = useState<number | null>(null);
-  const activeRequest = useRef<AbortController | null>(null);
-  const requestNumber = useRef(0);
-  const dictation = useDictation(noteText, setNoteText);
-  const closeModal = () => {
-    activeRequest.current?.abort();
-    dictation.stopDictation();
-    onClose();
+  // Redigerbare kladdefelter. Alt kan rettes, før noget gemmes.
+  const [tekst, setTekst] = useState<Record<string, string>>({});
+  const [flag, setFlag] = useState<Record<string, boolean>>({});
+
+  const nulstil = () => {
+    setTrin('vaelg');
+    setFejl(null);
+    setBilag(null);
+    setDublet(null);
+    setAnalyse(null);
+    setValgtType('UKENDT');
+    setValgtIndkomstAarId(indkomstAar.id);
+    setTekst({});
+    setFlag({});
+    setLandede(null);
   };
 
-  useModal(isOpen, closeModal);
-  useEffect(() => () => activeRequest.current?.abort(), []);
-  useEffect(() => {
-    setAnalysisResult(null);
-    setErrorMessage(null);
-    setSuccessNotice(null);
-    setTargetYearId(activeIndkomstAar.id);
-    setUnavailableYear(null);
-  }, [activeIndkomstAar.id]);
+  const luk = () => {
+    nulstil();
+    onLuk();
+  };
 
-  if (!isOpen) return null;
-
-  const analyzeData = async (payload: AnalysisPayload) => {
-    activeRequest.current?.abort();
-    const controller = new AbortController();
-    activeRequest.current = controller;
-    const currentRequest = ++requestNumber.current;
-    setIsAnalyzing(true);
-    setErrorMessage(null);
-    setSuccessNotice(null);
-    setAnalysisResult(null);
+  const vaelgFil = async (fil: File) => {
+    setFejl(null);
     try {
-      const response = await fetch('/api/gemini/analyze-bilag', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, incomeYear: activeIndkomstAar.aar }),
-        signal: controller.signal,
+      const data = await filTilBase64(fil);
+      const svar = await api.uploadBilag({
+        data,
+        mimeType: fil.type || 'application/pdf',
+        filnavn: fil.name,
       });
-      if (!response.ok) {
-        const details = await response.json().catch(() => ({}));
-        throw new Error(details.error || `Serverfejl (${response.status})`);
+
+      setBilag(svar.bilag);
+      onNytBilag(svar.bilag);
+
+      if (svar.dublet) {
+        setDublet({ filnavn: svar.dublet.filnavn, uploadet: svar.dublet.uploadet });
+        setTrin('dublet');
+      } else {
+        await analyser(svar.bilag);
       }
-      const result: AiExtractionResult = await response.json();
-      if (currentRequest === requestNumber.current) {
-        const resultYear = getAiSuggestionYear(result);
-        const matchedYear = resultYear !== undefined
-          ? indkomstAarList.find((year) => year.aar === resultYear)
-          : undefined;
-        setTargetYearId(matchedYear?.id ?? activeIndkomstAar.id);
-        setUnavailableYear(resultYear !== undefined && !matchedYear ? resultYear : null);
-        setAnalysisResult(result);
-      }
-    } catch (error: unknown) {
-      if (error instanceof DOMException && error.name === 'AbortError') return;
-      if (currentRequest === requestNumber.current) {
-        setErrorMessage(error instanceof Error ? error.message : 'Informationen kunne ikke analyseres.');
-      }
-    } finally {
-      if (currentRequest === requestNumber.current) setIsAnalyzing(false);
+    } catch (err) {
+      setFejl(err instanceof Error ? err.message : 'Filen kunne ikke lægges op.');
+      setTrin('fejl');
     }
   };
 
-  const analyzeNote = () => {
-    if (!noteText.trim()) return;
-    dictation.stopDictation();
-    setFile(null);
-    setSourceName('Dikteret eller skrevet note');
-    void analyzeData({ fileName: 'note.txt', textContent: noteText.trim() });
-  };
-
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = event.target.files?.[0];
-    event.target.value = '';
-    if (!selectedFile) return;
-    if (selectedFile.size > MAX_FILE_SIZE) {
-      setErrorMessage('Filen er for stor. Vælg et bilag på højst 15 MB.');
-      return;
-    }
-    if (!ALLOWED_FILE_TYPES.has(selectedFile.type)) {
-      setErrorMessage('Filtypen understøttes ikke. Brug PDF, PNG, JPG eller HEIC.');
-      return;
-    }
-    setFile(selectedFile);
-    setSourceName(selectedFile.name);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64Data = String(reader.result).split(',', 2)[1];
-      if (!base64Data) {
-        setErrorMessage('Filen kunne ikke læses.');
-        return;
-      }
-      void analyzeData({ fileData: base64Data, mimeType: selectedFile.type, fileName: selectedFile.name });
-    };
-    reader.onerror = () => setErrorMessage('Filen kunne ikke indlæses lokalt.');
-    reader.readAsDataURL(selectedFile);
-  };
-
-  const loadSample = (type: 'JOB' | 'FRADRAG' | 'INVESTERING') => {
-    const samples = {
-      JOB: 'Honorar fra Kulturhuset på 6.500 kr. for koncert den 12. juni 2026. Betales 25. juni. Jeg kørte 310 km tur-retur i egen bil.',
-      FRADRAG: 'Parkeringskvittering på 220 kr. den 12. juni 2026 i forbindelse med koncerten. Hele beløbet vedrører arbejdet.',
-      INVESTERING: 'Jeg købte en computer til 18.500 kr. den 3. marts 2026 til mit arbejde.',
-    };
-    setFile(null);
-    setNoteText(samples[type]);
-    setSourceName('Eksempeldata');
-    void analyzeData({ fileName: 'eksempel.txt', textContent: samples[type] });
-  };
-
-  const updateJob = (updates: Partial<AiJobSuggestion>) => setAnalysisResult((current) =>
-    current?.job ? { ...current, job: { ...current.job, ...updates } } : current);
-  const updateFradrag = (updates: Partial<AiFradragSuggestion>) => setAnalysisResult((current) =>
-    current?.fradrag ? { ...current, fradrag: { ...current.fradrag, ...updates } } : current);
-  const updateInvestering = (updates: Partial<AiInvesteringSuggestion>) => setAnalysisResult((current) =>
-    current?.investering ? { ...current, investering: { ...current.investering, ...updates } } : current);
-
-  const isComplete = isCompleteAiSuggestion(analysisResult);
-  const targetYear = indkomstAarList.find((year) => year.id === targetYearId);
-
-  const approveResult = async () => {
-    if (!analysisResult || !isComplete || !targetYear || targetYear.laast || isSaving) return;
-    setIsSaving(true);
-    setErrorMessage(null);
+  const analyser = async (b: Bilag) => {
+    setTrin('laeser');
+    setFejl(null);
     try {
-      await onApplyResult(analysisResult, file ?? undefined, targetYearId, file ? undefined : noteText.trim() || undefined);
-      setSuccessNotice(`Posten er placeret i ${targetYear.aar}. Gennemgå den i det valgte modul.`);
-    } catch (error: unknown) {
-      setErrorMessage(error instanceof Error ? error.message : 'Posten kunne ikke gemmes.');
-    } finally {
-      setIsSaving(false);
+      const svar = await api.analyserBilag(b.id);
+      setAnalyse(svar.analyse);
+      setValgtType(svar.analyse.klassifikation);
+      const forberedt = forbered(svar.analyse);
+      setValgtIndkomstAarId(
+        findIndkomstAarTilKladde(
+          svar.analyse.klassifikation,
+          forberedt,
+          indkomstAarListe,
+          indkomstAar.id
+        )
+      );
+      setTrin('kladde');
+    } catch (err) {
+      setFejl(
+        err instanceof Error
+          ? err.message
+          : 'Bilaget kunne ikke læses. Prøv igen, eller opret posten manuelt.'
+      );
+      setTrin('fejl');
     }
   };
 
-  const label = analysisResult?.classification === 'JOB' ? `Honorarjob · rubrik ${analysisResult.job?.rubrik ?? 12}`
-    : analysisResult?.classification === 'FRADRAG' ? 'Driftsudgift · forslag til rubrik 29'
-      : analysisResult?.classification === 'INVESTERING' ? 'Investering / anlægsaktiv' : 'Kræver manuel placering';
-  const inputClass = 'min-h-10 w-full border-b border-stone-300 bg-transparent px-1 py-2 text-sm text-stone-900 outline-none transition focus:border-stone-900';
+  /**
+   * Lægger udtrækket ind i redigerbare felter.
+   * Et felt uden værdi bliver tomt. Der udfyldes aldrig med et gæt.
+   */
+  const forbered = (a: BilagsAnalyse): Record<string, string> => {
+    const { tekst: t, flag: f } = kladdeFraUdtraek({
+      job: a.job as never,
+      fradrag: a.fradrag as never,
+      investering: a.investering as never,
+      revisorNotat: a.revisorNotat,
+    });
+    setTekst(t);
+    setFlag(f);
+    return t;
+  };
+
+  const sik = (gruppe: 'job' | 'fradrag' | 'investering', navn: string): number | undefined =>
+    (analyse?.[gruppe] as unknown as Record<string, { sikkerhed: number }> | undefined)?.[
+      navn
+    ]?.sikkerhed;
+
+  const tal = (navn: string) => kladdeTal(tekst, navn);
+  const valgtAar =
+    indkomstAarListe.find((aar) => aar.id === valgtIndkomstAarId)?.aar ?? indkomstAar.aar;
+
+  const gem = async () => {
+    if (!bilag) return;
+    setGemmer(true);
+    setFejl(null);
+
+    try {
+      if (valgtType === 'JOB') {
+        const nytJob = byggJobFraKladde(tekst, flag, valgtIndkomstAarId, [bilag.id]);
+        await onGemJob({ id: `job-${Date.now()}`, ...nytJob });
+        setLandede({
+          hvor: 'Jobs og kørsel',
+          rubrik: nytJob.erRubrik17 ? 'rubrik 17' : 'rubrik 12',
+          beloeb: `${kr(nytJob.honorar)} kr.`,
+          aar: valgtAar,
+        });
+      } else if (valgtType === 'FRADRAG') {
+        const nytFradrag = byggFradragFraKladde(tekst, valgtIndkomstAarId, [bilag.id]);
+        await onGemFradrag({ id: `fradrag-${Date.now()}`, ...nytFradrag });
+        setLandede({
+          hvor: 'Fradrag',
+          rubrik: 'rubrik 29',
+          beloeb: `${kr(nytFradrag.fradragIDKK)} kr.`,
+          aar: valgtAar,
+        });
+      } else if (valgtType === 'INVESTERING') {
+        const nyInvestering = byggInvesteringFraKladde(tekst, valgtIndkomstAarId, [bilag.id]);
+        await onGemInvestering({ id: `inv-${Date.now()}`, ...nyInvestering });
+        setLandede({
+          hvor: 'Investeringer',
+          rubrik: 'arkivet, uden for skatteberegningen',
+          beloeb: `${kr(nyInvestering.beloeb)} kr.`,
+          aar: valgtAar,
+        });
+      }
+      setTrin('gemt');
+    } catch (err) {
+      setFejl(err instanceof Error ? err.message : 'Posten kunne ikke gemmes.');
+    } finally {
+      setGemmer(false);
+    }
+  };
+
+  const kanGemme = kanGemmeKladde(valgtType, tekst);
+
+  useEffect(() => {
+    // Forsidens dropzone åbner scanneren og leverer filen i samme handling.
+    // Forbruget nulstiller den hos App, så den ikke læses igen ved en senere
+    // åbning uden en ny fil trukket ind.
+    if (aaben && startFil) {
+      void vaelgFil(startFil);
+      onStartFilForbrugt?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aaben, startFil]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-stone-950/55 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="agent-inbox-title">
-      <div className="my-auto max-h-[94vh] w-full max-w-3xl overflow-y-auto border border-stone-300 bg-white shadow-2xl">
-        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-stone-200 bg-white px-5 py-4 sm:px-7">
-          <div>
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Agentens indbakke · udgangspunkt {activeIndkomstAar.aar}</p>
-            <h2 id="agent-inbox-title" className="text-lg font-extrabold tracking-tight text-stone-950">Fortæl eller vis mig, hvad der skal bogføres</h2>
-            <p className="text-xs text-stone-500">Agenten foreslår placering. Du retter og godkender før posten oprettes.</p>
-          </div>
-          <button type="button" onClick={closeModal} aria-label="Luk agentens indbakke" className="p-2 text-stone-500 transition hover:bg-stone-100 hover:text-stone-950"><X className="h-5 w-5" /></button>
-        </header>
+    <Modal
+      aaben={aaben}
+      onLuk={luk}
+      titel="Læs et bilag"
+      beskrivelse="Kontrakt, honorarnota, faktura eller kvittering. Bilaget bliver gemt, og oplysningerne bliver til en kladde, du godkender."
+      bund={
+        trin === 'kladde' ? (
+          <>
+            <Knap onClick={luk}>Annullér</Knap>
+            <Knap art="primaer" onClick={gem} disabled={gemmer || !kanGemme}>
+              {gemmer ? 'Gemmer' : 'Godkend og opret posten'}
+            </Knap>
+          </>
+        ) : trin === 'gemt' ? (
+          <>
+            <Knap onClick={luk}>Luk</Knap>
+            <Knap art="primaer" onClick={nulstil}>
+              Læs et bilag mere
+            </Knap>
+          </>
+        ) : undefined
+      }
+    >
+      {!aiKlar ? (
+        <Advarsel titel="Bilagslæsning er slået fra">
+          Der er ingen AI-nøgle på serveren. Sæt GEMINI_API_KEY eller DEEPSEEK_API_KEY i .env
+          og start serveren igen. Indtil da oprettes posterne manuelt.
+        </Advarsel>
+      ) : trin === 'vaelg' ? (
+        <div className="space-y-3">
+          {/* Kameraet står først, fordi kvitteringen som regel ligger på bordet
+              og telefonen i hånden. capture="environment" åbner bagkameraet
+              direkte i stedet for et filgalleri. */}
+          <label className="flex cursor-pointer items-center gap-4 border border-rule-strong bg-ink px-5 py-5 text-surface md:hidden">
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="sr-only"
+              onChange={(e) => {
+                const fil = e.target.files?.[0];
+                if (fil) void vaelgFil(fil);
+              }}
+            />
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-7 w-7 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.2a1.5 1.5 0 0 0 1.3-.75l.6-1a1.5 1.5 0 0 1 1.3-.75h4.2a1.5 1.5 0 0 1 1.3.75l.6 1A1.5 1.5 0 0 0 17.3 7h2.2A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z" />
+              <circle cx="12" cy="13" r="3.4" />
+            </svg>
+            <span>
+              <span className="block text-sm font-semibold">Tag et billede</span>
+              <span className="mt-0.5 block text-2xs opacity-75">
+                Hold kvitteringen fladt og fyld billedet ud
+              </span>
+            </span>
+          </label>
 
-        <div className="space-y-6 p-5 sm:p-7">
-          <section className="grid gap-5 lg:grid-cols-[1.35fr_0.65fr]">
-            <div>
-              <label htmlFor="agent-note" className="mb-2 block text-xs font-bold uppercase tracking-wider text-stone-600">Skriv eller diktér</label>
-              <textarea id="agent-note" value={noteText} onChange={(event) => setNoteText(event.target.value)} rows={5} maxLength={20_000}
-                placeholder="Fx: Jeg spillede i Odense den 14. september for 8.000 kr. og kørte 330 km tur-retur i egen bil…"
-                className="w-full resize-y border border-stone-300 bg-stone-50 p-3 text-sm leading-relaxed outline-none transition focus:border-stone-900 focus:bg-white" />
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                {dictation.isSupported ? (
-                  <button type="button" onClick={dictation.isListening ? dictation.stopDictation : dictation.startDictation}
-                    aria-pressed={dictation.isListening}
-                    className={`inline-flex min-h-10 items-center gap-2 border px-3 text-xs font-bold transition ${dictation.isListening ? 'border-red-300 bg-red-50 text-red-800' : 'border-stone-300 bg-white text-stone-800 hover:bg-stone-100'}`}>
-                    {dictation.isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                    {dictation.isListening ? 'Stop diktering' : 'Diktér på dansk'}
-                  </button>
-                ) : <span className="text-xs text-stone-500">Diktering understøttes ikke i denne browser.</span>}
-                <button type="button" onClick={analyzeNote} disabled={!noteText.trim() || isAnalyzing}
-                  className="inline-flex min-h-10 items-center gap-2 bg-stone-950 px-4 text-xs font-bold text-white transition hover:bg-stone-800 disabled:opacity-40">
-                  <Send className="h-4 w-4" /> Find den rette placering
-                </button>
-              </div>
-              {(dictation.dictationError || errorMessage) && <p role="alert" className="mt-2 text-xs text-red-700">{dictation.dictationError || errorMessage}</p>}
-            </div>
+          <label className="flex cursor-pointer items-center justify-center border border-dashed border-rule-strong px-6 py-8 text-center hover:bg-sunk md:py-12">
+            <input
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,application/pdf,image/*"
+              className="sr-only"
+              onChange={(e) => {
+                const fil = e.target.files?.[0];
+                if (fil) void vaelgFil(fil);
+              }}
+            />
+            <span>
+              <span className="block text-sm font-medium text-ink">Vælg en fil</span>
+              <span className="mt-1 block text-2xs text-ink-muted">
+                PDF, PNG, JPG, WEBP eller HEIC. Højst 20 MB.
+              </span>
+            </span>
+          </label>
 
-            <label className="flex min-h-40 cursor-pointer flex-col items-center justify-center border border-dashed border-stone-400 bg-stone-50 p-4 text-center transition hover:border-stone-800 hover:bg-stone-100">
-              <UploadCloud className="mb-2 h-7 w-7 text-stone-500" />
-              <span className="text-sm font-bold text-stone-800">Upload bilag</span>
-              <span className="mt-1 text-xs text-stone-500">PDF, PNG, JPG eller HEIC · maks. 15 MB</span>
-              {sourceName && <span className="mt-3 max-w-full truncate text-xs font-semibold text-amber-800">{sourceName}</span>}
-              <input type="file" accept=".pdf,.png,.jpg,.jpeg,.heic,.heif" onChange={handleFileUpload} className="sr-only" />
-            </label>
-          </section>
-
-          <div className="flex flex-wrap items-center gap-2 border-y border-stone-200 py-3 text-xs">
-            <span className="font-semibold text-stone-500">Prøv med eksempeldata:</span>
-            <button type="button" onClick={() => loadSample('JOB')} className="inline-flex items-center gap-1 border-b border-stone-400 py-1 font-semibold hover:border-stone-950"><Briefcase className="h-3.5 w-3.5" /> job</button>
-            <button type="button" onClick={() => loadSample('FRADRAG')} className="inline-flex items-center gap-1 border-b border-stone-400 py-1 font-semibold hover:border-stone-950"><Receipt className="h-3.5 w-3.5" /> udgift</button>
-            <button type="button" onClick={() => loadSample('INVESTERING')} className="inline-flex items-center gap-1 border-b border-stone-400 py-1 font-semibold hover:border-stone-950"><DollarSign className="h-3.5 w-3.5" /> investering</button>
-          </div>
-
-          {isAnalyzing && <div className="flex items-center gap-3 border-l-2 border-amber-500 bg-amber-50 p-4 text-sm font-semibold text-stone-800"><Loader2 className="h-5 w-5 animate-spin" /> Agenten læser, udtrækker og klassificerer informationen…</div>}
-          {successNotice && <div role="status" className="flex items-center gap-2 border-l-2 border-emerald-600 bg-emerald-50 p-4 text-sm text-emerald-900"><CheckCircle2 className="h-5 w-5" />{successNotice}</div>}
-
-          {analysisResult && !isAnalyzing && (
-            <section className="border-t-2 border-stone-950 pt-5" aria-label="Agentens forslag">
-              <div className="mb-5 flex flex-wrap items-baseline justify-between gap-2">
-                <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-500">Foreslået placering</p><h3 className="text-xl font-extrabold text-stone-950">{label}</h3></div>
-                <span className="text-xs text-stone-500">Modelskøn {Math.round(analysisResult.confidence * 100)} %</span>
-              </div>
-              <p className="mb-5 text-sm leading-relaxed text-stone-700">{analysisResult.summary}</p>
-
-              <div className="mb-4 border-l-2 border-stone-900 bg-stone-50 px-4 py-3">
-                <label className="text-xs font-bold text-stone-700">Placér i indkomstår
-                  <select value={targetYearId} onChange={(event) => { setTargetYearId(event.target.value); setUnavailableYear(null); }}
-                    className="ml-3 min-h-9 border border-stone-300 bg-white px-3 text-sm font-bold text-stone-900">
-                    {indkomstAarList.map((year) => <option key={year.id} value={year.id}>{year.aar}</option>)}
-                  </select>
-                </label>
-                {unavailableYear && (
-                  <p role="alert" className="mt-2 text-xs text-amber-800">
-                    Bilagets dato peger på {unavailableYear}, som ikke er oprettet. Opret året under Indkomstår, eller vælg et eksisterende år efter din kontrol.
-                  </p>
-                )}
-                {targetYear?.laast && <p role="alert" className="mt-2 text-xs text-amber-800">{targetYear.aar} er låst. Lås året op under Indkomstår før godkendelse.</p>}
-              </div>
-
-              {analysisResult.classification === 'JOB' && analysisResult.job && (
-                <div className="grid grid-cols-1 gap-x-5 gap-y-3 border-y border-stone-200 py-4 sm:grid-cols-3">
-                  <label className="text-xs font-semibold text-stone-500">Hvervgiver<input className={inputClass} value={analysisResult.job.hvervgiver ?? ''} onChange={(e) => updateJob({ hvervgiver: e.target.value })} /></label>
-                  <label className="text-xs font-semibold text-stone-500">Honorar<input className={inputClass} type="number" min="0" inputMode="decimal" value={analysisResult.job.honorar ?? ''} onChange={(e) => updateJob({ honorar: Number(e.target.value) })} /></label>
-                  <label className="text-xs font-semibold text-stone-500">Dato<input className={inputClass} type="date" value={analysisResult.job.startDato ?? ''} onChange={(e) => updateJob({ startDato: e.target.value, slutDato: e.target.value })} /></label>
-                  <label className="text-xs font-semibold text-stone-500">Rubrik<select className={inputClass} value={analysisResult.job.rubrik ?? 12} onChange={(e) => updateJob({ rubrik: Number(e.target.value) as 12 | 17 })}><option value="12">12 · Honorar</option><option value="17">17 · Anden personlig indkomst</option></select></label>
-                  <label className="text-xs font-semibold text-stone-500">Transport<select className={inputClass} value={analysisResult.job.transportmiddel ?? 'NONE'} onChange={(e) => updateJob({ transportmiddel: e.target.value as AiJobSuggestion['transportmiddel'] })}><option value="NONE">Ingen registreret</option><option value="OWN_CAR_MC">Egen bil/MC</option><option value="OWN_BIKE">Egen cykel</option><option value="PASSENGER">Almindelig befordring</option></select></label>
-                  <label className="text-xs font-semibold text-stone-500">Km pr. arbejdsdag<input className={inputClass} type="number" min="0" inputMode="decimal" value={analysisResult.job.antalKm ?? ''} onChange={(e) => updateJob({ antalKm: Number(e.target.value) })} /></label>
-                  <label className="text-xs font-semibold text-stone-500">Antal dage/ture<input className={inputClass} type="number" min="0" inputMode="numeric" value={analysisResult.job.antalTure ?? 1} onChange={(e) => updateJob({ antalTure: Number(e.target.value) })} /></label>
-                  <label className="flex items-center gap-2 text-xs font-semibold text-stone-700 sm:col-span-2"><input type="checkbox" checked={Boolean(analysisResult.job.amBidragFritaget)} onChange={(e) => updateJob({ amBidragFritaget: e.target.checked })} /> Dokumentet angiver AM-fritagelse</label>
-                </div>
-              )}
-
-              {analysisResult.classification === 'FRADRAG' && analysisResult.fradrag && (
-                <div className="grid grid-cols-1 gap-x-5 gap-y-3 border-y border-stone-200 py-4 sm:grid-cols-3">
-                  <label className="text-xs font-semibold text-stone-500 sm:col-span-2">Beskrivelse<input className={inputClass} value={analysisResult.fradrag.beskrivelse ?? ''} onChange={(e) => updateFradrag({ beskrivelse: e.target.value })} /></label>
-                  <label className="text-xs font-semibold text-stone-500">Dato<input className={inputClass} type="date" value={analysisResult.fradrag.fakturaDato ?? ''} onChange={(e) => updateFradrag({ fakturaDato: e.target.value })} /></label>
-                  <label className="text-xs font-semibold text-stone-500">Beløb<input className={inputClass} type="number" min="0" inputMode="decimal" value={analysisResult.fradrag.fakturaBeloeb ?? ''} onChange={(e) => updateFradrag({ fakturaBeloeb: Number(e.target.value) })} /></label>
-                  <label className="text-xs font-semibold text-stone-500">Fradragsandel %<input className={inputClass} type="number" min="0" max="100" inputMode="decimal" value={analysisResult.fradrag.fradragsProcent ?? ''} onChange={(e) => updateFradrag({ fradragsProcent: Number(e.target.value) })} /></label>
-                  <label className="text-xs font-semibold text-stone-500">Kategori<input className={inputClass} value={analysisResult.fradrag.typeKategori ?? ''} onChange={(e) => updateFradrag({ typeKategori: e.target.value })} /></label>
-                </div>
-              )}
-
-              {analysisResult.classification === 'INVESTERING' && analysisResult.investering && (
-                <div className="grid grid-cols-1 gap-x-5 gap-y-3 border-y border-stone-200 py-4 sm:grid-cols-3">
-                  <label className="text-xs font-semibold text-stone-500">Aktiv<input className={inputClass} value={analysisResult.investering.titel ?? ''} onChange={(e) => updateInvestering({ titel: e.target.value })} /></label>
-                  <label className="text-xs font-semibold text-stone-500">Beløb<input className={inputClass} type="number" min="0" inputMode="decimal" value={analysisResult.investering.beloeb ?? ''} onChange={(e) => updateInvestering({ beloeb: Number(e.target.value) })} /></label>
-                  <label className="text-xs font-semibold text-stone-500">Dato<input className={inputClass} type="date" value={analysisResult.investering.fakturaDato ?? ''} onChange={(e) => updateInvestering({ fakturaDato: e.target.value })} /></label>
-                </div>
-              )}
-
-              {analysisResult.classification === 'UNKNOWN' && <div className="flex gap-2 bg-amber-50 p-4 text-sm text-amber-950"><AlertCircle className="h-5 w-5 shrink-0" /> Agenten har ikke nok sikre oplysninger til at oprette en post. Tilføj beløb, dato og formål, og prøv igen.</div>}
-              <div className="my-4 border-l-2 border-amber-500 pl-3 text-xs leading-relaxed text-stone-700"><strong className="block text-stone-950">Agentens kontrolnote</strong>{analysisResult.revisorNotat}</div>
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-200 pt-4">
-                <p className="max-w-lg text-[11px] leading-relaxed text-stone-500">Ved analyse sendes teksten eller bilaget til Google Gemini. Godkendte poster og originalbilag gemmes lokalt i denne browsers database.</p>
-                <button type="button" onClick={approveResult} disabled={!isComplete || !targetYear || targetYear.laast || isSaving || Boolean(successNotice)}
-                  className="inline-flex min-h-11 items-center gap-2 bg-stone-950 px-5 text-sm font-bold text-white transition hover:bg-stone-800 disabled:opacity-40">
-                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
-                  Godkend og opret
-                </button>
-              </div>
-            </section>
-          )}
+          {fejl && <Advarsel titel="Filen blev ikke lagt op">{fejl}</Advarsel>}
         </div>
-      </div>
-    </div>
+      ) : trin === 'dublet' ? (
+        <div className="space-y-4">
+          <Advarsel titel="Det her bilag ligger allerede i arkivet">
+            En fil med præcis samme indhold blev lagt op som {dublet?.filnavn} den{' '}
+            {datoLang(dublet?.uploadet ?? '')}. Er det den samme udgift, skal den ikke
+            oprettes igen.
+          </Advarsel>
+          <div className="flex flex-wrap gap-2">
+            <Knap onClick={luk}>Det er en dublet, luk</Knap>
+            <Knap art="primaer" onClick={() => bilag && analyser(bilag)}>
+              Læs det alligevel
+            </Knap>
+          </div>
+        </div>
+      ) : trin === 'laeser' ? (
+        <div className="py-10">
+          <KineticLoader faser={FASER} />
+          <p className="mt-4 text-2xs text-ink-faint">{bilag?.filnavn}</p>
+        </div>
+      ) : trin === 'gemt' && landede ? (
+        <div className="py-4">
+          <Advarsel art="positiv" titel={`Lagt i ${landede.hvor}`}>
+            Posten på {landede.beloeb} er oprettet og tæller nu med i {landede.rubrik}.
+            Den er gemt under indkomstår {landede.aar}, og bilaget hænger på den, så
+            dokumentationen kan findes frem igen.
+          </Advarsel>
+          <p className="mt-3 text-2xs text-ink-muted">
+            Har du flere bilag liggende, er det hurtigere at tage dem nu end at
+            lede efter dem i marts.
+          </p>
+        </div>
+      ) : trin === 'fejl' ? (
+        <div className="space-y-4">
+          <Advarsel titel="Bilaget blev ikke læst">{fejl}</Advarsel>
+          <p className="max-w-[64ch] text-2xs text-ink-muted">
+            Der bliver ikke gættet på et resultat. Et opfundet beløb, der ser rigtigt ud,
+            ender i en årsopgørelse, og det er værre end ingen aflæsning.
+          </p>
+          <div className="flex gap-2">
+            <Knap onClick={nulstil}>Vælg en anden fil</Knap>
+            {bilag && (
+              <Knap art="primaer" onClick={() => analyser(bilag)}>
+                Prøv igen
+              </Knap>
+            )}
+          </div>
+        </div>
+      ) : analyse ? (
+        <div className="space-y-5">
+          {analyse.klassifikation === 'UKENDT' ? (
+            <Advarsel titel="Bilaget kunne ikke placeres">
+              {analyse.resume ||
+                'Det står ikke klart, om bilaget er et job, et fradrag eller en investering.'}{' '}
+              Vælg selv typen nedenfor. Intet er gemt endnu.
+            </Advarsel>
+          ) : (
+            <p className="max-w-[68ch] text-xs text-ink-muted">{analyse.resume}</p>
+          )}
+
+          <Felt label="Posten oprettes som" paakraevet>
+            {(id) => (
+              <Vaelger
+                id={id}
+                value={valgtType}
+                onChange={(e) => setValgtType(e.target.value as Bilagsklassifikation)}
+              >
+                <option value="UKENDT">Vælg type</option>
+                <option value="JOB">Honorarjob, rubrik 12</option>
+                <option value="FRADRAG">Fradrag, rubrik 29</option>
+                <option value="INVESTERING">Investering, arkiv</option>
+              </Vaelger>
+            )}
+          </Felt>
+
+          <Felt
+            label="Indkomstår"
+            hjaelp="Valgt automatisk ud fra arbejds- eller fakturadatoen. Du kan rette det før gemning."
+            paakraevet
+          >
+            {(id) => (
+              <Vaelger
+                id={id}
+                value={valgtIndkomstAarId}
+                onChange={(e) => setValgtIndkomstAarId(e.target.value)}
+              >
+                {[...indkomstAarListe]
+                  .sort((a, b) => b.aar - a.aar)
+                  .map((aar) => (
+                    <option key={aar.id} value={aar.id}>{aar.aar}</option>
+                  ))}
+              </Vaelger>
+            )}
+          </Felt>
+
+          {valgtType === 'JOB' && (
+            <div className="space-y-4 border-t border-rule pt-4">
+              <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
+                <Felt label="Hvervgiver" paakraevet>
+                  {(id) => (
+                    <>
+                      <Tekstfelt
+                        id={id}
+                        value={tekst.hvervgiver ?? ''}
+                        onChange={(e) => setTekst({ ...tekst, hvervgiver: e.target.value })}
+                        className={usikkert(sik('job', 'hvervgiver')) ? 'border-negative' : ''}
+                      />
+                      <UsikkerMarkering sikkerhed={sik('job', 'hvervgiver')} />
+                    </>
+                  )}
+                </Felt>
+                <Felt label="Honorar" paakraevet>
+                  {(id) => (
+                    <>
+                      <BeloebFelt
+                        id={id}
+                        vaerdi={tekst.honorar ?? ''}
+                        onVaerdi={(v) => setTekst({ ...tekst, honorar: v })}
+                      />
+                      <UsikkerMarkering sikkerhed={sik('job', 'honorar')} />
+                    </>
+                  )}
+                </Felt>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Felt label="Startdato" paakraevet>
+                  {(id) => (
+                    <>
+                      <Datofelt
+                        id={id}
+                        value={tekst.startDato ?? ''}
+                        onChange={(e) => setTekst({ ...tekst, startDato: e.target.value })}
+                      />
+                      <UsikkerMarkering sikkerhed={sik('job', 'startDato')} />
+                    </>
+                  )}
+                </Felt>
+                <Felt label="Slutdato">
+                  {(id) => (
+                    <Datofelt
+                      id={id}
+                      value={tekst.slutDato ?? ''}
+                      onChange={(e) => setTekst({ ...tekst, slutDato: e.target.value })}
+                    />
+                  )}
+                </Felt>
+                <Felt label="Betalingsdato">
+                  {(id) => (
+                    <Datofelt
+                      id={id}
+                      value={tekst.betalingsDato ?? ''}
+                      onChange={(e) => setTekst({ ...tekst, betalingsDato: e.target.value })}
+                    />
+                  )}
+                </Felt>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-[2fr_1fr_1fr]">
+                <Felt label="Adresse for jobbet">
+                  {(id) => (
+                    <Tekstfelt
+                      id={id}
+                      value={tekst.destinationAdresse ?? ''}
+                      onChange={(e) =>
+                        setTekst({ ...tekst, destinationAdresse: e.target.value })
+                      }
+                    />
+                  )}
+                </Felt>
+                <Felt label="Kilometer pr. tur">
+                  {(id) => (
+                    <BeloebFelt
+                      id={id}
+                      vaerdi={tekst.antalKm ?? ''}
+                      onVaerdi={(v) => setTekst({ ...tekst, antalKm: v })}
+                      suffiks="km"
+                    />
+                  )}
+                </Felt>
+                <Felt label="Antal ture">
+                  {(id) => (
+                    <BeloebFelt
+                      id={id}
+                      vaerdi={tekst.antalTure ?? ''}
+                      onVaerdi={(v) => setTekst({ ...tekst, antalTure: v })}
+                      suffiks=""
+                    />
+                  )}
+                </Felt>
+              </div>
+
+              <Felt label="Transportmiddel" hjaelp="Bestemmer om kørslen lander i rubrik 29 eller 51.">
+                {(id) => (
+                  <Vaelger
+                    id={id}
+                    value={tekst.transportmiddel || 'NONE'}
+                    onChange={(e) => setTekst({ ...tekst, transportmiddel: e.target.value })}
+                  >
+                    <option value="NONE">Ingen kørsel i eget transportmiddel</option>
+                    <option value="OWN_CAR_MC">Egen bil eller motorcykel, rubrik 29</option>
+                    <option value="OWN_BIKE">Egen cykel eller knallert, rubrik 29</option>
+                    <option value="PASSENGER">Passager, rubrik 51</option>
+                  </Vaelger>
+                )}
+              </Felt>
+
+              <div className="space-y-2.5">
+                <label className="flex items-start gap-2.5 text-xs text-ink">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(flag.amBidragFritaget)}
+                    onChange={(e) =>
+                      setFlag({ ...flag, amBidragFritaget: e.target.checked })
+                    }
+                    className="mt-0.5 h-4 w-4 accent-[oklch(0.21_0.008_75)]"
+                  />
+                  <span>
+                    Fritaget for AM-bidrag
+                    <UsikkerMarkering sikkerhed={sik('job', 'amBidragFritaget')} />
+                  </span>
+                </label>
+                <label className="flex items-start gap-2.5 text-xs text-ink">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(flag.erRubrik17)}
+                    onChange={(e) => setFlag({ ...flag, erRubrik17: e.target.checked })}
+                    className="mt-0.5 h-4 w-4 accent-[oklch(0.21_0.008_75)]"
+                  />
+                  <span>Hører til i rubrik 17 i stedet for rubrik 12</span>
+                </label>
+                <label className="flex items-start gap-2.5 text-xs text-ink">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(flag.erBestyrelseshverv)}
+                    onChange={(e) => setFlag({ ...flag, erBestyrelseshverv: e.target.checked })}
+                    className="mt-0.5 h-4 w-4 accent-[oklch(0.21_0.008_75)]"
+                  />
+                  <span>
+                    Bestyrelses-, udvalgs- eller kommissionshverv
+                    <UsikkerMarkering sikkerhed={sik('job', 'erBestyrelseshverv')} />
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {valgtType === 'FRADRAG' && (
+            <div className="space-y-4 border-t border-rule pt-4">
+              <Felt label="Omkostning" paakraevet>
+                {(id) => (
+                  <>
+                    <Tekstfelt
+                      id={id}
+                      value={tekst.beskrivelse ?? ''}
+                      onChange={(e) => setTekst({ ...tekst, beskrivelse: e.target.value })}
+                      className={usikkert(sik('fradrag', 'beskrivelse')) ? 'border-negative' : ''}
+                    />
+                    <UsikkerMarkering sikkerhed={sik('fradrag', 'beskrivelse')} />
+                  </>
+                )}
+              </Felt>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Felt label="Type">
+                  {(id) => (
+                    <Tekstfelt
+                      id={id}
+                      value={tekst.typeKategori ?? ''}
+                      onChange={(e) => setTekst({ ...tekst, typeKategori: e.target.value })}
+                    />
+                  )}
+                </Felt>
+                <Felt label="Fakturadato" paakraevet>
+                  {(id) => (
+                    <>
+                      <Datofelt
+                        id={id}
+                        value={tekst.fakturaDato ?? ''}
+                        onChange={(e) => setTekst({ ...tekst, fakturaDato: e.target.value })}
+                      />
+                      <UsikkerMarkering sikkerhed={sik('fradrag', 'fakturaDato')} />
+                    </>
+                  )}
+                </Felt>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto]">
+                <Felt label="Fakturabeløb" paakraevet>
+                  {(id) => (
+                    <>
+                      <BeloebFelt
+                        id={id}
+                        vaerdi={tekst.fakturaBeloeb ?? ''}
+                        onVaerdi={(v) => setTekst({ ...tekst, fakturaBeloeb: v })}
+                      />
+                      <UsikkerMarkering sikkerhed={sik('fradrag', 'fakturaBeloeb')} />
+                    </>
+                  )}
+                </Felt>
+                <Felt
+                  label="Fradragsprocent"
+                  hjaelp="Forslaget er et skøn. Du hæfter selv for andelen."
+                >
+                  {(id) => (
+                    <BeloebFelt
+                      id={id}
+                      vaerdi={tekst.fradragsProcent ?? '100'}
+                      onVaerdi={(v) => setTekst({ ...tekst, fradragsProcent: v })}
+                      suffiks="%"
+                    />
+                  )}
+                </Felt>
+                <div className="flex flex-col justify-end pb-1">
+                  <span className="text-2xs text-ink-muted">Fradrag</span>
+                  <span className="tal text-lg font-semibold text-ink">
+                    {kr(
+                      (tal('fakturaBeloeb') *
+                        (tekst.fradragsProcent === '' ? 100 : tal('fradragsProcent'))) /
+                        100
+                    )}{' '}
+                    kr.
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {valgtType === 'INVESTERING' && (
+            <div className="space-y-4 border-t border-rule pt-4">
+              <Felt label="Investering" paakraevet>
+                {(id) => (
+                  <Tekstfelt
+                    id={id}
+                    value={tekst.titel ?? ''}
+                    onChange={(e) => setTekst({ ...tekst, titel: e.target.value })}
+                  />
+                )}
+              </Felt>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Felt label="Fakturadato" paakraevet>
+                  {(id) => (
+                    <Datofelt
+                      id={id}
+                      value={tekst.fakturaDato ?? ''}
+                      onChange={(e) => setTekst({ ...tekst, fakturaDato: e.target.value })}
+                    />
+                  )}
+                </Felt>
+                <Felt label="Beløb" paakraevet>
+                  {(id) => (
+                    <BeloebFelt
+                      id={id}
+                      vaerdi={tekst.beloeb ?? ''}
+                      onVaerdi={(v) => setTekst({ ...tekst, beloeb: v })}
+                    />
+                  )}
+                </Felt>
+              </div>
+            </div>
+          )}
+
+          <div className="border-t border-rule pt-4">
+            <Felt label="Note">
+              {(id) => (
+                <Notatfelt
+                  id={id}
+                  vaerdi={tekst.revisorNotat ?? ''}
+                  onVaerdi={(v) => setTekst({ ...tekst, revisorNotat: v })}
+                />
+              )}
+            </Felt>
+          </div>
+
+          {valgtType === 'UKENDT' && (
+            <p className="text-2xs text-ink-muted">
+              Vælg en type foroven, før posten kan oprettes. Bilaget er gemt i arkivet
+              uanset hvad.
+            </p>
+          )}
+
+          {fejl && <Advarsel titel="Posten blev ikke oprettet">{fejl}</Advarsel>}
+        </div>
+      ) : null}
+    </Modal>
   );
-};
+}

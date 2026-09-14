@@ -1,19 +1,22 @@
-export type TransportMiddel = 'NONE' | 'OWN_CAR_MC' | 'OWN_BIKE' | 'PASSENGER';
-export type IndkomstRubrik = 12 | 17;
-export type JobStatus = 'PLANLAGT' | 'BETALT' | 'AFLYST';
+import type { TransportMiddel } from './lib/tax/koersel';
+
+export type { TransportMiddel };
 
 export interface IndkomstAar {
   id: string;
   aar: number;
   hjemmeadresse: string;
   kommune: string;
-  kommuneSkatteprocent: number; // f.eks. 24.9
-  kirkeskatteprocent: number; // f.eks. 0.75
+  kommuneSkatteprocent: number;
+  kirkeskatteprocent: number;
   forventetAIndkomst: number;
   forventetPensionSUDagpenge: number;
+  forventetDagpenge: number;
   forventedeFradragAIndkomst: number;
   medlemFolkekirken: boolean;
   enligForsoerger: boolean;
+  seniorfradragBerettiget: boolean;
+  borPaaUdpegetSmaaoe: boolean;
   laast: boolean;
 }
 
@@ -21,25 +24,43 @@ export interface Job {
   id: string;
   indkomstAarId: string;
   hvervgiver: string;
+  /** Valgfri tilknytning til et job for en kørselspost (f.eks. ved en øver eller prøve knyttet til et job). */
+  tilknyttetJob?: string;
   honorar: number;
-  startDato: string; // YYYY-MM-DD
-  slutDato: string; // YYYY-MM-DD
-  betalingsDato: string; // YYYY-MM-DD
+  /** YYYY-MM-DD. Sammen med slutdatoen dokumenterer arbejdsperioden. */
+  startDato: string;
+  slutDato: string;
+  betalingsDato: string;
   transportmiddel: TransportMiddel;
+  /** Strækning for én tur. */
   antalKm: number;
   antalTure: number;
   destinationAdresse?: string;
-  koerselsFradrag: number;
   amBidragFritaget: boolean;
+  /** Rubrik 17 i stedet for rubrik 12: legater, gruppeliv, visse personalegoder. */
+  erRubrik17?: boolean;
+  /**
+   * Bestyrelses-, udvalgs- eller kommissionshverv, hvor der IKKE er modtaget
+   * skattefri kørselsgodtgørelse fra virksomheden.
+   *
+   * Ligningslovens § 9 B, stk. 5 giver netop denne gruppe ret til skattefri
+   * godtgørelse fra hvervgiveren — modsat kunstnere og musikere. Får de den
+   * ikke, er de IKKE henvist til de høje §9B-satser som kunstnere er, men
+   * skal i stedet bruge det almindelige, lave befordringsfradrag (§9C).
+   * Landsskatteretten har afvist lovhjemmel for det modsatte, jf. Østre
+   * Landsrets dom gengivet i SKM2001.141.
+   *
+   * Sat til true routes egen bil/cykel-kørsel til rubrik 51 i stedet for
+   * rubrik 29, uanset transportmiddel.
+   */
+  erBestyrelseshverv?: boolean;
   timerJob?: number;
   timerTransportForberedelse?: number;
   type?: string;
-  bilagNavne?: string[];
-  bilagIds?: string[];
-  kildeTekst?: string;
+  bilagIds: string[];
   noter?: string;
-  rubrik?: IndkomstRubrik;
-  status?: JobStatus;
+  /** Sat på poster oprettet af "indlæs eksempeldata", så de kan fjernes samlet. */
+  erEksempel?: boolean;
 }
 
 export interface Fradrag {
@@ -51,10 +72,9 @@ export interface Fradrag {
   fakturaBeloeb: number;
   fradragsProcent: number;
   fradragIDKK: number;
-  bilagNavne?: string[];
-  bilagIds?: string[];
-  kildeTekst?: string;
+  bilagIds: string[];
   revisorNotat?: string;
+  erEksempel?: boolean;
 }
 
 export interface Investering {
@@ -63,9 +83,9 @@ export interface Investering {
   titel: string;
   beloeb: number;
   fakturaDato: string;
-  bilagNavne?: string[];
-  bilagIds?: string[];
-  kildeTekst?: string;
+  bilagIds: string[];
+  noter?: string;
+  erEksempel?: boolean;
 }
 
 export interface OpsparingsTracker {
@@ -73,79 +93,104 @@ export interface OpsparingsTracker {
   opsparetPrivat: number;
 }
 
-export interface SkatteBeregningResultat {
-  // Blok 1: Indkomst & Fradrag
-  honorarerAlt: number; // Rubrik 12
-  rubrik17Indkomst: number; // Rubrik 17
-  amPligtigBIndkomst: number;
-  amBidrag: number; // 8%
-  oevrigeFradragRubrik29: number; // Sum af Fradrag + bil/cykelkørsel (Rubrik 29)
-  fradragKatalogSum: number;
-  koerselsFradragRubrik29: number;
-  befordringsFradragRubrik51: number; // Passagerkørsel (Rubrik 51)
-  personligIndkomst: number;
-  skattepligtigIndkomst: number;
-
-  // Blok 2: Skatteberegning
-  bundskat: number;
-  kommuneskat: number;
-  topskat: number;
-  mellemskat: number;
-  toptopskat: number;
-  kirkeskat: number;
-  personfradragSkattevaerdi: number;
-  beregnetSkatAlt: number;
-  samletSkatOgAM: number;
-  indtaegtEfterSkat: number;
-  effektivSkatteprocent: number;
-
-  // Valideringer & Sikkerhed
-  rubrik29LoftOverskredet: boolean;
-  maksTilladtFradragRubrik29: number;
-  overskydendeFradrag: number;
-  anvendtFradragRubrik29: number;
-  regelAar: number;
-  erEstimat: true;
+export interface Bilag {
+  id: string;
+  sha256: string;
+  filnavn: string;
+  mimeType: string;
+  stoerrelse: number;
+  uploadet: string;
+  /** Hvornår originalfilen senest blev bekræftet gemt i den tilsluttede Google Drev-mappe. */
+  drevBackupTidspunkt?: string | null;
+  /** Seneste fejl for netop dette bilag. Nulles efter en vellykket backup. */
+  drevBackupFejl?: string | null;
 }
 
-export interface AiJobSuggestion {
-  hvervgiver?: string;
-  honorar?: number;
-  startDato?: string;
-  slutDato?: string;
-  betalingsDato?: string;
-  destinationAdresse?: string;
-  transportmiddel?: TransportMiddel;
-  antalKm?: number;
-  antalTure?: number;
-  amBidragFritaget?: boolean;
-  rubrik?: IndkomstRubrik;
-  type?: string;
-  timerJob?: number;
-  timerTransportForberedelse?: number;
+/* ---------------------------------------------------------------- AI-laget */
+
+export type Bilagsklassifikation = 'JOB' | 'FRADRAG' | 'INVESTERING' | 'UKENDT';
+
+/**
+ * Et udtrukket felt med modellens egen vurdering af, hvor sikker den er.
+ * Felter under tærsklen markeres i grænsefladen og skal bekræftes aktivt.
+ */
+export interface UdtruktFelt<T> {
+  vaerdi: T | null;
+  sikkerhed: number;
 }
 
-export interface AiFradragSuggestion {
-  beskrivelse?: string;
-  typeKategori?: string;
-  fakturaDato?: string;
-  fakturaBeloeb?: number;
-  fradragsProcent?: number;
-  begrundelse?: string;
+export interface JobUdtraek {
+  hvervgiver: UdtruktFelt<string>;
+  honorar: UdtruktFelt<number>;
+  startDato: UdtruktFelt<string>;
+  slutDato: UdtruktFelt<string>;
+  betalingsDato: UdtruktFelt<string>;
+  destinationAdresse: UdtruktFelt<string>;
+  transportmiddel: UdtruktFelt<TransportMiddel>;
+  antalKm: UdtruktFelt<number>;
+  antalTure: UdtruktFelt<number>;
+  amBidragFritaget: UdtruktFelt<boolean>;
+  erRubrik17: UdtruktFelt<boolean>;
+  erBestyrelseshverv: UdtruktFelt<boolean>;
+  type: UdtruktFelt<string>;
+  timerJob: UdtruktFelt<number>;
+  timerTransportForberedelse: UdtruktFelt<number>;
 }
 
-export interface AiInvesteringSuggestion {
-  titel?: string;
-  beloeb?: number;
-  fakturaDato?: string;
+export interface FradragUdtraek {
+  beskrivelse: UdtruktFelt<string>;
+  typeKategori: UdtruktFelt<string>;
+  fakturaDato: UdtruktFelt<string>;
+  fakturaBeloeb: UdtruktFelt<number>;
+  fradragsProcent: UdtruktFelt<number>;
 }
 
-export interface AiExtractionResult {
-  classification: 'JOB' | 'FRADRAG' | 'INVESTERING' | 'UNKNOWN';
-  confidence: number;
-  summary: string;
-  job?: AiJobSuggestion;
-  fradrag?: AiFradragSuggestion;
-  investering?: AiInvesteringSuggestion;
+export interface InvesteringUdtraek {
+  titel: UdtruktFelt<string>;
+  beloeb: UdtruktFelt<number>;
+  fakturaDato: UdtruktFelt<string>;
+}
+
+export interface BilagsAnalyse {
+  klassifikation: Bilagsklassifikation;
+  sikkerhed: number;
+  resume: string;
   revisorNotat: string;
+  job?: JobUdtraek;
+  fradrag?: FradragUdtraek;
+  investering?: InvesteringUdtraek;
+}
+
+/** Analysen bliver til en kladde. Intet gemmes, før brugeren godkender. */
+export interface Kladde {
+  id: string;
+  bilag: Bilag;
+  analyse: BilagsAnalyse;
+  /** Sat når et bilag med samme indhold allerede findes. */
+  dublet?: { bilagId: string; filnavn: string; uploadet: string };
+}
+
+/** Felter under denne sikkerhed fremhæves og skal bekræftes aktivt. */
+export const SIKKERHEDSTAERSKEL = 0.75;
+
+/**
+ * Et forslag til en postering, som chatten selv har foreslået ud fra en
+ * besked — samme feltform som et bilagsudtræk. Intet gemmes, før brugeren
+ * godkender kortet, enten ved at klikke eller ved en utvetydig bekræftelse
+ * i chatten.
+ */
+export interface PosteringForslag {
+  klassifikation: Exclude<Bilagsklassifikation, 'UKENDT'>;
+  besked: string;
+  job?: JobUdtraek;
+  fradrag?: FradragUdtraek;
+  investering?: InvesteringUdtraek;
+}
+
+export interface ChatBesked {
+  rolle: 'bruger' | 'assistent';
+  indhold: string;
+  kilder?: { titel: string; url: string }[];
+  /** Et endnu ikke godkendt forslag, hængt på denne besked. */
+  forslag?: PosteringForslag;
 }

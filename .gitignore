@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Lokale data og bilag
+/data
+
+# Lokale backups
+backup/

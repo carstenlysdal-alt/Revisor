@@ -1,673 +1,1013 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import type { Bilag, IndkomstAar, Job, TransportMiddel } from '../types';
+import type { SkatteBeregning } from '../lib/tax/beregn';
+import { betalingKrydserAarsskifte } from '../lib/tax/beregn';
+import { beregnKoerselForJob } from '../lib/tax/koersel';
+import { dato, idag, kr, talFraFelt, timer } from '../lib/format';
+import { api } from '../lib/api';
+import { createGoogleCalendarUrl, hentIcsFil } from '../utils/calendarExport';
 import {
-  Briefcase,
-  Plus,
-  Car,
-  Bike,
-  Users,
-  Copy,
-  Trash2,
-  Edit2,
-  Calendar,
-  Download,
-  Inbox
-} from 'lucide-react';
-import type { IndkomstRubrik, Job, JobStatus, TransportMiddel, IndkomstAar } from '../types';
-import { getSkatteRegler } from '../data/danishTaxData';
-import { calculateAaretsKoerselsfradragMedPoster, calculateJobKoerselsfradrag } from '../utils/mileageCalculator';
-import { createGoogleCalendarUrl, downloadIcsFile } from '../utils/calendarExport';
-import { BilagButton } from './BilagButton';
-import { KildeTekst } from './KildeTekst';
-import { useModal } from '../hooks/useModal';
+  Advarsel,
+  Afkrydsning,
+  BeloebFelt,
+  Datofelt,
+  Felt,
+  Knap,
+  Modal,
+  Notatfelt,
+  MobilPost,
+  MobilSum,
+  Responsiv,
+  Rubrik,
+  Sektion,
+  Sumraekke,
+  Tabel,
+  Td,
+  Tekstfelt,
+  Th,
+  TomTilstand,
+  Vaelger,
+} from './ui';
 
 interface Props {
   jobs: Job[];
+  bilag: Bilag[];
   indkomstAar: IndkomstAar;
-  onAddJob: (job: Omit<Job, 'id'>) => void;
-  onUpdateJob: (id: string, job: Partial<Job>) => void;
-  onDeleteJob: (id: string) => void;
-  onOpenAiScanner: () => void;
+  beregning: SkatteBeregning;
+  onGem: (job: Job) => Promise<unknown>;
+  onSlet: (id: string) => Promise<unknown>;
+  onAabnScanner: () => void;
+  /**
+   * Samme jobs, to visninger. Kørsel er altid en del af jobbet, det hører
+   * til — der findes ikke en egen kørselspost, kun et andet udsnit af
+   * kolonner over de samme data, og den samme "Nyt job"-formular.
+   */
+  visning?: 'indtaegter' | 'koersel';
 }
 
-export const JobsModule: React.FC<Props> = ({
+const TRANSPORT: { vaerdi: TransportMiddel; navn: string; hjaelp: string }[] = [
+  {
+    vaerdi: 'NONE',
+    navn: 'Ingen kørsel i eget transportmiddel',
+    hjaelp:
+      'Har du haft dokumenterede udgifter til bus, tog, færge eller fly, hører de under Fradrag i stedet.',
+  },
+  {
+    vaerdi: 'OWN_CAR_MC',
+    navn: 'Egen bil eller motorcykel',
+    hjaelp:
+      'Fradraget lander i rubrik 29 og ikke i rubrik 51. Skatteværdien er højere i rubrik 29, og det er den rigtige placering for erhvervsmæssig kørsel til et honorarjob. Gælder ikke for bestyrelseshverv, se nedenfor.',
+  },
+  {
+    vaerdi: 'OWN_BIKE',
+    navn: 'Egen cykel, knallert eller EU-knallert',
+    hjaelp: 'Samme placering som bil, altså rubrik 29, men med en lavere sats.',
+  },
+  {
+    vaerdi: 'PASSENGER',
+    navn: 'Passager i bil eller på motorcykel',
+    hjaelp:
+      'Du har ikke selv kørt og har ingen dokumenteret udgift. Det giver det almindelige befordringsfradrag i rubrik 51.',
+  },
+];
+
+const nyKoersel = (indkomstAarId: string, aar: number): Job => {
+  const dag = idag();
+  const d = dag.startsWith(String(aar)) ? dag : `${aar}-01-01`;
+  return {
+    id: `koersel-${Date.now()}`,
+    indkomstAarId,
+    hvervgiver: '',
+    tilknyttetJob: '',
+    honorar: 0,
+    startDato: d,
+    slutDato: d,
+    betalingsDato: '',
+    transportmiddel: 'OWN_CAR_MC',
+    antalKm: 0,
+    antalTure: 1,
+    destinationAdresse: '',
+    amBidragFritaget: false,
+    erRubrik17: false,
+    type: '',
+    bilagIds: [],
+    noter: '',
+  };
+};
+
+const nytJob = (indkomstAarId: string, aar: number): Job => {
+  const dag = idag();
+  const d = dag.startsWith(String(aar)) ? dag : `${aar}-01-01`;
+  return {
+    id: `job-${Date.now()}`,
+    indkomstAarId,
+    hvervgiver: '',
+    tilknyttetJob: '',
+    honorar: 0,
+    startDato: d,
+    slutDato: d,
+    betalingsDato: '',
+    transportmiddel: 'NONE',
+    antalKm: 0,
+    antalTure: 1,
+    destinationAdresse: '',
+    amBidragFritaget: false,
+    erRubrik17: false,
+    type: '',
+    bilagIds: [],
+    noter: '',
+  };
+};
+
+export function JobsModule({
   jobs,
+  bilag,
   indkomstAar,
-  onAddJob,
-  onUpdateJob,
-  onDeleteJob,
-  onOpenAiScanner,
-}) => {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingJobId, setEditingJobId] = useState<string | null>(null);
-  useModal(isModalOpen, () => setIsModalOpen(false));
+  beregning,
+  onGem,
+  onSlet,
+  onAabnScanner,
+  visning = 'indtaegter',
+}: Props) {
+  const [redigerer, setRedigerer] = useState<Job | null>(null);
+  const [gemmer, setGemmer] = useState(false);
+  const [fejl, setFejl] = useState<string | null>(null);
+  const [sletter, setSletter] = useState<Job | null>(null);
 
-  // Form State
-  const [hvervgiver, setHvervgiver] = useState('');
-  const [honorar, setHonorar] = useState<number>(0);
-  const [startDato, setStartDato] = useState(new Date().toISOString().slice(0, 10));
-  const [slutDato, setSlutDato] = useState(new Date().toISOString().slice(0, 10));
-  const [betalingsDato, setBetalingsDato] = useState(new Date().toISOString().slice(0, 10));
-  const [transportmiddel, setTransportmiddel] = useState<TransportMiddel>('NONE');
-  const [antalKm, setAntalKm] = useState<number>(0);
-  const [antalTure, setAntalTure] = useState<number>(1);
-  const [destinationAdresse, setDestinationAdresse] = useState('');
-  const [amBidragFritaget, setAmBidragFritaget] = useState(false);
-  const [type, setType] = useState('Musik');
-  const [timerJob, setTimerJob] = useState<number>(4);
-  const [timerTransportForberedelse, setTimerTransportForberedelse] = useState<number>(2);
-  const [noter, setNoter] = useState('');
-  const [rubrik, setRubrik] = useState<IndkomstRubrik>(12);
-  const [status, setStatus] = useState<JobStatus>('PLANLAGT');
-  const regler = getSkatteRegler(indkomstAar.aar);
-  const calculatedFradrag = calculateJobKoerselsfradrag(indkomstAar.aar, transportmiddel, antalKm, antalTure);
+  const [honorar, setHonorar] = useState('');
+  const [km, setKm] = useState('');
+  const [ture, setTure] = useState('1');
+  const [timerJob, setTimerJob] = useState('');
+  const [timerTransport, setTimerTransport] = useState('');
+  const [visMere, setVisMere] = useState(false);
+  const [rutestatusKlar, setRutestatusKlar] = useState(false);
+  const [beregnerAfstand, setBeregnerAfstand] = useState(false);
+  const [afstandFejl, setAfstandFejl] = useState<string | null>(null);
 
-  const resetForm = () => {
-    setEditingJobId(null);
-    setHvervgiver('');
-    setHonorar(0);
-    setStartDato(new Date().toISOString().slice(0, 10));
-    setSlutDato(new Date().toISOString().slice(0, 10));
-    setBetalingsDato(new Date().toISOString().slice(0, 10));
-    setTransportmiddel('NONE');
-    setAntalKm(0);
-    setAntalTure(1);
-    setDestinationAdresse('');
-    setAmBidragFritaget(false);
-    setType('Musik');
-    setTimerJob(4);
-    setTimerTransportForberedelse(2);
-    setNoter('');
-    setRubrik(12);
-    setStatus('PLANLAGT');
-  };
+  useEffect(() => {
+    api
+      .rutestatus()
+      .then((s) => setRutestatusKlar(s.klar))
+      .catch(() => setRutestatusKlar(false));
+  }, []);
 
-  const openNewJobModal = () => {
-    resetForm();
-    setIsModalOpen(true);
-  };
-
-  const openEditModal = (job: Job) => {
-    setEditingJobId(job.id);
-    setHvervgiver(job.hvervgiver);
-    setHonorar(job.honorar);
-    setStartDato(job.startDato);
-    setSlutDato(job.slutDato);
-    setBetalingsDato(job.betalingsDato);
-    setTransportmiddel(job.transportmiddel);
-    setAntalKm(job.antalKm);
-    setAntalTure(job.antalTure || 1);
-    setDestinationAdresse(job.destinationAdresse || '');
-    setAmBidragFritaget(job.amBidragFritaget);
-    setType(job.type || 'Musik');
-    setTimerJob(job.timerJob || 0);
-    setTimerTransportForberedelse(job.timerTransportForberedelse || 0);
-    setNoter(job.noter || '');
-    setRubrik(job.rubrik ?? 12);
-    setStatus(job.status ?? 'PLANLAGT');
-    setIsModalOpen(true);
-  };
-
-  const handleCopyJob = (job: Job) => {
-    const copied: Omit<Job, 'id'> = {
-      ...job,
-      hvervgiver: `${job.hvervgiver} (Kopi)`,
-    };
-    onAddJob(copied);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!hvervgiver.trim() || honorar <= 0) return;
-
-    const jobData: Omit<Job, 'id'> = {
-      indkomstAarId: indkomstAar.id,
-      hvervgiver: hvervgiver.trim(),
-      honorar: Number(honorar),
-      startDato,
-      slutDato,
-      betalingsDato,
-      transportmiddel,
-      antalKm: Number(antalKm),
-      antalTure: Number(antalTure),
-      destinationAdresse: destinationAdresse.trim(),
-      koerselsFradrag: calculatedFradrag,
-      amBidragFritaget,
-      type: type.trim(),
-      timerJob: Number(timerJob),
-      timerTransportForberedelse: Number(timerTransportForberedelse),
-      noter: noter.trim(),
-      rubrik,
-      status,
-    };
-
-    if (editingJobId) {
-      onUpdateJob(editingJobId, jobData);
-    } else {
-      onAddJob(jobData);
+  const beregnAfstand = async () => {
+    if (!redigerer) return;
+    setAfstandFejl(null);
+    setBeregnerAfstand(true);
+    try {
+      const { km: nyKm } = await api.beregnAfstand(
+        indkomstAar.hjemmeadresse,
+        redigerer.destinationAdresse ?? ''
+      );
+      setKm(String(nyKm));
+    } catch (err) {
+      setAfstandFejl(err instanceof Error ? err.message : 'Afstanden kunne ikke beregnes.');
+    } finally {
+      setBeregnerAfstand(false);
     }
-    setIsModalOpen(false);
   };
 
-  const totalHonorar = jobs.reduce((sum, j) => sum + (Number(j.honorar) || 0), 0);
-  const aaretsKoersel = calculateAaretsKoerselsfradragMedPoster(indkomstAar.aar, jobs);
-  const totalKoersel = aaretsKoersel.rubrik29 + aaretsKoersel.rubrik51;
+  const unikkeJobNavne = useMemo(() => {
+    const navne = new Set<string>();
+    for (const j of jobs) {
+      if (j.tilknyttetJob?.trim()) navne.add(j.tilknyttetJob.trim());
+      if (j.honorar > 0 && j.hvervgiver?.trim()) navne.add(j.hvervgiver.trim());
+    }
+    return Array.from(navne);
+  }, [jobs]);
 
-  const exportJobsCSV = () => {
-    const headers = ['Hvervgiver', 'Honorar DKK', 'Startdato', 'Betalingsdato', 'Transport', 'Km', 'Fradrag DKK', 'Type'];
-    const csvCell = (value: string | number) => {
-      const raw = String(value);
-      const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
-      return `"${safe.replaceAll('"', '""')}"`;
-    };
-    const rows = jobs.map((j) => [
-      j.hvervgiver,
-      j.honorar,
-      j.startDato,
-      j.betalingsDato,
-      j.transportmiddel,
-      j.antalKm,
-      aaretsKoersel.prJob[j.id] ?? 0,
-      j.type || '',
-    ]);
-    const csvContent = '\uFEFF' + [headers, ...rows].map((row) => row.map(csvCell).join(';')).join('\r\n');
-    const encodedUri = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `jobs-${indkomstAar.aar}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(encodedUri);
+  const bilagIndeks = useMemo(
+    () => new Map(bilag.map((b) => [b.id, b])),
+    [bilag]
+  );
+  const koerselPrJob = useMemo(
+    () => new Map(beregning.koersel.linjer.map((l) => [l.jobId, l])),
+    [beregning]
+  );
+
+  const aabn = (job: Job, kopi = false) => {
+    setFejl(null);
+    const post = kopi
+      ? { ...job, id: `job-${Date.now()}`, bilagIds: [], betalingsDato: '' }
+      : job;
+    setRedigerer(post);
+    setHonorar(post.honorar ? String(post.honorar) : '');
+    setKm(post.antalKm ? String(post.antalKm) : '');
+    setTure(String(post.antalTure || 1));
+    setTimerJob(post.timerJob ? String(post.timerJob) : '');
+    setTimerTransport(post.timerTransportForberedelse ? String(post.timerTransportForberedelse) : '');
+    setVisMere(Boolean(post.type || post.timerJob || post.amBidragFritaget || post.erRubrik17));
   };
+
+  const kladdensKoersel = useMemo(() => {
+    if (!redigerer) return 0;
+    try {
+      return beregnKoerselForJob(
+        {
+          id: redigerer.id,
+          hvervgiver: redigerer.hvervgiver,
+          transportmiddel: redigerer.transportmiddel,
+          antalKm: talFraFelt(km),
+          antalTure: talFraFelt(ture),
+          startDato: redigerer.startDato,
+          erBestyrelseshverv: redigerer.erBestyrelseshverv,
+        },
+        beregning.satser
+      );
+    } catch {
+      return 0;
+    }
+  }, [redigerer, km, ture, beregning.satser]);
+
+  const gem = async () => {
+    if (!redigerer) return;
+    setFejl(null);
+
+    const erKoersel = visning === 'koersel';
+
+    if (erKoersel) {
+      if (!redigerer.hvervgiver.trim()) {
+        setFejl('Skriv en anledning eller et formål med kørslen (f.eks. Øver).');
+        return;
+      }
+    } else {
+      if (!redigerer.hvervgiver.trim()) {
+        setFejl('Skriv hvem der har hyret dig. Uden hvervgiver kan posten ikke dokumenteres.');
+        return;
+      }
+    }
+
+    if (redigerer.slutDato < redigerer.startDato) {
+      setFejl('Slutdatoen ligger før startdatoen.');
+      return;
+    }
+    const relevantDato = redigerer.slutDato || redigerer.startDato;
+    if (Number(relevantDato.slice(0, 4)) !== indkomstAar.aar) {
+      setFejl(
+        `Datoen ligger i ${relevantDato.slice(0, 4)}, men du står i indkomståret ${indkomstAar.aar}.`
+      );
+      return;
+    }
+
+    setGemmer(true);
+    try {
+      await onGem({
+        ...redigerer,
+        tilknyttetJob: redigerer.tilknyttetJob?.trim() || undefined,
+        honorar: talFraFelt(honorar),
+        antalKm: talFraFelt(km),
+        antalTure: Math.max(0, Math.round(talFraFelt(ture))),
+        timerJob: talFraFelt(timerJob) || undefined,
+        timerTransportForberedelse: talFraFelt(timerTransport) || undefined,
+      });
+      setRedigerer(null);
+    } catch (err) {
+      setFejl(
+        err instanceof Error
+          ? err.message
+          : erKoersel
+            ? 'Kørslen kunne ikke gemmes.'
+            : 'Jobbet kunne ikke gemmes.'
+      );
+    } finally {
+      setGemmer(false);
+    }
+  };
+
+  const valgtTransport = TRANSPORT.find((t) => t.vaerdi === redigerer?.transportmiddel);
+  const laast = indkomstAar.laast;
+
+  const koerselRubrik = (job: Job): 29 | 51 =>
+    job.transportmiddel === 'PASSENGER' || job.erBestyrelseshverv ? 51 : 29;
+  const koerselJobs = jobs.filter((j) => j.transportmiddel !== 'NONE');
+  const indtaegterJobs = jobs.filter(
+    (j) => (j.honorar && j.honorar > 0) || j.erRubrik17 || j.transportmiddel === 'NONE'
+  );
+  const visteJobs = visning === 'koersel' ? koerselJobs : indtaegterJobs;
+
+  const handlingKnap =
+    visning === 'koersel' ? (
+      <Knap art="primaer" onClick={() => aabn(nyKoersel(indkomstAar.id, indkomstAar.aar))}>
+        Opret kørsel
+      </Knap>
+    ) : (
+      <Knap art="primaer" onClick={() => aabn(nytJob(indkomstAar.id, indkomstAar.aar))}>
+        Nyt job
+      </Knap>
+    );
+
+  const læsBilagKnap = (
+    <Knap onClick={onAabnScanner} className="hidden lg:inline-flex">
+      Læs et bilag
+    </Knap>
+  );
 
   return (
-    <div className="space-y-6">
-      {/* Action Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-white border border-stone-200 rounded-xl p-6 shadow-xs">
-        <div>
-          <h2 className="text-xl font-bold text-stone-900 flex items-center gap-2">
-            <Briefcase className="w-5 h-5 text-stone-700" />
-            Jobs & Kørsel — Indkomstår {indkomstAar.aar}
-          </h2>
-          <p className="text-xs text-stone-500 mt-1">
-            Registrering af honorarjobs, udbetalingsdatoer og kørsel. Statens takster anvendes automatisk.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            onClick={onOpenAiScanner}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-stone-100 hover:bg-stone-200/80 text-stone-900 text-xs font-semibold transition border border-stone-300"
-          >
-            <Inbox className="w-4 h-4 text-amber-700" />
-            Fortæl agenten
-          </button>
-          <button
-            type="button"
-            onClick={openNewJobModal}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-stone-900 hover:bg-stone-800 text-white text-xs font-semibold transition shadow-xs"
-          >
-            <Plus className="w-4 h-4" />
-            Nyt Honorarjob
-          </button>
-        </div>
-      </div>
-
-      {/* Jobs Table */}
-      <div className="bg-white border border-stone-200 rounded-xl shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-stone-200 bg-stone-50/70 text-stone-500 font-semibold uppercase tracking-wider">
-                <th className="py-3 px-4">Hvervgiver</th>
-                <th className="py-3 px-4">Type</th>
-                <th className="py-3 px-4 text-right">Honorar</th>
-                <th className="py-3 px-4">Transport / Kørsel</th>
-                <th className="py-3 px-4 text-right">Kørselsfradrag</th>
-                <th className="py-3 px-4">Datoer</th>
-                <th className="py-3 px-4 text-center">Kalender</th>
-                <th className="py-3 px-4 text-right">Handlinger</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100 text-stone-800">
-              {jobs.length === 0 ? (
+    <Sektion
+      titel={visning === 'koersel' ? 'Kørsel' : 'Indtægter'}
+      beskrivelse={
+        visning === 'koersel'
+          ? `Kørsel i egen bil eller på egen cykel til jobs, øvere eller andre erhvervsmæssige aktiviteter havner i rubrik 29 — næsten altid en bedre skatteværdi end befordringsfradraget i rubrik 51. Bestyrelseshverv uden kørselsgodtgørelse bruger i stedet rubrik 51. Adressen tager udgangspunkt i din egen hjemmeadresse, sat under Indkomstår.`
+          : `Honorarer havner normalt i rubrik 12 på årsopgørelsen. Satserne for ${beregning.satser.aar} bruges automatisk.`
+      }
+      handling={laast ? null : <>{læsBilagKnap}{handlingKnap}</>}
+    >
+      {visteJobs.length === 0 ? (
+        <TomTilstand
+          besked={
+            visning === 'koersel'
+              ? 'Der er ikke registreret kørsel endnu. Opret en kørsel for at registrere ture til f.eks. øvere, prøver, møder eller jobs.'
+              : 'Der er ingen jobs i året endnu. Opret det første, eller læg en honorarkontrakt ind og lad den blive læst.'
+          }
+          handling={laast ? undefined : <>{handlingKnap}{læsBilagKnap}</>}
+        />
+      ) : visning === 'koersel' ? (
+        <Responsiv
+          tabel={
+            <Tabel minBredde={780}>
+              <thead>
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-stone-400">
-                    Ingen jobs oprettet for {indkomstAar.aar} endnu. Klik på "Fortæl agenten" eller "Nyt Honorarjob".
-                  </td>
+                  <Th bredde="2.5rem" />
+                  <Th>Anledning / Job</Th>
+                  <Th>Transportmiddel</Th>
+                  <Th bredde="9rem">Adresse</Th>
+                  <Th hoejre bredde="6rem">Km i alt</Th>
+                  <Th hoejre bredde="9rem">Fradrag</Th>
+                  <Th bredde="9rem" />
                 </tr>
-              ) : (
-                jobs.map((job) => {
-                  const beregnetKoerselsfradrag = aaretsKoersel.prJob[job.id] ?? 0;
+              </thead>
+              <tbody>
+                {visteJobs.map((job) => {
+                  const linje = koerselPrJob.get(job.id);
                   return (
-                  <tr key={job.id} className="hover:bg-stone-50/60 transition group">
-                    <td className="py-3.5 px-4 font-semibold text-stone-900">
-                      <div>{job.hvervgiver}</div>
-                      <span className="text-[10px] text-stone-500">Rubrik {job.rubrik ?? 12} · {job.status === 'BETALT' ? 'Betalt' : job.status === 'AFLYST' ? 'Aflyst' : 'Planlagt'}</span>
-                      {job.destinationAdresse && (
-                        <div className="text-[11px] text-stone-400 font-normal truncate max-w-xs">
-                          {job.destinationAdresse}
-                        </div>
-                      )}
-                      {job.amBidragFritaget && (
-                        <span className="inline-block mt-0.5 text-[10px] bg-purple-100 text-purple-800 font-bold px-1.5 py-0.2 rounded">
-                          AM-fritaget
+                    <tr key={job.id}>
+                      <Td>
+                        <Rubrik nr={koerselRubrik(job)} aktiv />
+                      </Td>
+                      <Td>
+                        <span className="font-medium text-ink">{job.hvervgiver}</span>
+                        <span className="block text-2xs text-ink-faint">
+                          {[
+                            job.tilknyttetJob ? `Job: ${job.tilknyttetJob}` : null,
+                            dato(job.startDato),
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
                         </span>
-                      )}
-                      <BilagButton ids={job.bilagIds} names={job.bilagNavne} />
-                      <KildeTekst text={job.kildeTekst} />
-                    </td>
-
-                    <td className="py-3.5 px-4">
-                      <span className="inline-block px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 font-medium text-[11px]">
-                        {job.type || 'Standard'}
-                      </span>
-                    </td>
-
-                    <td className="py-3.5 px-4 text-right font-bold text-stone-900 font-mono text-sm">
-                      {job.honorar.toLocaleString('da-DK')} DKK
-                    </td>
-
-                    <td className="py-3.5 px-4 text-stone-600">
-                      {job.transportmiddel === 'OWN_CAR_MC' && (
-                        <span className="inline-flex items-center gap-1 text-stone-700">
-                          <Car className="w-3.5 h-3.5 text-blue-600" />
-                          Egen bil ({job.antalKm} km)
-                        </span>
-                      )}
-                      {job.transportmiddel === 'OWN_BIKE' && (
-                        <span className="inline-flex items-center gap-1 text-stone-700">
-                          <Bike className="w-3.5 h-3.5 text-emerald-600" />
-                          Cykel ({job.antalKm} km)
-                        </span>
-                      )}
-                      {job.transportmiddel === 'PASSENGER' && (
-                        <span className="inline-flex items-center gap-1 text-stone-700">
-                          <Users className="w-3.5 h-3.5 text-amber-600" />
-                          Passager ({job.antalKm} km)
-                        </span>
-                      )}
-                      {job.transportmiddel === 'NONE' && (
-                        <span className="text-stone-400">—</span>
-                      )}
-                    </td>
-
-                    <td className="py-3.5 px-4 text-right font-mono font-medium">
-                      {beregnetKoerselsfradrag > 0 ? (
-                        <span
-                          className={
-                            job.transportmiddel === 'PASSENGER'
-                              ? 'text-amber-800'
-                              : 'text-emerald-800 font-semibold'
-                          }
-                        >
-                          {beregnetKoerselsfradrag.toLocaleString('da-DK')} DKK
-                          <span className="text-[10px] block font-normal text-stone-400">
-                            {job.transportmiddel === 'PASSENGER' ? 'Rubrik 51' : 'Rubrik 29'}
-                          </span>
-                        </span>
-                      ) : (
-                        <span className="text-stone-300">0 DKK</span>
-                      )}
-                    </td>
-
-                    <td className="py-3.5 px-4 text-stone-600">
-                      <div>Job: {job.startDato}</div>
-                      {job.betalingsDato && (
-                        <div className="text-[11px] text-stone-400">Udbet: {job.betalingsDato}</div>
-                      )}
-                    </td>
-
-                    <td className="py-3.5 px-4 text-center">
-                      <div className="inline-flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          title="Føj til Google Kalender"
-                          aria-label={`Føj ${job.hvervgiver} til Google Kalender`}
-                          onClick={() => window.open(createGoogleCalendarUrl(job), '_blank', 'noopener,noreferrer')}
-                          className="p-1 rounded text-stone-400 hover:text-blue-600 hover:bg-stone-100"
-                        >
-                          <Calendar className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          title="Hent .ics fil til Apple/Outlook"
-                          aria-label={`Hent kalenderfil for ${job.hvervgiver}`}
-                          onClick={() => downloadIcsFile(job)}
-                          className="p-1 rounded text-stone-400 hover:text-stone-800 hover:bg-stone-100"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="inline-flex items-center gap-1">
-                        <button
-                          type="button"
-                          title="Kopier job"
-                          aria-label={`Kopier job for ${job.hvervgiver}`}
-                          onClick={() => handleCopyJob(job)}
-                          className="p-1 rounded text-stone-400 hover:text-stone-700 hover:bg-stone-100"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          title="Rediger job"
-                          aria-label={`Rediger job for ${job.hvervgiver}`}
-                          onClick={() => openEditModal(job)}
-                          className="p-1 rounded text-stone-400 hover:text-stone-700 hover:bg-stone-100"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          title="Slet job"
-                          aria-label={`Slet job for ${job.hvervgiver}`}
-                          onClick={() => onDeleteJob(job.id)}
-                          className="p-1 rounded text-stone-400 hover:text-red-600 hover:bg-stone-100"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                      </Td>
+                      <Td>{TRANSPORT.find((t) => t.vaerdi === job.transportmiddel)?.navn}</Td>
+                      <Td className="text-2xs text-ink-muted">{job.destinationAdresse || '–'}</Td>
+                      <Td hoejre tal>
+                        {linje ? linje.kmIAlt.toLocaleString('da-DK') : job.antalKm * job.antalTure}
+                      </Td>
+                      <Td hoejre tal>{kr(linje?.fradrag ?? 0)}</Td>
+                      <Td hoejre>
+                        {!laast && (
+                          <div className="ikke-print flex justify-end gap-1">
+                            <Knap art="tekst" onClick={() => aabn(job)}>
+                              Rediger
+                            </Knap>
+                            <Knap art="tekst" onClick={() => setSletter(job)}>
+                              Slet
+                            </Knap>
+                          </div>
+                        )}
+                      </Td>
+                    </tr>
                   );
-                })
-              )}
-            </tbody>
-
-            {/* Sumline Footer */}
-            {jobs.length > 0 && (
-              <tfoot className="border-t-2 border-stone-200 bg-stone-50 font-bold text-stone-900">
-                <tr>
-                  <td className="py-3 px-4">I alt ({jobs.length} jobs)</td>
-                  <td className="py-3 px-4"></td>
-                  <td className="py-3 px-4 text-right font-mono text-sm text-stone-950">
-                    {totalHonorar.toLocaleString('da-DK')} DKK
-                  </td>
-                  <td className="py-3 px-4"></td>
-                  <td className="py-3 px-4 text-right font-mono text-sm text-emerald-800">
-                    {totalKoersel.toLocaleString('da-DK')} DKK
-                  </td>
-                  <td colSpan={3} className="py-3 px-4 text-right">
-                    <button
-                      type="button"
-                      onClick={exportJobsCSV}
-                      className="inline-flex items-center gap-1 text-xs text-stone-600 hover:text-stone-900 underline"
-                    >
-                      <Download className="w-3 h-3" />
-                      Eksporter CSV
-                    </button>
-                  </td>
+                })}
+                <Sumraekke
+                  celler={[
+                    {
+                      indhold: `${visteJobs.length} ${visteJobs.length === 1 ? 'tur' : 'ture'}`,
+                      span: 4,
+                    },
+                    {
+                      indhold: visteJobs
+                        .reduce((s, j) => s + (koerselPrJob.get(j.id)?.kmIAlt ?? 0), 0)
+                        .toLocaleString('da-DK'),
+                      hoejre: true,
+                      tal: true,
+                    },
+                    {
+                      indhold: kr(
+                        beregning.koerselsFradragRubrik29 + beregning.befordringsFradragRubrik51
+                      ),
+                      hoejre: true,
+                      tal: true,
+                    },
+                    { indhold: '' },
+                  ]}
+                />
+              </tbody>
+            </Tabel>
+          }
+          liste={
+            <>
+              {visteJobs.map((job) => {
+                const linje = koerselPrJob.get(job.id);
+                return (
+                  <MobilPost
+                    key={job.id}
+                    rubrik={koerselRubrik(job)}
+                    titel={job.hvervgiver}
+                    undertitel={
+                      <>
+                        {job.tilknyttetJob && `${job.tilknyttetJob} · `}
+                        {TRANSPORT.find((t) => t.vaerdi === job.transportmiddel)?.navn}
+                        {job.destinationAdresse && ` · ${job.destinationAdresse}`}
+                      </>
+                    }
+                    beloeb={`${kr(linje?.fradrag ?? 0)} kr.`}
+                    beloebNote={linje ? `${linje.kmIAlt.toLocaleString('da-DK')} km` : undefined}
+                    handlinger={
+                      laast ? undefined : (
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => aabn(job)}
+                            className="text-2xs text-ink-muted underline underline-offset-4"
+                          >
+                            Rediger
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSletter(job)}
+                            className="text-2xs text-negative underline underline-offset-4"
+                          >
+                            Slet
+                          </button>
+                        </div>
+                      )
+                    }
+                  />
+                );
+              })}
+              <MobilSum
+                tekst={`${visteJobs.length} ${visteJobs.length === 1 ? 'tur' : 'ture'} i alt`}
+                beloeb={`${kr(beregning.koerselsFradragRubrik29 + beregning.befordringsFradragRubrik51)} kr.`}
+              />
+            </>
+          }
+        />
+      ) : (
+        <Responsiv
+          tabel={
+            <Tabel minBredde={720}>
+          <thead>
+            <tr>
+              <Th bredde="2.5rem" />
+              <Th>Hvervgiver</Th>
+              <Th bredde="7rem">Dato</Th>
+              <Th bredde="7rem">Betaling</Th>
+              <Th hoejre bredde="8rem">Honorar</Th>
+              <Th bredde="13rem" />
+            </tr>
+          </thead>
+          <tbody>
+            {visteJobs.map((job) => {
+              const krydser = betalingKrydserAarsskifte(job);
+              return (
+                <tr key={job.id}>
+                  <Td>
+                    <Rubrik nr={job.erRubrik17 ? 17 : 12} aktiv />
+                  </Td>
+                  <Td>
+                    <span className="font-medium text-ink">{job.hvervgiver}</span>
+                    <span className="block text-2xs text-ink-faint">
+                      {[
+                        job.type,
+                        job.amBidragFritaget ? 'Fritaget for AM-bidrag' : null,
+                        job.timerJob ? timer(job.timerJob) : null,
+                        job.erEksempel ? 'eksempel' : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
+                    {job.bilagIds.length > 0 && (
+                      <span className="mt-0.5 block text-2xs">
+                        {job.bilagIds.map((id) => {
+                          const b = bilagIndeks.get(id);
+                          return b ? (
+                            <a
+                              key={id}
+                              href={api.bilagUrl(id)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mr-2 text-ink-muted underline underline-offset-2 hover:text-ink"
+                            >
+                              {b.filnavn}
+                            </a>
+                          ) : null;
+                        })}
+                      </span>
+                    )}
+                  </Td>
+                  <Td tal>{dato(job.startDato)}</Td>
+                  <Td tal>
+                    {dato(job.betalingsDato) || <span className="text-ink-faint">–</span>}
+                    {krydser && (
+                      <span className="block font-sans text-2xs text-ink-faint">
+                        udbetales i {job.betalingsDato.slice(0, 4)}
+                      </span>
+                    )}
+                  </Td>
+                  <Td hoejre tal>
+                    {kr(job.honorar)}
+                  </Td>
+                  <Td hoejre>
+                    <div className="ikke-print flex justify-end gap-1">
+                      <Knap
+                        art="tekst"
+                        onClick={() => hentIcsFil(job, beregning.marginalskatProcent)}
+                        title="Hent en kalenderfil, der kan åbnes i Google, Apple og Outlook"
+                      >
+                        Kalender
+                      </Knap>
+                      {!laast && (
+                        <>
+                          <Knap art="tekst" onClick={() => aabn(job, true)}>
+                            Kopiér
+                          </Knap>
+                          <Knap art="tekst" onClick={() => aabn(job)}>
+                            Rediger
+                          </Knap>
+                          <Knap art="tekst" onClick={() => setSletter(job)}>
+                            Slet
+                          </Knap>
+                        </>
+                      )}
+                    </div>
+                  </Td>
                 </tr>
-              </tfoot>
+              );
+            })}
+            <Sumraekke
+              celler={[
+                { indhold: `${visteJobs.length} ${visteJobs.length === 1 ? 'job' : 'jobs'}`, span: 4 },
+                { indhold: kr(beregning.honorarerRubrik12 + beregning.rubrik17Indkomst), hoejre: true, tal: true },
+                { indhold: '' },
+              ]}
+            />
+          </tbody>
+            </Tabel>
+          }
+          liste={
+            <>
+              {visteJobs.map((job) => {
+                const linje = koerselPrJob.get(job.id);
+                return (
+                  <MobilPost
+                    key={job.id}
+                    rubrik={job.erRubrik17 ? 17 : 12}
+                    titel={job.hvervgiver}
+                    undertitel={
+                      <>
+                        {dato(job.startDato)}
+                        {job.betalingsDato && ` · betales ${dato(job.betalingsDato)}`}
+                        {job.type && ` · ${job.type}`}
+                        {job.amBidragFritaget && ' · fritaget for AM-bidrag'}
+                      </>
+                    }
+                    beloeb={`${kr(job.honorar)} kr.`}
+                    beloebNote={
+                      linje && linje.fradrag > 0
+                        ? `+ ${kr(linje.fradrag)} kr. kørsel`
+                        : undefined
+                    }
+                    handlinger={
+                      laast ? undefined : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => aabn(job)}
+                            className="text-2xs text-ink-muted underline underline-offset-4"
+                          >
+                            Rediger
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSletter(job)}
+                            className="text-2xs text-negative underline underline-offset-4"
+                          >
+                            Slet
+                          </button>
+                        </>
+                      )
+                    }
+                  />
+                );
+              })}
+              <MobilSum
+                tekst={`${visteJobs.length} ${visteJobs.length === 1 ? 'job' : 'jobs'} i alt`}
+                beloeb={`${kr(beregning.honorarerRubrik12 + beregning.rubrik17Indkomst)} kr.`}
+              />
+            </>
+          }
+        />
+      )}
+
+      <Modal
+        aaben={Boolean(redigerer)}
+        onLuk={() => setRedigerer(null)}
+        titel={
+          jobs.some((j) => j.id === redigerer?.id)
+            ? visning === 'koersel'
+              ? 'Rediger kørsel'
+              : 'Rediger job'
+            : visning === 'koersel'
+              ? 'Opret kørsel'
+              : 'Nyt job'
+        }
+        bund={
+          <>
+            <Knap onClick={() => setRedigerer(null)}>Annullér</Knap>
+            <Knap art="primaer" onClick={gem} disabled={gemmer}>
+              {gemmer ? 'Gemmer' : visning === 'koersel' ? 'Gem kørsel' : 'Gem job'}
+            </Knap>
+          </>
+        }
+      >
+        {redigerer && (
+          <div className="space-y-5">
+            {fejl && (
+              <Advarsel titel={visning === 'koersel' ? 'Kørslen blev ikke gemt' : 'Jobbet blev ikke gemt'}>
+                {fejl}
+              </Advarsel>
             )}
-          </table>
-        </div>
-      </div>
 
-      {/* Create / Edit Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/50 backdrop-blur-xs p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-label={editingJobId ? 'Rediger honorarjob' : 'Opret honorarjob'}>
-          <div className="bg-white border border-stone-200 rounded-2xl w-full max-w-xl shadow-xl overflow-hidden my-6">
-            <form onSubmit={handleSubmit}>
-              <div className="flex items-center justify-between px-6 py-4 border-b border-stone-200 bg-stone-50">
-                <h3 className="font-bold text-stone-900 text-base">
-                  {editingJobId ? 'Rediger Honorarjob' : 'Opret Nyt Honorarjob'}
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  aria-label="Luk jobformular"
-                  className="text-stone-400 hover:text-stone-700 p-1"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="p-6 space-y-4 text-xs">
-                {/* Hvervgiver & Honorar */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="font-semibold text-stone-700 block mb-1">
-                      Hvervgiver / Kunde *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={hvervgiver}
-                      onChange={(e) => setHvervgiver(e.target.value)}
-                      placeholder="fx Musikhuset, Danmarks Radio, Forening"
-                      className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs focus:ring-1 focus:ring-stone-800"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-semibold text-stone-700 block mb-1">
-                      Honorar i DKK (før skat) *
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min={0}
-                      step={50}
-                      value={honorar || ''}
-                      onChange={(e) => setHonorar(Number(e.target.value))}
-                      placeholder="fx 5000"
-                      className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs font-mono font-bold focus:ring-1 focus:ring-stone-800"
-                    />
-                  </div>
+            {visning === 'koersel' ? (
+              <>
+                <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
+                  <Felt
+                    label="Anledning / formål"
+                    paakraevet
+                    hjaelp="Hvad kørte du til? F.eks. en øver, bandprøve eller et spillested."
+                  >
+                    {(id) => (
+                      <Tekstfelt
+                        id={id}
+                        value={redigerer.hvervgiver}
+                        placeholder="F.eks. Øver, bandprøve, møde eller spillested"
+                        onChange={(e) => setRedigerer({ ...redigerer, hvervgiver: e.target.value })}
+                      />
+                    )}
+                  </Felt>
+                  <Felt
+                    label="Job"
+                    hjaelp="Ikke obligatorisk. Udfyld hvis kørslen hører til et bestemt job."
+                  >
+                    {(id) => (
+                      <>
+                        <Tekstfelt
+                          id={id}
+                          value={redigerer.tilknyttetJob ?? ''}
+                          placeholder="F.eks. Vega Musikhus (valgfrit)"
+                          list="eksisterende-jobs-liste"
+                          onChange={(e) =>
+                            setRedigerer({ ...redigerer, tilknyttetJob: e.target.value })
+                          }
+                        />
+                        {unikkeJobNavne.length > 0 && (
+                          <datalist id="eksisterende-jobs-liste">
+                            {unikkeJobNavne.map((navn) => (
+                              <option key={navn} value={navn} />
+                            ))}
+                          </datalist>
+                        )}
+                      </>
+                    )}
+                  </Felt>
                 </div>
 
-                {/* Datoer */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="font-semibold text-stone-700 block mb-1">Startdato *</label>
-                    <input
-                      type="date"
-                      required
-                      value={startDato}
-                      onChange={(e) => setStartDato(e.target.value)}
-                      className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-semibold text-stone-700 block mb-1">Slutdato</label>
-                    <input
-                      type="date"
-                      value={slutDato}
-                      onChange={(e) => setSlutDato(e.target.value)}
-                      className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-semibold text-stone-700 block mb-1">Betalingsdato</label>
-                    <input
-                      type="date"
-                      value={betalingsDato}
-                      onChange={(e) => setBetalingsDato(e.target.value)}
-                      className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs"
-                    />
-                  </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Felt label="Dato for kørslen" paakraevet>
+                    {(id) => (
+                      <Datofelt
+                        id={id}
+                        value={redigerer.startDato}
+                        onChange={(e) => {
+                          const d = e.target.value;
+                          setRedigerer({
+                            ...redigerer,
+                            startDato: d,
+                            slutDato: d,
+                          });
+                        }}
+                      />
+                    )}
+                  </Felt>
+                  <Felt
+                    label="Honorar (valgfrit)"
+                    hjaelp="Udfyldes kun, hvis du modtager særskilt honorar for denne kørsel."
+                  >
+                    {(id) => <BeloebFelt id={id} vaerdi={honorar} onVaerdi={setHonorar} />}
+                  </Felt>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
+                  <Felt label="Hvervgiver" paakraevet>
+                    {(id) => (
+                      <Tekstfelt
+                        id={id}
+                        value={redigerer.hvervgiver}
+                        placeholder="Hvem har hyret dig"
+                        onChange={(e) => setRedigerer({ ...redigerer, hvervgiver: e.target.value })}
+                      />
+                    )}
+                  </Felt>
+                  <Felt label="Honorar" paakraevet hjaelp="Beløbet før AM-bidrag og skat.">
+                    {(id) => <BeloebFelt id={id} vaerdi={honorar} onVaerdi={setHonorar} />}
+                  </Felt>
                 </div>
 
-                {/* Transportmiddel kontrol */}
-                <div className="p-3.5 bg-stone-50 border border-stone-200 rounded-xl space-y-3">
-                  <div>
-                    <label className="font-semibold text-stone-800 block mb-1">
-                      Transportmiddel *
-                    </label>
-                    <select
-                      value={transportmiddel}
-                      onChange={(e) => setTransportmiddel(e.target.value as TransportMiddel)}
-                      className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs bg-white"
-                    >
-                      <option value="NONE">Ingen transport / ikke brugt eget transportmiddel</option>
-                      <option value="OWN_CAR_MC">Egen bil eller motorcykel ({regler.takstBilMCFoerste20k.toLocaleString('da-DK')} kr/km op til 20.000 km - Rubrik 29)</option>
-                      <option value="OWN_BIKE">Egen cykel eller knallert ({regler.takstCykelPrKm.toLocaleString('da-DK')} kr/km - Rubrik 29)</option>
-                      <option value="PASSENGER">Almindeligt befordringsfradrag (afstandstrin - Rubrik 51)</option>
-                    </select>
-                  </div>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <Felt label="Startdato" paakraevet>
+                    {(id) => (
+                      <Datofelt
+                        id={id}
+                        value={redigerer.startDato}
+                        onChange={(e) => {
+                          const startDato = e.target.value;
+                          setRedigerer({
+                            ...redigerer,
+                            startDato,
+                            slutDato:
+                              redigerer.slutDato < startDato ? startDato : redigerer.slutDato,
+                          });
+                        }}
+                      />
+                    )}
+                  </Felt>
+                  <Felt
+                    label="Slutdato"
+                    paakraevet
+                    hjaelp="Bruges som standard for retserhvervelsesåret ved et almindeligt afsluttet job."
+                  >
+                    {(id) => (
+                      <Datofelt
+                        id={id}
+                        value={redigerer.slutDato}
+                        onChange={(e) => setRedigerer({ ...redigerer, slutDato: e.target.value })}
+                      />
+                    )}
+                  </Felt>
+                  <Felt label="Betalingsdato" hjaelp="Hvornår pengene faktisk kommer ind.">
+                    {(id) => (
+                      <Datofelt
+                        id={id}
+                        value={redigerer.betalingsDato}
+                        onChange={(e) =>
+                          setRedigerer({ ...redigerer, betalingsDato: e.target.value })
+                        }
+                      />
+                    )}
+                  </Felt>
+                </div>
 
-                  {transportmiddel !== 'NONE' && (
-                    <div className="space-y-3 pt-2 border-t border-stone-200">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="font-semibold text-stone-700 block mb-1">
-                            Antal kilometer (tur/retur)
-                          </label>
-                          <input
-                            type="number"
-                            min={0}
-                            value={antalKm || ''}
-                            onChange={(e) => setAntalKm(Number(e.target.value))}
-                            placeholder="fx 60"
-                            className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs font-mono font-semibold"
+                {betalingKrydserAarsskifte(redigerer) && (
+                  <Advarsel art="neutral" titel="Betalingen falder i et andet år">
+                    Betalingsdatoen afgør ikke i sig selv indkomståret. Som udgangspunkt bruges
+                    året, hvor du fik endelig ret til honoraret; for et almindeligt afsluttet job
+                    vil det normalt være slutåret.
+                  </Advarsel>
+                )}
+              </>
+            )}
+
+            <div className="border-t border-rule pt-4">
+              <Felt label="Transportmiddel" paakraevet hjaelp={valgtTransport?.hjaelp}>
+                {(id) => (
+                  <Vaelger
+                    id={id}
+                    value={redigerer.transportmiddel}
+                    onChange={(e) =>
+                      setRedigerer({
+                        ...redigerer,
+                        transportmiddel: e.target.value as TransportMiddel,
+                      })
+                    }
+                  >
+                    {TRANSPORT.map((t) => (
+                      <option key={t.vaerdi} value={t.vaerdi}>
+                        {t.navn}
+                      </option>
+                    ))}
+                  </Vaelger>
+                )}
+              </Felt>
+
+              {redigerer.transportmiddel !== 'NONE' && (
+                <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_1fr_auto]">
+                  <Felt label="Kilometer pr. tur" hjaelp="Hele strækningen, som den køres.">
+                    {(id) => <BeloebFelt id={id} vaerdi={km} onVaerdi={setKm} suffiks="km" />}
+                  </Felt>
+                  <Felt label="Antal ture">
+                    {(id) => <BeloebFelt id={id} vaerdi={ture} onVaerdi={setTure} suffiks="" />}
+                  </Felt>
+                  <div className="flex flex-col justify-end pb-1">
+                    <span className="text-2xs text-ink-muted">
+                      Fradrag, rubrik{' '}
+                      {redigerer.transportmiddel === 'PASSENGER' || redigerer.erBestyrelseshverv
+                        ? 51
+                        : 29}
+                    </span>
+                    <span className="tal text-lg font-semibold text-ink">
+                      {kr(kladdensKoersel)} kr.
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {(redigerer.transportmiddel === 'OWN_CAR_MC' ||
+                redigerer.transportmiddel === 'OWN_BIKE') && (
+                <div className="mt-4">
+                  <Afkrydsning
+                    label="Bestyrelses-, udvalgs- eller kommissionshverv uden modtaget skattefri kørselsgodtgørelse"
+                    hjaelp="Modsat kunstnere og musikere er bestyrelsesmedlemmer henvist til det almindelige befordringsfradrag, hvis de ikke får kørepenge fra virksomheden. Fradraget lander derfor i rubrik 51, ikke rubrik 29, med bundgrænse på 24 km."
+                    checked={Boolean(redigerer.erBestyrelseshverv)}
+                    onChange={(e) =>
+                      setRedigerer({ ...redigerer, erBestyrelseshverv: e.target.checked })
+                    }
+                  />
+                </div>
+              )}
+
+              {redigerer.transportmiddel !== 'NONE' && (
+                <div className="mt-4">
+                  <Felt
+                    label={visning === 'koersel' ? 'Adresse for kørslen' : 'Adresse for jobbet'}
+                    hjaelp={
+                      !indkomstAar.hjemmeadresse
+                        ? 'Sæt en hjemmeadresse på indkomståret for at kunne beregne afstanden herfra.'
+                        : undefined
+                    }
+                  >
+                    {(id) => (
+                      <div className="flex gap-2">
+                        <div className="flex-1">
+                          <Tekstfelt
+                            id={id}
+                            value={redigerer.destinationAdresse ?? ''}
+                            placeholder={
+                              visning === 'koersel'
+                                ? 'Øvelokale, spillested eller mødested'
+                                : 'Spillested eller mødested'
+                            }
+                            onChange={(e) =>
+                              setRedigerer({ ...redigerer, destinationAdresse: e.target.value })
+                            }
                           />
                         </div>
-                        <div>
-                          <label className="font-semibold text-stone-700 block mb-1">
-                            Antal ture
-                          </label>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => setAntalTure(Math.max(1, antalTure - 1))}
-                              className="px-2.5 py-1.5 border border-stone-300 rounded bg-white font-bold"
-                            >
-                              -
-                            </button>
-                            <input
-                              type="number"
-                              min={1}
-                              value={antalTure}
-                              onChange={(e) => setAntalTure(Math.max(1, Number(e.target.value)))}
-                              className="w-16 px-2 py-1.5 border border-stone-300 rounded text-center text-xs font-bold"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setAntalTure(antalTure + 1)}
-                              className="px-2.5 py-1.5 border border-stone-300 rounded bg-white font-bold"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
+                        {rutestatusKlar && (
+                          <Knap
+                            onClick={beregnAfstand}
+                            disabled={
+                              beregnerAfstand ||
+                              !indkomstAar.hjemmeadresse ||
+                              !redigerer.destinationAdresse?.trim()
+                            }
+                            title="Foreslår kilometertallet ud fra de to adresser. Du kan altid rette det bagefter."
+                          >
+                            {beregnerAfstand ? 'Beregner…' : 'Beregn afstand'}
+                          </Knap>
+                        )}
                       </div>
-
-                      <div>
-                        <label className="font-semibold text-stone-700 block mb-1">
-                          Destination / Spillested (Adresse B)
-                        </label>
-                        <input
-                          type="text"
-                          value={destinationAdresse}
-                          onChange={(e) => setDestinationAdresse(e.target.value)}
-                          placeholder="fx Vester Allé 15, 8000 Aarhus"
-                          className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs"
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg">
-                        <span className="text-emerald-900 font-medium">Beregnet kørselsfradrag:</span>
-                        <span className="text-emerald-950 font-bold font-mono text-sm">
-                          {calculatedFradrag.toLocaleString('da-DK')} DKK
-                          <span className="text-[10px] font-normal text-emerald-800 ml-1">
-                            ({transportmiddel === 'PASSENGER' ? 'Rubrik 51' : 'Rubrik 29'})
-                          </span>
-                        </span>
-                      </div>
-                    </div>
+                    )}
+                  </Felt>
+                  {afstandFejl && (
+                    <p className="mt-1.5 text-2xs text-negative">{afstandFejl}</p>
                   )}
                 </div>
+              )}
+            </div>
 
-                {/* Udvidede felter */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="font-semibold text-stone-700 block mb-1">Jobtype</label>
-                    <input
-                      type="text"
-                      value={type}
-                      onChange={(e) => setType(e.target.value)}
-                      placeholder="fx Musik, Foredrag"
-                      className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-semibold text-stone-700 block mb-1">Timer på job</label>
-                    <input
-                      type="number"
-                      step={0.5}
-                      min={0}
-                      value={timerJob || ''}
-                      onChange={(e) => setTimerJob(Number(e.target.value))}
-                      className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-semibold text-stone-700 block mb-1">Timer forberedelse</label>
-                    <input
-                      type="number"
-                      step={0.5}
-                      min={0}
-                      value={timerTransportForberedelse || ''}
-                      onChange={(e) => setTimerTransportForberedelse(Number(e.target.value))}
-                      className="w-full px-3 py-2 border border-stone-300 rounded-lg text-xs"
-                    />
-                  </div>
-                </div>
+            {jobs.some((j) => j.id === redigerer.id) && (
+              <div className="flex flex-wrap items-center gap-3 border-t border-rule pt-4">
+                <span className="text-2xs text-ink-muted">Læg jobbet i kalenderen:</span>
+                <Knap
+                  art="tekst"
+                  onClick={() => hentIcsFil(redigerer, beregning.marginalskatProcent)}
+                >
+                  Hent kalenderfil
+                </Knap>
+                <a
+                  href={createGoogleCalendarUrl(redigerer, beregning.marginalskatProcent)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-ink-muted underline underline-offset-4 hover:text-ink"
+                >
+                  Åbn i Google Kalender
+                </a>
+              </div>
+            )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <label className="font-semibold text-stone-700">Indkomstrubrik
-                    <select value={rubrik} onChange={(event) => setRubrik(Number(event.target.value) as IndkomstRubrik)} className="mt-1 w-full px-3 py-2 border border-stone-300 rounded-lg bg-white">
-                      <option value={12}>Rubrik 12 — honorar/B-indkomst</option>
-                      <option value={17}>Rubrik 17 — særlig indkomst/legat</option>
-                    </select>
-                  </label>
-                  <label className="font-semibold text-stone-700">Betalingsstatus
-                    <select value={status} onChange={(event) => setStatus(event.target.value as JobStatus)} className="mt-1 w-full px-3 py-2 border border-stone-300 rounded-lg bg-white">
-                      <option value="PLANLAGT">Planlagt</option><option value="BETALT">Betalt</option><option value="AFLYST">Aflyst</option>
-                    </select>
-                  </label>
-                </div>
+            <div className="border-t border-rule pt-4">
+              <Knap art="tekst" onClick={() => setVisMere(!visMere)}>
+                {visMere ? 'Skjul de valgfrie felter' : 'Vis flere felter'}
+              </Knap>
 
-                {/* AM-bidragsfritagelse Checkbox */}
-                <div className="flex items-center gap-2 pt-1">
-                  <input
-                    type="checkbox"
-                    id="amFritaget"
-                    checked={amBidragFritaget}
-                    onChange={(e) => setAmBidragFritaget(e.target.checked)}
-                    className="rounded border-stone-300 text-stone-900 focus:ring-0"
+              {visMere && (
+                <div className="mt-4 space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <Felt label="Timer på selve jobbet">
+                      {(id) => (
+                        <BeloebFelt id={id} vaerdi={timerJob} onVaerdi={setTimerJob} suffiks="t" />
+                      )}
+                    </Felt>
+                    <Felt label="Timer på forberedelse og transport">
+                      {(id) => (
+                        <BeloebFelt
+                          id={id}
+                          vaerdi={timerTransport}
+                          onVaerdi={setTimerTransport}
+                          suffiks="t"
+                        />
+                      )}
+                    </Felt>
+                    <Felt label="Type" hjaelp="Din egen kategori. Bruges i statistikken.">
+                      {(id) => (
+                        <Tekstfelt
+                          id={id}
+                          value={redigerer.type ?? ''}
+                          placeholder="Musik, foredrag, konsulent"
+                          onChange={(e) => setRedigerer({ ...redigerer, type: e.target.value })}
+                        />
+                      )}
+                    </Felt>
+                  </div>
+
+                  <Afkrydsning
+                    label="Der skal ikke betales AM-bidrag af dette honorar"
+                    hjaelp="Gælder fx biblioteksafgift, rettighedsbetalinger og legater uden krav om en konkret modydelse. Markér ikke almindelige honorarer."
+                    checked={redigerer.amBidragFritaget}
+                    onChange={(e) =>
+                      setRedigerer({ ...redigerer, amBidragFritaget: e.target.checked })
+                    }
                   />
-                  <label htmlFor="amFritaget" className="text-xs text-stone-700 cursor-pointer">
-                    Bilaget eller en faglig vurdering dokumenterer, at der ikke skal betales AM-bidrag
-                  </label>
-                </div>
-              </div>
+                  <Afkrydsning
+                    label="Beløbet hører til i rubrik 17 i stedet for rubrik 12"
+                    hjaelp="Gruppelivsforsikring gennem fagforening, uddelinger og visse personalegoder."
+                    checked={Boolean(redigerer.erRubrik17)}
+                    onChange={(e) =>
+                      setRedigerer({ ...redigerer, erRubrik17: e.target.checked })
+                    }
+                  />
 
-              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-stone-200 bg-stone-50">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-stone-300 rounded-lg text-xs font-semibold text-stone-700 hover:bg-stone-100"
-                >
-                  Annuller
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-stone-900 text-white rounded-lg text-xs font-semibold hover:bg-stone-800 shadow-xs"
-                >
-                  {editingJobId ? 'Gem ændringer' : 'Opret job'}
-                </button>
-              </div>
-            </form>
+                  <Felt label="Noter">
+                    {(id) => (
+                      <Notatfelt
+                        id={id}
+                        vaerdi={redigerer.noter ?? ''}
+                        onVaerdi={(v) => setRedigerer({ ...redigerer, noter: v })}
+                      />
+                    )}
+                  </Felt>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </Modal>
+
+      <Modal
+        aaben={Boolean(sletter)}
+        onLuk={() => setSletter(null)}
+        titel={visning === 'koersel' ? 'Slet kørslen?' : 'Slet jobbet?'}
+        bredde="max-w-lg"
+        bund={
+          <>
+            <Knap onClick={() => setSletter(null)}>Behold</Knap>
+            <Knap
+              art="fare"
+              onClick={async () => {
+                if (sletter) await onSlet(sletter.id);
+                setSletter(null);
+              }}
+            >
+              {visning === 'koersel' ? 'Slet kørslen' : 'Slet jobbet'}
+            </Knap>
+          </>
+        }
+      >
+        <p className="text-xs text-ink-muted">
+          {visning === 'koersel' ? (
+            <>
+              Kørslen &quot;{sletter?.hvervgiver}&quot; fjernes fra kørselsopgørelsen og
+              skatteberegningen. Bilag bliver liggende i arkivet.
+            </>
+          ) : (
+            <>
+              {sletter?.hvervgiver} på {kr(sletter?.honorar ?? 0)} kr. forsvinder fra rubrik{' '}
+              {sletter?.erRubrik17 ? 17 : 12} og fra skatteberegningen. Bilag bliver liggende i
+              arkivet.
+            </>
+          )}
+        </p>
+      </Modal>
+    </Sektion>
   );
-};
+}

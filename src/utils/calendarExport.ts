@@ -1,66 +1,85 @@
 import type { Job } from '../types';
+import { kr } from '../lib/format';
 
-function nextDate(date: string): string {
-  const value = new Date(`${date}T00:00:00Z`);
-  value.setUTCDate(value.getUTCDate() + 1);
-  return value.toISOString().slice(0, 10);
-}
+/**
+ * En heldagsbegivenhed i iCalendar slutter dagen EFTER den sidste dag.
+ * DTEND lig DTSTART giver en begivenhed uden længde, som flere kalendere
+ * enten skjuler eller viser forkert.
+ */
+const dagEfter = (iso: string): string => {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
 
-function compactDate(date: string): string {
-  return date.replaceAll('-', '');
-}
+const udenBindestreger = (iso: string) => iso.replace(/-/g, '');
 
-function escapeIcs(value: string): string {
-  return value.replaceAll('\\', '\\\\').replaceAll(';', '\\;').replaceAll(',', '\\,').replace(/\r?\n/g, '\\n');
-}
+const beskrivelse = (job: Job, opsparingsProcent?: number): string =>
+  [
+    `Honorar: ${kr(job.honorar)} kr.`,
+    job.betalingsDato ? `Forventet betaling: ${job.betalingsDato}` : null,
+    opsparingsProcent
+      ? `Sæt ca. ${kr((job.honorar * opsparingsProcent) / 100)} kr. til side til skat og AM-bidrag.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join('\n');
 
-export function createGoogleCalendarUrl(job: Job): string {
-  const details =
-    `Honorar: ${job.honorar.toLocaleString('da-DK')} DKK\n` +
-    `Transport: ${job.transportmiddel}\n` +
-    `Forventet betaling: ${job.betalingsDato || 'Ikke angivet'}`;
-  const endDate = nextDate(job.slutDato || job.startDato);
-  const params = new URLSearchParams({
-    action: 'TEMPLATE', text: `Honorarjob: ${job.hvervgiver}`, details,
-    location: job.destinationAdresse || '', dates: `${compactDate(job.startDato)}/${compactDate(endDate)}`,
+export function createGoogleCalendarUrl(job: Job, opsparingsProcent?: number): string {
+  const p = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: `Honorarjob: ${job.hvervgiver}`,
+    details: beskrivelse(job, opsparingsProcent),
+    location: job.destinationAdresse || '',
+    dates: `${udenBindestreger(job.startDato)}/${udenBindestreger(
+      dagEfter(job.slutDato || job.startDato)
+    )}`,
   });
-  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+  return `https://calendar.google.com/calendar/render?${p.toString()}`;
 }
 
-export function createIcsContent(job: Job, now = new Date()): string {
-  const startDateFormatted = compactDate(job.startDato);
-  const endDateFormatted = compactDate(nextDate(job.slutDato || job.startDato));
-  
-  return [
+const escape = (tekst: string) =>
+  tekst.replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+
+export function byggIcs(job: Job, opsparingsProcent?: number): string {
+  const nu = new Date().toISOString().replace(/[-:]/g, '').split('.')[0];
+  const linjer = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Revisor AI//B-indkomst Kalender//DA',
+    'PRODID:-//Revisor AI//B-indkomst//DA',
     'CALSCALE:GREGORIAN',
     'BEGIN:VEVENT',
-    `UID:job-${escapeIcs(job.id)}@revisor-ai.local`,
-    `DTSTAMP:${now.toISOString().replace(/[-:]/g, '').split('.')[0]!}Z`,
-    `DTSTART;VALUE=DATE:${startDateFormatted}`,
-    `DTEND;VALUE=DATE:${endDateFormatted}`,
-    `SUMMARY:${escapeIcs(`Honorarjob - ${job.hvervgiver}`)}`,
-    `DESCRIPTION:${escapeIcs(`Honorar: ${job.honorar} DKK\nBetalingsdato: ${job.betalingsDato || '-'}`)}`,
-    `LOCATION:${escapeIcs(job.destinationAdresse || '')}`,
+    `UID:${job.id}@revisor-ai`,
+    `DTSTAMP:${nu}Z`,
+    `DTSTART;VALUE=DATE:${udenBindestreger(job.startDato)}`,
+    `DTEND;VALUE=DATE:${udenBindestreger(dagEfter(job.slutDato || job.startDato))}`,
+    `SUMMARY:${escape(`Honorarjob: ${job.hvervgiver}`)}`,
+    `DESCRIPTION:${escape(beskrivelse(job, opsparingsProcent))}`,
+    job.destinationAdresse ? `LOCATION:${escape(job.destinationAdresse)}` : null,
     'STATUS:CONFIRMED',
+    // Påmindelse dagen før jobbet.
+    'BEGIN:VALARM',
+    'TRIGGER:-P1D',
+    'ACTION:DISPLAY',
+    `DESCRIPTION:${escape(`I morgen: ${job.hvervgiver}`)}`,
+    'END:VALARM',
     'END:VEVENT',
     'END:VCALENDAR',
-  ].join('\r\n');
+  ].filter(Boolean);
+
+  return linjer.join('\r\n');
 }
 
-export function downloadIcsFile(job: Job) {
-  const icsContent = createIcsContent(job);
-
-  const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+export function hentIcsFil(job: Job, opsparingsProcent?: number): void {
+  const blob = new Blob([byggIcs(job, opsparingsProcent)], {
+    type: 'text/calendar;charset=utf-8',
+  });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  const safeName = job.hvervgiver.toLowerCase().replace(/[^a-z0-9æøå]+/gi, '-').replace(/^-|-$/g, '');
-  link.setAttribute('download', `job-${safeName || job.id}.ics`);
+  link.download = `${job.hvervgiver.toLowerCase().replace(/[^a-z0-9æøå]+/g, '-')}.ics`;
   document.body.appendChild(link);
   link.click();
-  document.body.removeChild(link);
+  link.remove();
   URL.revokeObjectURL(url);
 }

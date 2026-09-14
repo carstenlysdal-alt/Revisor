@@ -1,160 +1,312 @@
-import React from 'react';
-import {
-  Inbox,
-  TrendingUp,
-  ShieldAlert,
-  MessageSquare,
-  UploadCloud,
-  ChevronRight
-} from 'lucide-react';
-import { IndkomstAar, Job, Fradrag, SkatteBeregningResultat, OpsparingsTracker } from '../types';
-import { getSkatteRegler } from '../data/danishTaxData';
-import { calculateAaretsKoerselsfradrag } from '../utils/mileageCalculator';
+import React, { useEffect, useState } from 'react';
+import type { IndkomstAar, OpsparingsTracker } from '../types';
+import type { SkatteBeregning } from '../lib/tax/beregn';
+import { kr, pct } from '../lib/format';
+import { api } from '../lib/api';
+import { Advarsel, Knap, Kort } from './ui';
+
+/** Samme opdeling som topnavigationen i App.tsx — kun til forklaringskortet. */
+const FANER_DRIFT_NAVNE = ['Indtægter', 'Udgifter & fradrag', 'Kørsel', 'Investeringer'];
+const FANER_OVERBLIK_NAVNE = ['Skatteoverblik', 'Årsopgørelse', 'Statistik', 'Dokumentation'];
 
 interface Props {
-  activeIndkomstAar: IndkomstAar;
-  allIndkomstAar: IndkomstAar[];
-  allJobs: Job[];
-  allFradrag: Fradrag[];
-  activeSkatteBeregning: SkatteBeregningResultat;
-  activeOpsparing: OpsparingsTracker;
-  onOpenAiScanner: () => void;
-  onOpenRevisorChat: () => void;
-  onSelectTab: (tab: string) => void;
+  indkomstAar: IndkomstAar;
+  beregning: SkatteBeregning;
+  opsparing: OpsparingsTracker;
+  aiKlar: boolean;
+  aiUdbyder: string | null;
+  aiModel: string | null;
+  onAabnScanner: () => void;
+  onGaaTil: (fane: string) => void;
+  /** Kun sat fra Forsiden. */
+  antalJobs?: number;
+  investeringerIAlt?: number;
+  /** Forklaringskortet om Daglig drift/Samlet overblik — kun på Forsiden. */
+  visForklaring?: boolean;
 }
 
-export const GlobalSidebar: React.FC<Props> = ({
-  activeIndkomstAar,
-  allIndkomstAar,
-  allJobs,
-  allFradrag,
-  activeSkatteBeregning,
-  activeOpsparing,
-  onOpenAiScanner,
-  onOpenRevisorChat,
-  onSelectTab,
-}) => {
-  const regler = getSkatteRegler(activeIndkomstAar.aar);
-  // Compute accumulated gains across ALL years
-  const koerselsfradragAllYears = allIndkomstAar.reduce((sum, indkomstAar) => {
-    const aaretsJobs = allJobs.filter((job) => job.indkomstAarId === indkomstAar.id);
-    const resultat = calculateAaretsKoerselsfradrag(indkomstAar.aar, aaretsJobs);
-    return sum + resultat.rubrik29 + resultat.rubrik51;
-  }, 0);
-  const samletFradragAllYears = allFradrag.reduce((sum, fradrag) => sum + (Number(fradrag.fradragIDKK) || 0), 0)
-    + koerselsfradragAllYears;
-  
-  const skatOgAmTotal = activeSkatteBeregning.samletSkatOgAM;
-  const daekketTotal = (activeOpsparing.indbetaltTilSkat || 0) + (activeOpsparing.opsparetPrivat || 0);
-  const manglerOpsparing = Math.max(0, skatOgAmTotal - daekketTotal);
+function Noegletal({
+  label,
+  vaerdi,
+  note,
+  fremhaev = false,
+}: {
+  label: string;
+  vaerdi: string;
+  note?: string;
+  fremhaev?: boolean;
+}) {
+  return (
+    <div className="border-b border-rule py-2.5 last:border-b-0">
+      <p className="text-2xs uppercase tracking-wide text-ink-faint">{label}</p>
+      <p
+        className={`tal mt-0.5 ${fremhaev ? 'text-xl font-semibold' : 'text-base'} text-ink`}
+      >
+        {vaerdi}
+      </p>
+      {note && <p className="mt-0.5 text-2xs text-ink-muted">{note}</p>}
+    </div>
+  );
+}
+
+interface GoogleDriveStatus {
+  konfigureret: boolean;
+  forbundet: boolean;
+  sidsteFejl: string | null;
+  sikkerhedskopieredeBilag: number;
+  afventendeBilag: number;
+}
+
+/**
+ * Egen fetch, ligesom rutestatus i JobsModule — sidebaren behøver ikke gå
+ * gennem App.tsx for en status, kun den selv bruger.
+ */
+function GoogleDriveStatusBlok() {
+  const [status, setStatus] = useState<GoogleDriveStatus | null>(null);
+  const [urlBesked, setUrlBesked] = useState<string | null>(null);
+  const [afbryderLige, setAfbryderLige] = useState(false);
+
+  const hentStatus = () => api.googleDriveStatus().then(setStatus).catch(() => setStatus(null));
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const drev = params.get('drev');
+    if (drev) {
+      setUrlBesked(
+        drev === 'forbundet'
+          ? 'Google Drev blev forbundet.'
+          : drev === 'ikke-konfigureret'
+            ? 'Google Drev er ikke sat op på serveren endnu.'
+            : 'Forbindelsen til Google Drev fejlede. Prøv igen.'
+      );
+      params.delete('drev');
+      const rest = params.toString();
+      window.history.replaceState({}, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
+    }
+    void hentStatus();
+    const interval = window.setInterval(() => void hentStatus(), 15_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  if (!status) return null;
+
+  async function afbryd() {
+    if (
+      !window.confirm(
+        'Afbryd forbindelsen til Google Drev? Filer, der allerede ligger der, bliver ikke slettet.'
+      )
+    ) {
+      return;
+    }
+    setAfbryderLige(true);
+    try {
+      await api.googleDriveAfbryd();
+      await hentStatus();
+    } finally {
+      setAfbryderLige(false);
+    }
+  }
 
   return (
-    <aside className="w-full lg:w-72 space-y-4 shrink-0">
-      {/* AI Quick Upload Button */}
-      <div className="bg-stone-900 text-white rounded-xl p-5 shadow-xs">
-        <div className="flex items-center gap-2 text-amber-300 text-xs font-bold uppercase tracking-wider mb-2">
-          <Inbox className="w-4 h-4" />
-          Revisoragentens indbakke
-        </div>
-        <h4 className="font-bold text-sm text-white leading-snug">
-          Fortæl det én gang
-        </h4>
-        <p className="text-xs text-stone-300 mt-1 leading-relaxed">
-          Diktér, skriv eller upload et bilag. Agenten foreslår selv den rette placering og felterne til din godkendelse.
+    <div className="mt-5 border-t border-rule pt-4">
+      <p className="text-2xs uppercase tracking-wide text-ink-faint">Google Drev-backup</p>
+
+      {!status.konfigureret && (
+        <p className="mt-1.5 text-2xs text-ink-muted">
+          Alt gemmes løbende i appens database. Ekstern Google Drev-backup er ikke sat op
+          på serveren endnu.
         </p>
-        <button
-          type="button"
-          onClick={onOpenAiScanner}
-          className="mt-4 w-full py-2.5 px-4 bg-white text-stone-900 hover:bg-stone-100 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 shadow-xs"
-        >
-          <UploadCloud className="w-4 h-4 text-stone-900" />
-          Åbn agentindbakke
-        </button>
-      </div>
+      )}
 
-      {/* Accumulated Gain Widget (Gevinst-widget) */}
-      <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-xs">
-        <div className="flex items-center gap-2 text-stone-800 text-xs font-bold uppercase tracking-wider mb-2">
-          <TrendingUp className="w-4 h-4 text-emerald-600" />
-          Akkumuleret Gevinst
-        </div>
-        <div className="space-y-2.5 pt-1">
-          <div>
-            <span className="text-[11px] text-stone-500 block">Opnåede fradrag i alt:</span>
-            <span className="text-lg font-bold font-mono text-stone-900">
-              {samletFradragAllYears.toLocaleString('da-DK')} DKK
-            </span>
-          </div>
-          <p className="text-[11px] text-stone-500">Fradragets faktiske skatteværdi afhænger af din samlede indkomst og beregnes ikke som en fast procent.</p>
-        </div>
-        <div className="mt-3 pt-3 border-t border-stone-100 text-[11px] text-stone-400">
-          Opgjort på tværs af alle registrerede år.
-        </div>
-      </div>
+      {urlBesked && <p className="mt-1.5 text-2xs text-ink-muted">{urlBesked}</p>}
 
-      {/* Warning widget if savings are insufficient */}
-      {manglerOpsparing > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 shadow-xs">
-          <div className="flex items-start gap-2.5">
-            <ShieldAlert className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-            <div className="text-xs">
-              <span className="font-bold text-red-950 block">
-                Utilstrækkelig opsparing!
-              </span>
-              <p className="text-red-800 mt-1 leading-relaxed">
-                Du mangler at afsætte <strong>{manglerOpsparing.toLocaleString('da-DK')} DKK</strong> til B-skat og AM-bidrag for {activeIndkomstAar.aar}.
-              </p>
-              <button
-                type="button"
-                onClick={() => onSelectTab('opsparing')}
-                className="mt-2.5 text-xs font-semibold text-red-900 hover:text-red-950 underline flex items-center gap-1"
-              >
-                Se detaljer i opsparings-trackeren
-                <ChevronRight className="w-3 h-3" />
-              </button>
-            </div>
-          </div>
+      {status.konfigureret && status.forbundet && !status.sidsteFejl && (
+        <>
+          <p className="mt-1.5 text-2xs text-ink-muted">
+            Forbundet. {status.sikkerhedskopieredeBilag} bilag er sikkerhedskopieret
+            {status.afventendeBilag > 0
+              ? `; ${status.afventendeBilag} afventer.`
+              : '. Datasnapshottet er ajour.'}
+          </p>
+          <button
+            type="button"
+            onClick={afbryd}
+            disabled={afbryderLige}
+            className="mt-1.5 text-2xs text-ink-muted underline underline-offset-2"
+          >
+            Afbryd forbindelse
+          </button>
+        </>
+      )}
+
+      {status.konfigureret && status.forbundet && status.sidsteFejl && (
+        <div className="mt-1.5">
+          <Advarsel titel="Backup kræver opmærksomhed">{status.sidsteFejl}</Advarsel>
+          <a
+            href="/api/google/start"
+            className="mt-1.5 inline-block text-2xs text-ink-muted underline underline-offset-2"
+          >
+            Prøv at genforbinde Google Drev
+          </a>
         </div>
       )}
 
-      {/* Ask AI Revisor Chat Card */}
-      <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-xs">
-        <div className="flex items-center gap-2 text-stone-900 font-bold text-xs mb-1.5">
-          <MessageSquare className="w-4 h-4 text-stone-700" />
-          Spørg din Revisor AI
-        </div>
-        <p className="text-xs text-stone-500 leading-relaxed">
-          Er du i tvivl om Rubrik 29, kørselstakster eller momsfritagelse for musikere og freelancere?
-        </p>
-        <button
-          type="button"
-          onClick={onOpenRevisorChat}
-          className="mt-3.5 w-full py-2 px-3 bg-stone-100 hover:bg-stone-200/80 text-stone-900 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 border border-stone-200"
+      {status.konfigureret && !status.forbundet && (
+        <a
+          href="/api/google/start"
+          className="mt-1.5 inline-block text-2xs text-ink-muted underline underline-offset-2"
         >
-          <MessageSquare className="w-3.5 h-3.5" />
-          Åbn Revisor AI Chat
-        </button>
-      </div>
+          Forbind Google Drev
+        </a>
+      )}
+    </div>
+  );
+}
 
-      {/* Kommune & Skattesatser Box */}
-      <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 text-xs text-stone-600 space-y-1.5">
-        <div className="flex items-center justify-between">
-          <span className="text-stone-500">Bopælskommune:</span>
-          <span className="font-semibold text-stone-800">{activeIndkomstAar.kommune}</span>
+export function GlobalSidebar({
+  indkomstAar,
+  beregning,
+  opsparing,
+  aiKlar,
+  aiUdbyder,
+  aiModel,
+  onAabnScanner,
+  onGaaTil,
+  antalJobs,
+  investeringerIAlt,
+  visForklaring = false,
+}: Props) {
+  const afsat = opsparing.indbetaltTilSkat + opsparing.opsparetPrivat;
+  const mangler = Math.max(0, beregning.samletSkatOgAM - afsat);
+
+  return (
+    <aside className="ikke-print w-full shrink-0 lg:w-72">
+      <div className="lg:sticky lg:top-24">
+        <h2 className="border-b border-rule-strong pb-1.5 font-display text-sm font-bold text-ink">
+          Dit overblik i {beregning.aar}
+        </h2>
+
+        {antalJobs !== undefined && (
+          <Noegletal
+            label="B-indkomst i år"
+            vaerdi={`${kr(beregning.honorarerRubrik12 + beregning.rubrik17Indkomst)} kr.`}
+            note={`${antalJobs} ${antalJobs === 1 ? 'job' : 'job'} indberettet`}
+          />
+        )}
+        <Noegletal
+          label="Skat og AM-bidrag"
+          vaerdi={`${kr(beregning.samletSkatOgAM)} kr.`}
+          note={`Effektivt ${pct(beregning.effektivSkatteprocent)} af honorarerne.`}
+          fremhaev
+        />
+        <Noegletal label="Sat til side" vaerdi={`${kr(afsat)} kr.`} />
+        <Noegletal
+          label="Tilbage efter skat"
+          vaerdi={`${kr(beregning.indtaegtEfterSkat)} kr.`}
+        />
+        <Noegletal
+          label="Fradrag i rubrik 29"
+          vaerdi={`${kr(beregning.anvendtFradragRubrik29)} kr.`}
+          note={
+            beregning.rubrik29LoftOverskredet
+              ? `${kr(beregning.overskydendeFradrag)} kr. kan ikke bruges i år.`
+              : undefined
+          }
+        />
+        {investeringerIAlt !== undefined && (
+          <Noegletal label="Investeringer" vaerdi={`${kr(investeringerIAlt)} kr.`} />
+        )}
+
+        {mangler > 0 && (
+          <div className="mt-4">
+            <Advarsel titel="Der mangler at blive sat penge til side">
+              Du står til at skulle betale {kr(mangler)} kr. mere, end der er dækket ind.
+              <button
+                type="button"
+                onClick={() => onGaaTil('opsparing')}
+                className="mt-1.5 block underline underline-offset-2"
+              >
+                Se hvad der skal til
+              </button>
+            </Advarsel>
+          </div>
+        )}
+
+        {mangler === 0 && beregning.samletSkatOgAM > 0 && (
+          <div className="mt-4">
+            <Advarsel art="positiv" titel="Skatten er dækket ind">
+              Der er sat nok til side til årets skat og AM-bidrag, som det ser ud nu.
+            </Advarsel>
+          </div>
+        )}
+
+        <div className="mt-5 space-y-2 border-t border-rule pt-4">
+          {/*
+            Ikke disabled på aiKlar: en deaktiveret knap giver ingen forklaring,
+            og ser ud som om funktionen slet ikke findes. Klikker brugeren
+            alligevel, åbner modalen og viser selv hvorfor den er slået fra.
+            Revisor-chatten har sin egen faste knap i headeren og på
+            forsiden — den gentages ikke her.
+          */}
+          <Knap onClick={onAabnScanner} className="w-full justify-center">
+            Læs et bilag
+          </Knap>
+          {!aiKlar && (
+            <p className="text-2xs text-ink-faint">
+              Kræver en AI-nøgle på serveren. Sæt GEMINI_API_KEY eller DEEPSEEK_API_KEY i .env.
+            </p>
+          )}
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-stone-500">Kommuneskat:</span>
-          <span className="font-mono text-stone-800">{activeIndkomstAar.kommuneSkatteprocent}%</span>
+
+        <GoogleDriveStatusBlok />
+
+        <div className="mt-5 border-t border-rule pt-4 text-2xs text-ink-faint">
+          <p>
+            Beregnet med satserne for {beregning.satser.aar} og kommuneskat{' '}
+            {indkomstAar.kommuneSkatteprocent.toString().replace('.', ',')} % i{' '}
+            {indkomstAar.kommune || 'ukendt kommune'}.
+          </p>
+          <p className="mt-1.5">
+            Tallene er et beslutningsgrundlag, ikke en årsopgørelse. Kontrollér dem mod
+            skat.dk, før du indberetter.
+          </p>
+          {aiKlar && aiUdbyder && (
+            <p className="mt-1.5">
+              Bilag læses af {aiUdbyder}
+              {aiModel ? ` (${aiModel})` : ''}. Forslagene skal godkendes, før de
+              bliver til posteringer.
+            </p>
+          )}
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-stone-500">AM-bidrag:</span>
-          <span className="font-mono text-stone-800">8,00%</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-stone-500">Kørselsfradrag bil:</span>
-          <span className="font-mono text-emerald-800 font-semibold">{regler.takstBilMCFoerste20k.toLocaleString('da-DK')} kr/km</span>
-        </div>
+
+        {visForklaring && (
+          <Kort className="mt-4 p-4">
+            <p className="font-display text-sm font-bold text-ink">To områder – én løsning</p>
+            <p className="mt-1 text-2xs text-ink-muted">
+              Revis er delt op i to hovedområder, så du nemt kan holde styr på hverdagen og
+              det store overblik.
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-3 text-2xs">
+              <div>
+                <p className="font-medium text-ink">Daglig drift</p>
+                <ul className="mt-1 space-y-0.5 text-ink-muted">
+                  {FANER_DRIFT_NAVNE.map((n) => (
+                    <li key={n}>{n}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p className="font-medium text-ink">Samlet overblik</p>
+                <ul className="mt-1 space-y-0.5 text-ink-muted">
+                  {FANER_OVERBLIK_NAVNE.map((n) => (
+                    <li key={n}>{n}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </Kort>
+        )}
       </div>
     </aside>
   );
-};
+}
