@@ -145,6 +145,7 @@ export function JobsModule({
   const [beregnetInfo, setBeregnetInfo] = useState<string | null>(null);
   const [turRetur, setTurRetur] = useState(true);
   const [mellemstationer, setMellemstationer] = useState<string[]>([]);
+  const sidsteBeregningRef = useRef<{ enkeltTurKm: number; turReturKm: number } | null>(null);
 
   useEffect(() => {
     api
@@ -153,8 +154,9 @@ export function JobsModule({
       .catch(() => setRutestatusKlar(false));
   }, []);
 
-  const beregnAfstand = async () => {
+  const beregnAfstand = async (overstyrTurRetur?: boolean) => {
     if (!redigerer) return;
+    const aktivTurRetur = overstyrTurRetur !== undefined ? overstyrTurRetur : turRetur;
     setAfstandFejl(null);
     setBeregnetInfo(null);
     setBeregnerAfstand(true);
@@ -165,10 +167,14 @@ export function JobsModule({
         redigerer.destinationAdresse ?? '',
         {
           mellemstationer: stops,
-          turRetur,
+          turRetur: aktivTurRetur,
         }
       );
       setKm(String(res.km));
+      sidsteBeregningRef.current = {
+        enkeltTurKm: res.enkeltTurKm,
+        turReturKm: aktivTurRetur ? res.km : Math.round(res.enkeltTurKm * 2 * 10) / 10,
+      };
       if (res.fundetAdresse && res.fundetAdresse !== redigerer.destinationAdresse) {
         setRedigerer({ ...redigerer, destinationAdresse: res.fundetAdresse });
       }
@@ -176,7 +182,7 @@ export function JobsModule({
         stops.length > 0
           ? ` (via ${stops.length} mellemstation${stops.length > 1 ? 'er' : ''})`
           : '';
-      const turTxt = turRetur
+      const turTxt = aktivTurRetur
         ? `Beregnet: ${res.km} km tur/retur${res.enkeltTurKm ? ` (${res.enkeltTurKm} km hver vej)` : ''}${stopsTxt}`
         : `Beregnet: ${res.km} km enkelt tur${stopsTxt}`;
       setBeregnetInfo(turTxt);
@@ -184,6 +190,47 @@ export function JobsModule({
       setAfstandFejl(err instanceof Error ? err.message : 'Afstanden kunne ikke beregnes.');
     } finally {
       setBeregnerAfstand(false);
+    }
+  };
+
+  const skiftTurRetur = (nyTurRetur: boolean) => {
+    setTurRetur(nyTurRetur);
+
+    const nuvaerendeKm = talFraFelt(km);
+
+    if (nuvaerendeKm > 0) {
+      let nytKm: number;
+      if (
+        sidsteBeregningRef.current &&
+        (nuvaerendeKm === sidsteBeregningRef.current.turReturKm ||
+          nuvaerendeKm === sidsteBeregningRef.current.enkeltTurKm)
+      ) {
+        nytKm = nyTurRetur
+          ? sidsteBeregningRef.current.turReturKm
+          : sidsteBeregningRef.current.enkeltTurKm;
+      } else {
+        nytKm = nyTurRetur
+          ? Math.round(nuvaerendeKm * 2 * 10) / 10
+          : Math.round((nuvaerendeKm / 2) * 10) / 10;
+      }
+
+      setKm(String(nytKm));
+
+      if (beregnetInfo) {
+        const enkelt = nyTurRetur ? Math.round((nytKm / 2) * 10) / 10 : nytKm;
+        const stops = mellemstationer.map((s) => s.trim()).filter(Boolean);
+        const stopsTxt =
+          stops.length > 0
+            ? ` (via ${stops.length} mellemstation${stops.length > 1 ? 'er' : ''})`
+            : '';
+        setBeregnetInfo(
+          nyTurRetur
+            ? `Beregnet: ${nytKm} km tur/retur (${enkelt} km hver vej)${stopsTxt}`
+            : `Beregnet: ${nytKm} km enkelt tur${stopsTxt}`
+        );
+      }
+    } else if (redigerer?.destinationAdresse?.trim()) {
+      void beregnAfstand(nyTurRetur);
     }
   };
 
@@ -943,7 +990,7 @@ export function JobsModule({
                     <Afkrydsning
                       label="Tur/retur (retur til bopæl)"
                       checked={turRetur}
-                      onChange={(e) => setTurRetur(e.target.checked)}
+                      onChange={(e) => skiftTurRetur(e.target.checked)}
                     />
                     <button
                       type="button"

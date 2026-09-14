@@ -117,9 +117,11 @@ export function PosteringForslagKort({
   const [afstandBesked, setAfstandBesked] = useState<string | null>(null);
   const [gemmer, setGemmer] = useState(false);
   const [fejl, setFejl] = useState<string | null>(null);
+  const sidsteBeregningRef = useRef<{ enkeltTurKm: number; turReturKm: number } | null>(null);
 
-  const beregnAfstand = async () => {
+  const beregnAfstand = async (overstyrTurRetur?: boolean) => {
     if (!tekst.destinationAdresse?.trim()) return;
+    const aktivTurRetur = overstyrTurRetur !== undefined ? overstyrTurRetur : turRetur;
     setAfstandFejl(null);
     setAfstandBesked(null);
     setBeregnerAfstand(true);
@@ -130,7 +132,7 @@ export function PosteringForslagKort({
         tekst.destinationAdresse,
         {
           mellemstationer: stops,
-          turRetur,
+          turRetur: aktivTurRetur,
         }
       );
       setTekst((prev) => ({
@@ -138,11 +140,15 @@ export function PosteringForslagKort({
         antalKm: String(res.km),
         destinationAdresse: res.fundetAdresse || prev.destinationAdresse,
       }));
+      sidsteBeregningRef.current = {
+        enkeltTurKm: res.enkeltTurKm,
+        turReturKm: aktivTurRetur ? res.km : Math.round(res.enkeltTurKm * 2 * 10) / 10,
+      };
       const stopInfo =
         stops.length > 0
           ? ` (via ${stops.length} mellemstation${stops.length > 1 ? 'er' : ''})`
           : '';
-      const besked = turRetur
+      const besked = aktivTurRetur
         ? `Beregnet: ${res.km} km tur/retur${res.enkeltTurKm ? ` (${res.enkeltTurKm} km hver vej)` : ''}${stopInfo}`
         : `Beregnet: ${res.km} km enkelt tur${stopInfo}`;
       setAfstandBesked(besked);
@@ -150,6 +156,48 @@ export function PosteringForslagKort({
       setAfstandFejl(err instanceof Error ? err.message : 'Afstanden kunne ikke beregnes.');
     } finally {
       setBeregnerAfstand(false);
+    }
+  };
+
+  const skiftTurRetur = (nyTurRetur: boolean) => {
+    setTurRetur(nyTurRetur);
+    setFlag((prev) => ({ ...prev, turRetur: nyTurRetur }));
+
+    const nuvaerendeKm = talFraFelt(tekst.antalKm || '');
+
+    if (nuvaerendeKm > 0) {
+      let nytKm: number;
+      if (
+        sidsteBeregningRef.current &&
+        (nuvaerendeKm === sidsteBeregningRef.current.turReturKm ||
+          nuvaerendeKm === sidsteBeregningRef.current.enkeltTurKm)
+      ) {
+        nytKm = nyTurRetur
+          ? sidsteBeregningRef.current.turReturKm
+          : sidsteBeregningRef.current.enkeltTurKm;
+      } else {
+        nytKm = nyTurRetur
+          ? Math.round(nuvaerendeKm * 2 * 10) / 10
+          : Math.round((nuvaerendeKm / 2) * 10) / 10;
+      }
+
+      setTekst((prev) => ({ ...prev, antalKm: String(nytKm) }));
+
+      if (afstandBesked) {
+        const enkelt = nyTurRetur ? Math.round((nytKm / 2) * 10) / 10 : nytKm;
+        const stops = mellemstationer.map((s) => s.trim()).filter(Boolean);
+        const stopsTxt =
+          stops.length > 0
+            ? ` (via ${stops.length} mellemstation${stops.length > 1 ? 'er' : ''})`
+            : '';
+        setAfstandBesked(
+          nyTurRetur
+            ? `Beregnet: ${nytKm} km tur/retur (${enkelt} km hver vej)${stopsTxt}`
+            : `Beregnet: ${nytKm} km enkelt tur${stopsTxt}`
+        );
+      }
+    } else if (tekst.destinationAdresse?.trim()) {
+      void beregnAfstand(nyTurRetur);
     }
   };
 
@@ -362,10 +410,7 @@ export function PosteringForslagKort({
                 <Afkrydsning
                   label="Tur/retur (retur til bopæl)"
                   checked={turRetur}
-                  onChange={(e) => {
-                    setTurRetur(e.target.checked);
-                    setFlag({ ...flag, turRetur: e.target.checked });
-                  }}
+                  onChange={(e) => skiftTurRetur(e.target.checked)}
                 />
                 <button
                   type="button"

@@ -40,8 +40,26 @@ export const idag = (): string => new Date().toISOString().slice(0, 10);
  * Både komma og punktum skal virke som decimaltegn, og et tomt felt er 0.
  */
 export const talFraFelt = (vaerdi: string): number => {
-  const rent = vaerdi.replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
-  const tal = parseFloat(rent);
+  if (!vaerdi) return 0;
+  const s = String(vaerdi).trim().replace(/\s/g, '');
+  if (!s) return 0;
+  if (s.includes('.') && s.includes(',')) {
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+      const tal = parseFloat(s.replace(/\./g, '').replace(',', '.'));
+      return Number.isFinite(tal) ? tal : 0;
+    }
+    const tal = parseFloat(s.replace(/,/g, ''));
+    return Number.isFinite(tal) ? tal : 0;
+  }
+  if (s.includes(',')) {
+    const tal = parseFloat(s.replace(',', '.'));
+    return Number.isFinite(tal) ? tal : 0;
+  }
+  if (/^\d{1,3}(\.\d{3})+$/.test(s)) {
+    const tal = parseFloat(s.replace(/\./g, ''));
+    return Number.isFinite(tal) ? tal : 0;
+  }
+  const tal = parseFloat(s);
   return Number.isFinite(tal) ? tal : 0;
 };
 
