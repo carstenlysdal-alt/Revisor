@@ -209,6 +209,25 @@ export interface PosteringForslag {
   investering?: InvesteringUdtraek;
 }
 
+/**
+ * Navnet på det, et forslag handler om: hvervgiveren på et job, teksten på et
+ * fradrag, titlen på en investering.
+ *
+ * Forslaget har ikke selv et navn — det ligger nede i det udtræk, der passer
+ * til klassifikationen. Flere steder læste tidligere et `titel` direkte på
+ * forslaget, og da det felt ikke findes, faldt de altid tilbage til en tom
+ * streng eller ordet "posteringen".
+ */
+export function forslagetsNavn(forslag: PosteringForslag): string {
+  const felt =
+    forslag.klassifikation === 'JOB'
+      ? forslag.job?.hvervgiver
+      : forslag.klassifikation === 'FRADRAG'
+        ? forslag.fradrag?.beskrivelse
+        : forslag.investering?.titel;
+  return felt?.vaerdi?.trim() || '';
+}
+
 export interface ChatBesked {
   rolle: 'bruger' | 'assistent';
   indhold: string;

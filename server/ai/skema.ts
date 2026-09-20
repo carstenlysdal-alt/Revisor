@@ -42,18 +42,18 @@ export function normaliserDato(v: unknown): string | null {
   const s = v.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   const dm = s.match(/^(\d{1,2})[-./](\d{1,2})[-./](\d{4})$/);
-  if (dm) {
+  if (dm?.[1] && dm[2] && dm[3]) {
     const dag = dm[1].padStart(2, '0');
     const mdr = dm[2].padStart(2, '0');
     const aar = dm[3];
     return `${aar}-${mdr}-${dag}`;
   }
   const dtekst = s.toLowerCase().match(/^(\d{1,2})\.?\s+([a-zæøå]+)\s+(\d{4})$/);
-  if (dtekst && MAANEDER[dtekst[2]]) {
+  const maanedstal = dtekst?.[2] ? MAANEDER[dtekst[2]] : undefined;
+  if (dtekst?.[1] && dtekst[3] && maanedstal) {
     const dag = dtekst[1].padStart(2, '0');
-    const mdr = MAANEDER[dtekst[2]];
     const aar = dtekst[3];
-    return `${aar}-${mdr}-${dag}`;
+    return `${aar}-${maanedstal}-${dag}`;
   }
   return s;
 }

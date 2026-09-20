@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   BrugerProfil,
   Fradrag,
@@ -8,7 +8,7 @@ import type {
   PosteringForslag,
   TransportMiddel,
 } from '../types';
-import { SIKKERHEDSTAERSKEL } from '../types';
+import { SIKKERHEDSTAERSKEL, forslagetsNavn } from '../types';
 import { kr, talFraFelt } from '../lib/format';
 import {
   byggFradragFraKladde,
@@ -143,7 +143,7 @@ export function PosteringForslagKort({
       setTekst((prev) => ({
         ...prev,
         antalKm: String(res.km),
-        destinationAdresse: res.fundetAdresse || prev.destinationAdresse,
+        destinationAdresse: res.fundetAdresse || prev.destinationAdresse || '',
       }));
       sidsteBeregningRef.current = {
         enkeltTurKm: res.enkeltTurKm ?? (aktivTurRetur ? Math.round((res.km / 2) * 10) / 10 : res.km),
@@ -223,7 +223,7 @@ export function PosteringForslagKort({
     setGemmer(true);
     setFejl(null);
     try {
-      let gemtTitel = forslag.titel;
+      let gemtTitel = forslagetsNavn(forslag);
       if (forslag.klassifikation === 'JOB') {
         const nyt = byggJobFraKladde(tekst, flag, valgtIndkomstAarId, []);
         gemtTitel = nyt.hvervgiver || gemtTitel;
@@ -234,7 +234,9 @@ export function PosteringForslagKort({
         await onGemFradrag({ id: `fradrag-${Date.now()}`, ...nyt });
       } else {
         const nyt = byggInvesteringFraKladde(tekst, valgtIndkomstAarId, []);
-        gemtTitel = nyt.beskrivelse || gemtTitel;
+        // En investering hedder titel, ikke beskrivelse. Feltet fandtes ikke,
+        // så navnet på det gemte blev tidligere aldrig vist i kvitteringen.
+        gemtTitel = nyt.titel || gemtTitel;
         await onGemInvestering({ id: `inv-${Date.now()}`, ...nyt });
       }
       onGemt({ klassifikation: forslag.klassifikation, titel: gemtTitel });

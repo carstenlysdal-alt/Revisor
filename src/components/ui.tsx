@@ -550,10 +550,10 @@ export function Modal({
       const fokusérbare = panel.current.querySelectorAll<HTMLElement>(
         'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
       );
-      if (fokusérbare.length === 0) return;
-
       const foerste = fokusérbare[0];
       const sidste = fokusérbare[fokusérbare.length - 1];
+      if (!foerste || !sidste) return;
+
       if (e.shiftKey && document.activeElement === foerste) {
         e.preventDefault();
         sidste.focus();

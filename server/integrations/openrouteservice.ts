@@ -110,9 +110,10 @@ export async function geokodDawa(adresse: string): Promise<Placering | null> {
         adressebetegnelse?: string;
         adgangsadresse?: { adgangspunkt?: { koordinater?: [number, number] } };
       }[];
-      const coords = data?.[0]?.adgangsadresse?.adgangspunkt?.koordinater;
+      const traef = data?.[0];
+      const coords = traef?.adgangsadresse?.adgangspunkt?.koordinater;
       if (coords && coords.length === 2) {
-        return { lon: coords[0], lat: coords[1], adresse: data[0].adressebetegnelse };
+        return { lon: coords[0], lat: coords[1], adresse: traef.adressebetegnelse };
       }
     }
 
@@ -124,9 +125,10 @@ export async function geokodDawa(adresse: string): Promise<Placering | null> {
         adressebetegnelse?: string;
         adgangspunkt?: { koordinater?: [number, number] };
       }[];
-      const coords = adgData?.[0]?.adgangspunkt?.koordinater;
+      const adgTraef = adgData?.[0];
+      const coords = adgTraef?.adgangspunkt?.koordinater;
       if (coords && coords.length === 2) {
-        return { lon: coords[0], lat: coords[1], adresse: adgData[0].adressebetegnelse };
+        return { lon: coords[0], lat: coords[1], adresse: adgTraef.adressebetegnelse };
       }
     }
   } catch {
@@ -350,8 +352,9 @@ export async function beregnRuteKm(fra: Koordinat, til: Koordinat): Promise<numb
  * (f.eks. start -> mellemstationer -> destination [-> retur til start]).
  */
 export async function beregnRuteKmFlere(punkter: Koordinat[]): Promise<number> {
-  if (punkter.length < 2) return 0;
-  if (punkter.length === 2) return beregnRuteKm(punkter[0], punkter[1]);
+  const [foerste, andet] = punkter;
+  if (!foerste || !andet) return 0;
+  if (punkter.length === 2) return beregnRuteKm(foerste, andet);
 
   try {
     const coordsStr = punkter.map((p) => `${p.lon},${p.lat}`).join(';');
@@ -371,7 +374,10 @@ export async function beregnRuteKmFlere(punkter: Koordinat[]): Promise<number> {
 
   let total = 0;
   for (let i = 0; i < punkter.length - 1; i++) {
-    total += await beregnRuteKm(punkter[i], punkter[i + 1]);
+    const fra = punkter[i];
+    const til = punkter[i + 1];
+    if (!fra || !til) continue;
+    total += await beregnRuteKm(fra, til);
   }
   return Math.round(total * 10) / 10;
 }
@@ -451,7 +457,7 @@ export async function beregnRuteDetaljer(
     turRetur,
     fundetAdresse: til.adresse || destinationAdresse,
     fraAdresse: fra.adresse || hjemmeadresse,
-    mellemstationer: mellemPunkter.map((m, idx) => m.adresse || raaMellem[idx]),
+    mellemstationer: mellemPunkter.map((m, idx) => m.adresse || raaMellem[idx] || ''),
   };
 }
 

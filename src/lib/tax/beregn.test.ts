@@ -268,9 +268,9 @@ describe('den årlige 20.000 km-grænse for erhvervsmæssig kørsel', () => {
       satser
     );
 
-    expect(resultat.linjer[0].fradrag).toBe(Math.round(15_000 * 3.94));
-    expect(resultat.linjer[1].fradrag).toBe(Math.round(5_000 * 3.94 + 5_000 * 2.28));
-    expect(resultat.linjer[1].kmOverAarsgraense).toBe(5_000);
+    expect(resultat.linjer[0]!.fradrag).toBe(Math.round(15_000 * 3.94));
+    expect(resultat.linjer[1]!.fradrag).toBe(Math.round(5_000 * 3.94 + 5_000 * 2.28));
+    expect(resultat.linjer[1]!.kmOverAarsgraense).toBe(5_000);
   });
 
   it('anvender grænsen i datorækkefølge, ikke i indtastningsrækkefølge', () => {

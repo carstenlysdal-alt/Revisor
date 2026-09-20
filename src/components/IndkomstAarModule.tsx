@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { IndkomstAar } from '../types';
 import {
   GENNEMSNIT,
@@ -7,7 +7,7 @@ import {
   getKommuneSatser,
 } from '../lib/tax/kommuner';
 import { TILGAENGELIGE_AAR } from '../lib/tax/satser';
-import { kr, talFraFelt } from '../lib/format';
+import { talFraFelt } from '../lib/format';
 import { AdresseInput } from './AdresseInput';
 import {
   Advarsel,
@@ -20,7 +20,6 @@ import {
   Sektion,
   Tabel,
   Td,
-  Tekstfelt,
   Th,
   TomTilstand,
   Vaelger,
@@ -78,6 +77,9 @@ export function IndkomstAarModule({
 
   const brugteAar = new Set(indkomstAarListe.map((a) => a.aar));
   const ledigeAar = TILGAENGELIGE_AAR.filter((a) => !brugteAar.has(a));
+  // Det nyeste år, der endnu ikke er oprettet. Er der ingen ledige, kan der
+  // ikke oprettes flere år, og knapperne til det vises ikke.
+  const senesteLedigeAar = ledigeAar.at(-1);
 
   const aabn = (aar: IndkomstAar) => {
     const officielleSatser = aar.kommune ? getKommuneSatser(aar.kommune, aar.aar) : null;
@@ -170,8 +172,8 @@ export function IndkomstAarModule({
       titel="Indkomstår"
       beskrivelse="Året styrer, hvilke satser der regnes med, og hvilken kommuneskat der bruges. Alt andet i appen hænger på et indkomstår."
       handling={
-        ledigeAar.length > 0 ? (
-          <Knap art="primaer" onClick={() => aabn(tomtAar(ledigeAar[ledigeAar.length - 1]))}>
+        senesteLedigeAar !== undefined ? (
+          <Knap art="primaer" onClick={() => aabn(tomtAar(senesteLedigeAar))}>
             Nyt indkomstår
           </Knap>
         ) : null
@@ -182,9 +184,11 @@ export function IndkomstAarModule({
           besked="Der er ikke oprettet noget indkomstår endnu. Opret det år, du vil registrere honorarer for, så følger resten efter."
           handling={
             <>
-              <Knap art="primaer" onClick={() => aabn(tomtAar(ledigeAar[ledigeAar.length - 1] ?? TILGAENGELIGE_AAR[0]))}>
-                Opret indkomstår
-              </Knap>
+              {senesteLedigeAar !== undefined && (
+                <Knap art="primaer" onClick={() => aabn(tomtAar(senesteLedigeAar))}>
+                  Opret indkomstår
+                </Knap>
+              )}
               <Knap art="tekst" onClick={onIndlaesEksempel}>
                 Indlæs eksempeldata i stedet
               </Knap>

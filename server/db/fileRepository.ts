@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import type {
   Bilag,
+  BrugerProfil,
   Fradrag,
   IndkomstAar,
   Investering,
@@ -13,6 +14,7 @@ import {
   DataSnapshot,
   GoogleDriveForbindelse,
   Repository,
+  tomtProfil,
   tomtSnapshot,
 } from './repository';
 
@@ -104,9 +106,12 @@ export class FileRepository implements Repository {
     );
   }
 
-  gemProfil(profil: BrugerProfil) {
+  gemProfil(profil: BrugerProfil): Promise<BrugerProfil> {
     return this.transaktion((s) => {
-      s.profil = { ...tomtProfil(), ...profil };
+      // Den gemte profil holdes i en egen variabel, så returværdien er den
+      // samme som det, der blev skrevet — snapshotets felt er valgfrit.
+      const gemt: BrugerProfil = { ...tomtProfil(), ...profil };
+      s.profil = gemt;
       if (profil.hjemmeadresse) {
         for (const aar of s.indkomstAar) {
           if (!aar.laast && (!aar.hjemmeadresse || aar.hjemmeadresse.includes('Vesterbrogade 42'))) {
@@ -114,7 +119,7 @@ export class FileRepository implements Repository {
           }
         }
       }
-      return s.profil;
+      return gemt;
     });
   }
 

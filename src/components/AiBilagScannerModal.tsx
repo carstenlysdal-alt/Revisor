@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type {
   Bilag,
   BilagsAnalyse,
@@ -7,7 +7,6 @@ import type {
   IndkomstAar,
   Investering,
   Job,
-  TransportMiddel,
 } from '../types';
 import { SIKKERHEDSTAERSKEL } from '../types';
 import { api, filTilBase64 } from '../lib/api';

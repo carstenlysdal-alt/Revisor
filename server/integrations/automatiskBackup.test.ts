@@ -62,7 +62,7 @@ describe('automatisk Google Drev-backup', () => {
       'application/pdf'
     );
     expect(opdaterSnapshot).toHaveBeenCalledTimes(2);
-    const sikkerhedskopi = JSON.parse(opdaterSnapshot.mock.calls[0][3]);
+    const sikkerhedskopi = JSON.parse(opdaterSnapshot.mock.calls[0]![3]);
     expect(sikkerhedskopi.bilag[0].drevBackupTidspunkt).toBe('2026-01-03T00:00:00.000Z');
 
     const gemtBilag = await repo.hentBilag('bilag-1');

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import type {
   BrugerProfil,
@@ -9,6 +9,7 @@ import type {
   Job,
   PosteringForslag,
 } from '../types';
+import { forslagetsNavn } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
 import { kr, pct } from '../lib/format';
 import { laesEventStroem } from '../lib/sse';
@@ -386,7 +387,8 @@ export function RevisorChatModal({
                             setAktivtForslagIndeks(null);
                             const klassifikation =
                               info?.klassifikation || b.forslag?.klassifikation || 'JOB';
-                            const titel = info?.titel || b.forslag?.titel || '';
+                            const titel =
+                              info?.titel || (b.forslag ? forslagetsNavn(b.forslag) : '');
                             const fane =
                               klassifikation === 'JOB'
                                 ? 'indtaegter'

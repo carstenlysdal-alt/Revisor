@@ -26,9 +26,9 @@ describe('PosteringForslagSkema', () => {
 
     const parset = PosteringForslagSkema.parse(raa);
     expect(parset.klassifikation).toBe('JOB');
-    expect(parset.job?.hvervgiver.vaerdi).toBe('Vega Musikhus');
-    expect(parset.job?.honorar.vaerdi).toBe(5000);
-    expect(parset.job?.slutDato.vaerdi).toBeNull();
+    expect(parset.job?.hvervgiver?.vaerdi).toBe('Vega Musikhus');
+    expect(parset.job?.honorar?.vaerdi).toBe(5000);
+    expect(parset.job?.slutDato?.vaerdi).toBeNull();
     expect(parset.fradrag).toBeUndefined();
     expect(parset.investering).toBeUndefined();
   });
@@ -47,7 +47,7 @@ describe('PosteringForslagSkema', () => {
     });
 
     expect(parset.klassifikation).toBe('FRADRAG');
-    expect(parset.fradrag?.beskrivelse.sikkerhed).toBe(0);
+    expect(parset.fradrag?.beskrivelse?.sikkerhed).toBe(0);
     expect(parset.job).toBeUndefined();
   });
 
@@ -75,10 +75,10 @@ describe('PosteringForslagSkema', () => {
       },
     });
 
-    expect(parset.job?.hvervgiver.vaerdi).toBe('Comwell i Kolding');
-    expect(parset.job?.honorar.vaerdi).toBe(4000);
-    expect(parset.job?.startDato.vaerdi).toBe('2026-09-06');
-    expect(parset.job?.transportmiddel.vaerdi).toBe('OWN_CAR_MC');
+    expect(parset.job?.hvervgiver?.vaerdi).toBe('Comwell i Kolding');
+    expect(parset.job?.honorar?.vaerdi).toBe(4000);
+    expect(parset.job?.startDato?.vaerdi).toBe('2026-09-06');
+    expect(parset.job?.transportmiddel?.vaerdi).toBe('OWN_CAR_MC');
   });
 
   it('klemmer en sikkerhed uden for [0,1] ind i intervallet', () => {
@@ -90,8 +90,8 @@ describe('PosteringForslagSkema', () => {
         honorar: { vaerdi: -3, sikkerhed: -1 },
       },
     });
-    expect(parset.job?.hvervgiver.sikkerhed).toBe(1);
-    expect(parset.job?.honorar.sikkerhed).toBe(0);
+    expect(parset.job?.hvervgiver?.sikkerhed).toBe(1);
+    expect(parset.job?.honorar?.sikkerhed).toBe(0);
   });
 
   it('normaliserer transportmiddel fra uformelle udtryk som bil, egen bil, kørte selv', () => {
@@ -99,25 +99,25 @@ describe('PosteringForslagSkema', () => {
       klassifikation: 'JOB',
       job: { transportmiddel: 'bil' },
     });
-    expect(p1.job?.transportmiddel.vaerdi).toBe('OWN_CAR_MC');
+    expect(p1.job?.transportmiddel?.vaerdi).toBe('OWN_CAR_MC');
 
     const p2 = PosteringForslagSkema.parse({
       klassifikation: 'JOB',
       job: { transportmiddel: { vaerdi: 'egen bil', sikkerhed: 0.9 } },
     });
-    expect(p2.job?.transportmiddel.vaerdi).toBe('OWN_CAR_MC');
+    expect(p2.job?.transportmiddel?.vaerdi).toBe('OWN_CAR_MC');
 
     const p3 = PosteringForslagSkema.parse({
       klassifikation: 'JOB',
       job: { transportmiddel: 'kørte selv' },
     });
-    expect(p3.job?.transportmiddel.vaerdi).toBe('OWN_CAR_MC');
+    expect(p3.job?.transportmiddel?.vaerdi).toBe('OWN_CAR_MC');
 
     const p4 = PosteringForslagSkema.parse({
       klassifikation: 'JOB',
       job: { transportmiddel: 'cykel' },
     });
-    expect(p4.job?.transportmiddel.vaerdi).toBe('OWN_BIKE');
+    expect(p4.job?.transportmiddel?.vaerdi).toBe('OWN_BIKE');
   });
 
   it('normaliserer datoer i dansk tekstformat til YYYY-MM-DD', () => {
@@ -125,7 +125,7 @@ describe('PosteringForslagSkema', () => {
       klassifikation: 'JOB',
       job: { startDato: '13. september 2026' },
     });
-    expect(p.job?.startDato.vaerdi).toBe('2026-09-13');
+    expect(p.job?.startDato?.vaerdi).toBe('2026-09-13');
   });
 
   it('normaliserer tal med enheder som km og kr.', () => {
@@ -136,8 +136,8 @@ describe('PosteringForslagSkema', () => {
         antalKm: '45 km',
       },
     });
-    expect(p.job?.honorar.vaerdi).toBe(2000);
-    expect(p.job?.antalKm.vaerdi).toBe(45);
+    expect(p.job?.honorar?.vaerdi).toBe(2000);
+    expect(p.job?.antalKm?.vaerdi).toBe(45);
   });
 
   it('udleder klassifikation automatisk, hvis modellen udelader den', () => {
@@ -147,6 +147,6 @@ describe('PosteringForslagSkema', () => {
       },
     });
     expect(p.klassifikation).toBe('JOB');
-    expect(p.job?.hvervgiver.vaerdi).toBe('Kolding Bibliotek');
+    expect(p.job?.hvervgiver?.vaerdi).toBe('Kolding Bibliotek');
   });
 });

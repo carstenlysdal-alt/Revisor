@@ -1,6 +1,7 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import type { FunctionDeclaration } from '@google/genai';
 import type { BilagsAnalyse } from '../../src/types';
+import { forslagetsNavn } from '../../src/types';
 import { ANALYSE_SYSTEMPROMPT, chatSystemprompt } from './prompts';
 import { BilagsAnalyseSkema, PosteringForslagSkema } from './skema';
 import { rensAnalyse, rensPosteringForslag, fletForslag, enrichForslagMedAfstand } from './normaliser';
@@ -257,7 +258,7 @@ export function opretGeminiUdbyder(): AiUdbyder {
           console.error('foreslaaPostering: udkastet kunne ikke læses.', err, kald.args);
           if (indgang.aktivtForslag) {
             return {
-              tekst: `Jeg har noteret tilføjelsen til dit udkast for ${indgang.aktivtForslag.hvervgiver || indgang.aktivtForslag.titel || 'posteringen'}. Kan du bekræfte de specifikke detaljer (f.eks. dato eller kørsel), så opdaterer jeg straks?`,
+              tekst: `Jeg har noteret tilføjelsen til dit udkast for ${forslagetsNavn(indgang.aktivtForslag) || 'posteringen'}. Kan du bekræfte de specifikke detaljer (f.eks. dato eller kørsel), så opdaterer jeg straks?`,
               kilder: kilder ?? [],
               forslag: indgang.aktivtForslag,
             };

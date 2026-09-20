@@ -1,4 +1,3 @@
-import React from 'react';
 import type { IndkomstAar } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
 import { kr, pct } from '../lib/format';

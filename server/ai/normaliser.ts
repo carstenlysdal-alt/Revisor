@@ -52,6 +52,9 @@ export function rensPosteringForslag(raa: RaaPosteringForslag): PosteringForslag
  * Hvis modellen kun returnerer de felter, brugeren lige har rettet/tilføjet,
  * bevares de eksisterende felter (fx hvervgiver og honorar).
  */
+/** Et felt som modellen har udfyldt: en værdi og en sikkerhed på den. */
+type UdtruktFeltLignende = { vaerdi: unknown; sikkerhed: number };
+
 export function fletForslag(
   eksisterende: PosteringForslag | null | undefined,
   nyt: PosteringForslag
@@ -60,16 +63,15 @@ export function fletForslag(
     return nyt;
   }
 
-  const fletGruppe = <
-    T extends Record<string, { vaerdi: unknown; sikkerhed: number } | undefined>
-  >(
-    gamle?: T,
-    nye?: T
-  ): T | undefined => {
+  // Grupperne er JobUdtraek, FradragUdtraek og InvesteringUdtraek. De har
+  // navngivne felter og ingen indekssignatur, så T må ikke bindes til en
+  // Record-type — den ville ingen af dem passe på.
+  const fletGruppe = <T extends object>(gamle?: T, nye?: T): T | undefined => {
     if (!gamle) return nye;
     if (!nye) return gamle;
-    const resultat = { ...gamle } as Record<string, { vaerdi: unknown; sikkerhed: number }>;
-    for (const [felt, nyV] of Object.entries(nye)) {
+    const resultat: Record<string, unknown> = { ...(gamle as Record<string, unknown>) };
+    const nyeFelter = Object.entries(nye) as [string, UdtruktFeltLignende | undefined][];
+    for (const [felt, nyV] of nyeFelter) {
       if (nyV && nyV.vaerdi !== null && nyV.vaerdi !== undefined && nyV.vaerdi !== '') {
         resultat[felt] = nyV;
       }

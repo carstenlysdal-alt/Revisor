@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { BrugerProfil, TransportMiddel } from '../types';
 import { KOMMUNENAVNE, getKommuneSatser } from '../lib/tax/kommuner';
 import { AdresseInput } from './AdresseInput';
@@ -78,7 +78,6 @@ export function ProfilModal({ aaben, profil: startProfil, onLuk, onGem }: Props)
       aaben={aaben}
       titel="Min profil & faste stamdata"
       onLuk={onLuk}
-      maxWidth="max-w-2xl"
       bund={
         <div className="flex w-full items-center justify-between">
           <div>

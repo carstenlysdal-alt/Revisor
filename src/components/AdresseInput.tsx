@@ -80,7 +80,7 @@ export function AdresseInput({
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setIndeks((prev) => (prev > 0 ? prev - 1 : forslag.length - 1));
-    } else if (e.key === 'Enter' && indeks >= 0 && indeks < forslag.length) {
+    } else if (e.key === 'Enter' && forslag[indeks]) {
       e.preventDefault();
       vaelgForslag(forslag[indeks].tekst);
     } else if (e.key === 'Escape') {

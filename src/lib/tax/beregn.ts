@@ -1,4 +1,4 @@
-import { Satser, getSatser } from './satser';
+import { ProgressivSkatId, Satser, getSatser } from './satser';
 import { KoerselsInput, beregnAaretsKoersel, AaretsKoersel } from './koersel';
 import { erYderkommune } from './kommuner';
 
@@ -152,7 +152,9 @@ export function beregnIndkomstskat(
   const kommuneskat = (skattepligtigIndkomst * kommuneProcent) / 100;
   const kirkeskat = (skattepligtigIndkomst * kirkeProcent) / 100;
 
-  const progressive: Record<string, number> = {
+  // Nøglerne er netop de tre lag, og alle tre har en værdi fra start. Uden den
+  // stramme nøgletype ville hver opslag se ud, som om det kunne mangle.
+  const progressive: Record<ProgressivSkatId, number> = {
     mellemskat: 0,
     topskat: 0,
     topTopskat: 0,

@@ -22,9 +22,10 @@ export function hashKodeord(kodeord: string): string {
  */
 export function tjekKodeord(kodeord: string, gemt: string): boolean {
   const dele = gemt.split('$');
-  if (dele.length !== 3 || dele[0] !== 'scrypt') return false;
-
-  const [, salt, forventet] = dele;
+  const [maerke, salt, forventet] = dele;
+  // Hver del tjekkes for sig. Et hash uden salt eller uden hash-del er ikke
+  // et gyldigt kodeord, uanset hvordan strengen ellers ser ud.
+  if (dele.length !== 3 || maerke !== 'scrypt' || !salt || !forventet) return false;
   let beregnet: Buffer;
   try {
     beregnet = crypto.scryptSync(kodeord, salt, NOEGLE_BYTES);

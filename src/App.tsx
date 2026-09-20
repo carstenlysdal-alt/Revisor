@@ -155,9 +155,13 @@ export default function App() {
   const [handlingsfejl, setHandlingsfejl] = useState<string | null>(null);
   const [profilAaben, setProfilAaben] = useState(false);
 
-  /** Forsidens spørgeboks åbner chatten og sender teksten med det samme. */
-  const stilSpoergsmaal = (tekst: string) => {
-    setChatStartBesked(tekst);
+  /**
+   * Åbner Revisor-chatten. Med en tekst sendes den med det samme — det er
+   * Forsidens spørgeboks. Uden tekst åbnes chatten blank, som når et modul
+   * blot tilbyder at spørge Revisor om noget, brugeren selv formulerer.
+   */
+  const stilSpoergsmaal = (tekst?: string) => {
+    setChatStartBesked(tekst ?? null);
     setChatAaben(true);
   };
 

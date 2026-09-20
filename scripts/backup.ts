@@ -61,7 +61,7 @@ async function main() {
       console.error('\nServeren sendte ingen session tilbage.');
       process.exit(1);
     }
-    headers.cookie = cookie.split(';')[0];
+    headers.cookie = cookie.split(';')[0] ?? cookie;
   }
 
   const dataSvar = await fetch(`${URL_BASE}/api/data`, { headers });

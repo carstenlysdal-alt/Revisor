@@ -11,9 +11,12 @@
  * som regel den samme grænse før AM-bidrag (grænse / 0,92).
  */
 
+/** De progressive lag, der findes. Beregningen har en post for hvert af dem. */
+export type ProgressivSkatId = 'mellemskat' | 'topskat' | 'topTopskat';
+
 export interface ProgressivSkat {
   /** Nøgle brugt i beregning og visning. */
-  id: 'mellemskat' | 'topskat' | 'topTopskat';
+  id: ProgressivSkatId;
   navn: string;
   procent: number;
   /** Grænse målt på personlig indkomst EFTER AM-bidrag. */

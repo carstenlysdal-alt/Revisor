@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Bilag, BrugerProfil, IndkomstAar, Job, TransportMiddel } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
 import { betalingKrydserAarsskifte } from '../lib/tax/beregn';

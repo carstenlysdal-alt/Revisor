@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import type { Bilag, Fradrag, IndkomstAar } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
-import { dato, kr, pct, talFraFelt } from '../lib/format';
+import { dato, kr, talFraFelt } from '../lib/format';
 import { api } from '../lib/api';
 import { Sparkles } from 'lucide-react';
 import {
