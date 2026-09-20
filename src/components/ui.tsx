@@ -25,7 +25,7 @@ export function Sektion({
             <p className="mt-0.5 max-w-[68ch] text-2xs text-ink-muted">{beskrivelse}</p>
           )}
         </div>
-        {handling && <div className="ikke-print flex shrink-0 gap-2">{handling}</div>}
+        {handling && <div className="ikke-print flex max-w-full flex-wrap gap-2">{handling}</div>}
       </header>
       <div className="pt-1">{children}</div>
     </section>
@@ -300,6 +300,35 @@ export function Knap({
       type="button"
       {...rest}
       className={`overgang inline-flex items-center gap-1.5 rounded-[4px] px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-45 ${knapStil[art]} ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Handlingsknap i en liste- eller tabelrække: Rediger, Slet, Kopiér, Vis.
+ *
+ * Det var før understregede tekstlinjer med en trykflade under 20px. Det er
+ * for lidt til en tommelfinger — minimum er 44px. Knappen har derfor synlig
+ * ramme og fuld trykhøjde på telefonen, og bliver kompakt fra sm og op, hvor
+ * der peges med en mus. Slet er den eneste, der bærer rød.
+ */
+export function RaekkeKnap({
+  art = 'sekundaer',
+  children,
+  className = '',
+  ...rest
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { art?: 'sekundaer' | 'fare' }) {
+  return (
+    <button
+      type="button"
+      {...rest}
+      className={`overgang inline-flex min-h-11 items-center justify-center gap-1.5 rounded-[4px] border px-3 text-2xs font-medium disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-8 ${
+        art === 'fare'
+          ? 'border-negative/40 text-negative hover:bg-negative-ground'
+          : 'border-rule-strong text-ink hover:bg-sunk'
+      } ${className}`}
     >
       {children}
     </button>
@@ -635,7 +664,7 @@ export function MobilPost({
       </div>
       {meta && <div className="mt-1.5 text-2xs text-ink-muted">{meta}</div>}
       {handlinger && (
-        <div className="ikke-print mt-2 flex flex-wrap gap-3">{handlinger}</div>
+        <div className="ikke-print mt-2 flex flex-wrap gap-2">{handlinger}</div>
       )}
     </li>
   );

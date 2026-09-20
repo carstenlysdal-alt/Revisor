@@ -9,6 +9,7 @@ import {
   Datofelt,
   Felt,
   Knap,
+  RaekkeKnap,
   Modal,
   Notatfelt,
   MobilPost,
@@ -168,12 +169,12 @@ export function InvesteringerModule({
                 <Td hoejre>
                   {!laast && (
                     <div className="ikke-print flex justify-end gap-1">
-                      <Knap art="tekst" onClick={() => aabn(inv)}>
+                      <RaekkeKnap onClick={() => aabn(inv)}>
                         Rediger
-                      </Knap>
-                      <Knap art="tekst" onClick={() => setSletter(inv)}>
+                      </RaekkeKnap>
+                      <RaekkeKnap art="fare" onClick={() => setSletter(inv)}>
                         Slet
-                      </Knap>
+                      </RaekkeKnap>
                     </div>
                   )}
                 </Td>
@@ -204,20 +205,8 @@ export function InvesteringerModule({
                   handlinger={
                     laast ? undefined : (
                       <>
-                        <button
-                          type="button"
-                          onClick={() => aabn(inv)}
-                          className="text-2xs text-ink-muted underline underline-offset-4"
-                        >
-                          Rediger
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSletter(inv)}
-                          className="text-2xs text-negative underline underline-offset-4"
-                        >
-                          Slet
-                        </button>
+                        <RaekkeKnap onClick={() => aabn(inv)}>Rediger</RaekkeKnap>
+                        <RaekkeKnap art="fare" onClick={() => setSletter(inv)}>Slet</RaekkeKnap>
                       </>
                     )
                   }

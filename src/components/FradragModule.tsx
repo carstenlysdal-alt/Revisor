@@ -10,6 +10,7 @@ import {
   Datofelt,
   Felt,
   Knap,
+  RaekkeKnap,
   Modal,
   Notatfelt,
   MobilPost,
@@ -266,12 +267,12 @@ export function FradragModule({
                     <Td hoejre>
                       {!laast && (
                         <div className="ikke-print flex justify-end gap-1">
-                          <Knap art="tekst" onClick={() => aabn(f)}>
+                          <RaekkeKnap onClick={() => aabn(f)}>
                             Rediger
-                          </Knap>
-                          <Knap art="tekst" onClick={() => setSletter(f)}>
+                          </RaekkeKnap>
+                          <RaekkeKnap art="fare" onClick={() => setSletter(f)}>
                             Slet
-                          </Knap>
+                          </RaekkeKnap>
                         </div>
                       )}
                     </Td>
@@ -333,20 +334,8 @@ export function FradragModule({
                       handlinger={
                         laast ? undefined : (
                           <>
-                            <button
-                              type="button"
-                              onClick={() => aabn(f)}
-                              className="text-2xs text-ink-muted underline underline-offset-4"
-                            >
-                              Rediger
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setSletter(f)}
-                              className="text-2xs text-negative underline underline-offset-4"
-                            >
-                              Slet
-                            </button>
+                            <RaekkeKnap onClick={() => aabn(f)}>Rediger</RaekkeKnap>
+                            <RaekkeKnap art="fare" onClick={() => setSletter(f)}>Slet</RaekkeKnap>
                           </>
                         )
                       }

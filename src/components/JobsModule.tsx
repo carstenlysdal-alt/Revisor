@@ -14,6 +14,7 @@ import {
   Datofelt,
   Felt,
   Knap,
+  RaekkeKnap,
   Modal,
   Notatfelt,
   MobilPost,
@@ -459,12 +460,12 @@ export function JobsModule({
                       <Td hoejre>
                         {!laast && (
                           <div className="ikke-print flex justify-end gap-1">
-                            <Knap art="tekst" onClick={() => aabn(job)}>
+                            <RaekkeKnap onClick={() => aabn(job)}>
                               Rediger
-                            </Knap>
-                            <Knap art="tekst" onClick={() => setSletter(job)}>
+                            </RaekkeKnap>
+                            <RaekkeKnap art="fare" onClick={() => setSletter(job)}>
                               Slet
-                            </Knap>
+                            </RaekkeKnap>
                           </div>
                         )}
                       </Td>
@@ -518,20 +519,8 @@ export function JobsModule({
                     handlinger={
                       laast ? undefined : (
                         <div className="flex items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={() => aabn(job)}
-                            className="text-2xs text-ink-muted underline underline-offset-4"
-                          >
-                            Rediger
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setSletter(job)}
-                            className="text-2xs text-negative underline underline-offset-4"
-                          >
-                            Slet
-                          </button>
+                          <RaekkeKnap onClick={() => aabn(job)}>Rediger</RaekkeKnap>
+                          <RaekkeKnap art="fare" onClick={() => setSletter(job)}>Slet</RaekkeKnap>
                         </div>
                       )
                     }
@@ -612,24 +601,23 @@ export function JobsModule({
                   </Td>
                   <Td hoejre>
                     <div className="ikke-print flex justify-end gap-1">
-                      <Knap
-                        art="tekst"
+                      <RaekkeKnap
                         onClick={() => hentIcsFil(job, beregning.marginalskatProcent)}
                         title="Hent en kalenderfil, der kan åbnes i Google, Apple og Outlook"
                       >
                         Kalender
-                      </Knap>
+                      </RaekkeKnap>
                       {!laast && (
                         <>
-                          <Knap art="tekst" onClick={() => aabn(job, true)}>
+                          <RaekkeKnap onClick={() => aabn(job, true)}>
                             Kopiér
-                          </Knap>
-                          <Knap art="tekst" onClick={() => aabn(job)}>
+                          </RaekkeKnap>
+                          <RaekkeKnap onClick={() => aabn(job)}>
                             Rediger
-                          </Knap>
-                          <Knap art="tekst" onClick={() => setSletter(job)}>
+                          </RaekkeKnap>
+                          <RaekkeKnap art="fare" onClick={() => setSletter(job)}>
                             Slet
-                          </Knap>
+                          </RaekkeKnap>
                         </>
                       )}
                     </div>
@@ -673,20 +661,8 @@ export function JobsModule({
                     handlinger={
                       laast ? undefined : (
                         <>
-                          <button
-                            type="button"
-                            onClick={() => aabn(job)}
-                            className="text-2xs text-ink-muted underline underline-offset-4"
-                          >
-                            Rediger
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setSletter(job)}
-                            className="text-2xs text-negative underline underline-offset-4"
-                          >
-                            Slet
-                          </button>
+                          <RaekkeKnap onClick={() => aabn(job)}>Rediger</RaekkeKnap>
+                          <RaekkeKnap art="fare" onClick={() => setSletter(job)}>Slet</RaekkeKnap>
                         </>
                       )
                     }

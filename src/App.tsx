@@ -31,6 +31,7 @@ import {
   FileText,
   Home,
   Receipt,
+  Settings2,
   Sparkles,
   User,
 } from 'lucide-react';
@@ -321,30 +322,30 @@ export default function App() {
       {besked && (
         <div
           role="status"
-          className="ikke-print fixed bottom-5 right-5 z-50 border border-rule-strong bg-surface px-4 py-2.5 text-xs shadow-lg"
+          className="ikke-print fixed bottom-20 right-4 z-50 max-w-[calc(100%-2rem)] border sm:bottom-5 sm:right-5 border-rule-strong bg-surface px-4 py-2.5 text-xs shadow-lg"
         >
           {besked}
         </div>
       )}
 
       <header className="ikke-print sticky top-0 z-30 border-b border-rule bg-surface">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-2 sm:gap-4 sm:px-6 sm:py-3">
           <button
             type="button"
             onClick={() => naviger({ fane: 'forside' })}
-            className="overgang flex items-baseline gap-2 hover:opacity-70"
+            className="overgang flex shrink-0 items-baseline gap-2 hover:opacity-70"
           >
             <span className="font-display text-base font-extrabold tracking-tight text-ink">
               revis
             </span>
-            <span className="tal text-2xs text-ink-faint">B-indkomst</span>
+            <span className="tal hidden text-2xs text-ink-faint sm:inline">B-indkomst</span>
           </button>
 
-          <div className="flex items-center gap-3 sm:gap-4">
+          <div className="flex min-w-0 items-center justify-end gap-2 sm:gap-4">
             <button
               type="button"
               onClick={() => setProfilAaben(true)}
-              className="overgang flex items-center gap-1.5 rounded-[4px] border border-rule-strong bg-surface px-2.5 py-1 text-xs text-ink hover:bg-sunk"
+              className="overgang flex min-h-11 shrink-0 items-center gap-1.5 rounded-[4px] border border-rule-strong bg-surface px-2.5 py-1 text-xs sm:min-h-0 text-ink hover:bg-sunk"
               title="Rediger din profil og faste stamdata (bopæl, skat, kørselspræferencer)"
             >
               <User className="h-3.5 w-3.5 text-ink-muted" />
@@ -355,15 +356,15 @@ export default function App() {
             </button>
 
             {aarListe.length > 0 && (
-            <div className="flex items-center gap-2">
-              <label htmlFor="aar-vaelger" className="text-2xs text-ink-muted">
+            <div className="flex min-w-0 items-center gap-1 sm:gap-2">
+              <label htmlFor="aar-vaelger" className="sr-only text-2xs text-ink-muted sm:not-sr-only">
                 Indkomstår
               </label>
               <select
                 id="aar-vaelger"
                 value={aktivtAar?.id ?? ''}
                 onChange={(e) => naviger({ aar: e.target.value })}
-                className="tal rounded-[4px] border border-rule-strong bg-surface px-2 py-1 text-xs text-ink"
+                className="tal min-h-11 min-w-0 rounded-[4px] border border-rule-strong bg-surface px-2 py-1 text-xs text-ink sm:min-h-0"
               >
                 {aarListe.map((a) => (
                   <option key={a.id} value={a.id}>
@@ -375,9 +376,12 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => naviger({ fane: 'aar' })}
-                className="text-2xs text-ink-muted underline underline-offset-4 hover:text-ink"
+                aria-label="Administrér indkomstår"
+                title="Administrér indkomstår"
+                className="flex min-h-11 min-w-11 shrink-0 items-center justify-center text-2xs text-ink-muted hover:text-ink sm:min-h-0 sm:min-w-0 sm:underline sm:underline-offset-4"
               >
-                Administrér
+                <Settings2 aria-hidden="true" className="h-4 w-4 sm:hidden" />
+                <span className="hidden sm:inline">Administrér</span>
               </button>
             </div>
             )}
@@ -398,7 +402,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => void auth.logUd()}
-                className="text-2xs text-ink-muted underline underline-offset-4 hover:text-ink"
+                className="flex min-h-11 shrink-0 items-center text-2xs text-ink-muted underline underline-offset-4 hover:text-ink sm:min-h-0"
               >
                 Log ud
               </button>
@@ -406,13 +410,13 @@ export default function App() {
           </div>
         </div>
 
-        <nav aria-label="Moduler" className="mx-auto flex max-w-7xl items-center justify-between gap-4 overflow-x-auto px-4 sm:px-6">
-          <ul className="flex gap-1 pb-px">
+        <nav aria-label="Moduler" className="mx-auto flex max-w-7xl items-center justify-between gap-4 overflow-x-auto px-4 [scrollbar-width:none] sm:px-6 [&::-webkit-scrollbar]:hidden">
+          <ul className="flex shrink-0 gap-1 pb-px">
             {FANER_DRIFT.map((f) => (
               <FaneKnap key={f.id} fane={f} aktiv={visning.fane === f.id} onNaviger={naviger} />
             ))}
           </ul>
-          <ul className="flex gap-1 pb-px">
+          <ul className="flex shrink-0 gap-1 pb-px">
             {FANER_OVERBLIK.map((f) => (
               <FaneKnap key={f.id} fane={f} aktiv={visning.fane === f.id} onNaviger={naviger} />
             ))}
@@ -635,12 +639,12 @@ export default function App() {
       {aktivtAar && (
         <nav
           aria-label="Hurtige handlinger"
-          className="ikke-print fixed inset-x-0 bottom-0 z-40 flex items-stretch gap-px border-t border-rule-strong bg-rule lg:hidden"
+          className="ikke-print fixed inset-x-0 bottom-0 z-40 flex items-stretch gap-px border-t border-rule-strong bg-rule pb-[env(safe-area-inset-bottom)] lg:hidden"
         >
           <button
             type="button"
             onClick={() => setScannerAaben(true)}
-            className="flex flex-1 items-center justify-center gap-2 bg-ink px-4 py-3.5 text-sm font-semibold text-surface"
+            className="flex min-w-0 flex-1 items-center justify-center gap-2 bg-ink px-4 py-3.5 text-sm font-semibold text-surface"
           >
             <svg
               aria-hidden="true"

@@ -15,6 +15,7 @@ import {
   BeloebFelt,
   Felt,
   Knap,
+  RaekkeKnap,
   Modal,
   Sektion,
   Tabel,
@@ -236,22 +237,21 @@ export function IndkomstAarModule({
                   <Td hoejre>
                     <div className="ikke-print flex justify-end gap-1">
                       {!aktiv && (
-                        <Knap art="tekst" onClick={() => onVaelg(aar.id)}>
+                        <RaekkeKnap onClick={() => onVaelg(aar.id)}>
                           Vis
-                        </Knap>
+                        </RaekkeKnap>
                       )}
-                      <Knap art="tekst" onClick={() => aabn(aar)}>
+                      <RaekkeKnap onClick={() => aabn(aar)}>
                         Rediger
-                      </Knap>
-                      <Knap
-                        art="tekst"
+                      </RaekkeKnap>
+                      <RaekkeKnap
                         onClick={() => onGem({ ...aar, laast: !aar.laast })}
                       >
                         {aar.laast ? 'Lås op' : 'Lås'}
-                      </Knap>
-                      <Knap art="tekst" onClick={() => setSletter(aar)}>
+                      </RaekkeKnap>
+                      <RaekkeKnap art="fare" onClick={() => setSletter(aar)}>
                         Slet
-                      </Knap>
+                      </RaekkeKnap>
                     </div>
                   </Td>
                 </tr>
