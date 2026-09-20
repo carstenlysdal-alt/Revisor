@@ -269,7 +269,7 @@ export function Forside({
             <button
               type="button"
               onClick={() => onGaaTil('dokumentation')}
-              className="overgang flex items-center gap-1 text-xs text-ink-muted hover:text-ink"
+              className="overgang flex min-h-11 items-center gap-1 text-xs text-ink-muted hover:text-ink sm:min-h-0"
             >
               Se alle
               <ArrowRight className="h-3.5 w-3.5" />

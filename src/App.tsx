@@ -16,6 +16,7 @@ import { AarsopgoerelseModule } from './components/AarsopgoerelseModule';
 import { OpsparingTrackerModule } from './components/OpsparingTrackerModule';
 import { StatistikModule } from './components/StatistikModule';
 import { DokumentationModule } from './components/DokumentationModule';
+import { BilagsArkivModule } from './components/BilagsArkivModule';
 import { Forside } from './components/Forside';
 import { GlobalSidebar } from './components/GlobalSidebar';
 import { AiBilagScannerModal } from './components/AiBilagScannerModal';
@@ -82,7 +83,7 @@ function MobilOverblik({
         <button
           type="button"
           onClick={() => onGaaTil('opsparing')}
-          className="mt-1.5 text-2xs text-negative underline underline-offset-4"
+          className="inline-flex min-h-11 items-center text-2xs text-negative underline underline-offset-4"
         >
           Se hvad der skal sættes til side
         </button>
@@ -587,13 +588,25 @@ export default function App() {
                   )}
 
                   {visning.fane === 'dokumentation' && (
-                    <DokumentationModule
-                      indkomstAarListe={aarListe}
-                      jobs={d.data.jobs}
-                      fradrag={d.data.fradrag}
-                      investeringer={d.data.investeringer}
-                      onAabnChat={stilSpoergsmaal}
-                    />
+                    <>
+                      <DokumentationModule
+                        indkomstAarListe={aarListe}
+                        jobs={d.data.jobs}
+                        fradrag={d.data.fradrag}
+                        investeringer={d.data.investeringer}
+                        onAabnChat={stilSpoergsmaal}
+                      />
+                      <BilagsArkivModule
+                        bilag={d.data.bilag}
+                        jobs={d.data.jobs}
+                        fradrag={d.data.fradrag}
+                        investeringer={d.data.investeringer}
+                        indkomstAarListe={aarListe}
+                        onGemJob={medFejlhaandtering(d.gemJob)}
+                        onGemFradrag={medFejlhaandtering(d.gemFradrag)}
+                        onGemInvestering={medFejlhaandtering(d.gemInvestering)}
+                      />
+                    </>
                   )}
 
                   {!['forside', 'indtaegter', 'koersel', 'fradrag', 'overblik', 'aarsopgoerelse', 'opsparing', 'statistik', 'investeringer', 'dokumentation'].includes(visning.fane) && (

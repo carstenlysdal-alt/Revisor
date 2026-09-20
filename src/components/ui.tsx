@@ -299,7 +299,7 @@ export function Knap({
     <button
       type="button"
       {...rest}
-      className={`overgang inline-flex items-center gap-1.5 rounded-[4px] px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-45 ${knapStil[art]} ${className}`}
+      className={`overgang inline-flex min-h-11 items-center justify-center gap-1.5 rounded-[4px] px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-45 sm:min-h-8 ${knapStil[art]} ${className}`}
     >
       {children}
     </button>
@@ -356,8 +356,10 @@ export function IkonKnap({
 
 /* ------------------------------------------------------------------ Felter */
 
+// min-h-11 er de 44px, en finger har brug for. Uden den lander felterne på
+// 42px, og det er lige under grænsen på en telefon.
 const feltStil =
-  'w-full rounded-[4px] border border-rule-strong bg-surface px-3 py-2.5 text-sm text-ink placeholder:text-ink-faint disabled:bg-sunk disabled:text-ink-muted';
+  'w-full min-h-11 rounded-[4px] border border-rule-strong bg-surface px-3 py-2.5 text-sm text-ink placeholder:text-ink-faint disabled:bg-sunk disabled:text-ink-muted';
 
 export function Felt({
   label,

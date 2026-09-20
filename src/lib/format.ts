@@ -21,7 +21,9 @@ export const pct = (v: number | null | undefined, decimaler = 1): string =>
 
 export const dato = (iso: string | undefined | null): string => {
   if (!iso) return '';
-  const [aar, maaned, dag] = iso.split('-');
+  // Et tidsstempel klippes ned til datoen. Uden det bliver dagen til
+  // "06T15:18:25.275Z", fordi der deles på bindestreg alene.
+  const [aar, maaned, dag] = iso.slice(0, 10).split('-');
   if (!aar || !maaned || !dag) return iso;
   return `${dag}.${maaned}.${aar}`;
 };

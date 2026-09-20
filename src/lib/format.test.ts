@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { talFraFelt } from './format';
+import { dato, talFraFelt } from './format';
 
 describe('talFraFelt', () => {
   it('håndterer tomme eller ugyldige strenge som 0', () => {
@@ -29,5 +29,27 @@ describe('talFraFelt', () => {
     expect(talFraFelt('1.000')).toBe(1000);
     expect(talFraFelt('25.000')).toBe(25000);
     expect(talFraFelt('1.250,50')).toBe(1250.5);
+  });
+});
+
+describe('dato', () => {
+  it('viser en ren dato på dansk form', () => {
+    expect(dato('2026-09-06')).toBe('06.09.2026');
+  });
+
+  it('klipper et tidsstempel ned til datoen', () => {
+    // Bilag gemmes med et fuldt ISO-tidsstempel. Uden nedklipningen blev
+    // dagen til "06T15:18:25.275Z" i bilagsarkivet.
+    expect(dato('2026-09-06T15:18:25.275Z')).toBe('06.09.2026');
+  });
+
+  it('giver tom streng for ingenting', () => {
+    expect(dato(null)).toBe('');
+    expect(dato(undefined)).toBe('');
+    expect(dato('')).toBe('');
+  });
+
+  it('lader en uforståelig værdi stå, frem for at finde på', () => {
+    expect(dato('i går')).toBe('i går');
   });
 });
