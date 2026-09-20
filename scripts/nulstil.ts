@@ -1,4 +1,4 @@
-import readline from 'readline';
+import { spoerg, spoergSkjult } from './spoerg';
 
 /**
  * Rydder hele regnskabet: alle indkomstår, jobs, fradrag, investeringer,
@@ -14,16 +14,6 @@ import readline from 'readline';
  */
 
 const URL_BASE = (process.env.REVISOR_URL || 'http://localhost:3000').replace(/\/$/, '');
-
-function spoerg(spoergsmaal: string): Promise<string> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((resolve) => {
-    rl.question(spoergsmaal, (svar) => {
-      rl.close();
-      resolve(svar);
-    });
-  });
-}
 
 async function main() {
   console.log(`\nDette sletter ALT i regnskabet på ${URL_BASE}:`);
@@ -44,7 +34,7 @@ async function main() {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
   if (status.kraeverLogin) {
-    const kodeord = process.env.REVISOR_KODEORD || (await spoerg('Kodeord: '));
+    const kodeord = process.env.REVISOR_KODEORD || (await spoergSkjult('Kodeord: '));
     const login = await fetch(`${URL_BASE}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

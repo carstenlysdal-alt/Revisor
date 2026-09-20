@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import readline from 'readline';
+import { spoergSkjult } from './spoerg';
 
 /**
  * Henter alt ned på maskinen: regnskabet som JSON og hvert eneste bilag som
@@ -12,16 +12,6 @@ import readline from 'readline';
  */
 
 const URL_BASE = (process.env.REVISOR_URL || 'http://localhost:3000').replace(/\/$/, '');
-
-function spoerg(spoergsmaal: string): Promise<string> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  return new Promise((resolve) => {
-    rl.question(spoergsmaal, (svar) => {
-      rl.close();
-      resolve(svar);
-    });
-  });
-}
 
 /** Filnavne fra et bilag er brugerdata og må ikke kunne pege uden for mappen. */
 const sikkertFilnavn = (navn: string) =>
@@ -43,7 +33,7 @@ async function main() {
   const headers: Record<string, string> = {};
 
   if (status.kraeverLogin) {
-    const kodeord = process.env.REVISOR_KODEORD || (await spoerg('Kodeord: '));
+    const kodeord = process.env.REVISOR_KODEORD || (await spoergSkjult('Kodeord: '));
     const login = await fetch(`${URL_BASE}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
