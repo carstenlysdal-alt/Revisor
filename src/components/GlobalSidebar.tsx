@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { BrugerProfil, IndkomstAar, OpsparingsTracker } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
 import { kr, pct } from '../lib/format';
-import { api } from '../lib/api';
 import { Advarsel, Knap, Kort } from './ui';
 
 /** Samme opdeling som topnavigationen i App.tsx — kun til forklaringskortet. */
@@ -19,6 +18,7 @@ interface Props {
   profil?: BrugerProfil;
   onAabnProfil?: () => void;
   onAabnScanner: () => void;
+  onHentBackup: () => Promise<unknown>;
   onGaaTil: (fane: string) => void;
   /** Kun sat fra Forsiden. */
   antalJobs?: number;
@@ -51,120 +51,6 @@ function Noegletal({
   );
 }
 
-interface GoogleDriveStatus {
-  konfigureret: boolean;
-  forbundet: boolean;
-  sidsteFejl: string | null;
-  sikkerhedskopieredeBilag: number;
-  afventendeBilag: number;
-}
-
-/**
- * Egen fetch, ligesom rutestatus i JobsModule — sidebaren behøver ikke gå
- * gennem App.tsx for en status, kun den selv bruger.
- */
-function GoogleDriveStatusBlok() {
-  const [status, setStatus] = useState<GoogleDriveStatus | null>(null);
-  const [urlBesked, setUrlBesked] = useState<string | null>(null);
-  const [afbryderLige, setAfbryderLige] = useState(false);
-
-  const hentStatus = () => api.googleDriveStatus().then(setStatus).catch(() => setStatus(null));
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const drev = params.get('drev');
-    if (drev) {
-      setUrlBesked(
-        drev === 'forbundet'
-          ? 'Google Drev blev forbundet.'
-          : drev === 'ikke-konfigureret'
-            ? 'Google Drev er ikke sat op på serveren endnu.'
-            : 'Forbindelsen til Google Drev fejlede. Prøv igen.'
-      );
-      params.delete('drev');
-      const rest = params.toString();
-      window.history.replaceState({}, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
-    }
-    void hentStatus();
-    const interval = window.setInterval(() => void hentStatus(), 15_000);
-    return () => window.clearInterval(interval);
-  }, []);
-
-  if (!status) return null;
-
-  async function afbryd() {
-    if (
-      !window.confirm(
-        'Afbryd forbindelsen til Google Drev? Filer, der allerede ligger der, bliver ikke slettet.'
-      )
-    ) {
-      return;
-    }
-    setAfbryderLige(true);
-    try {
-      await api.googleDriveAfbryd();
-      await hentStatus();
-    } finally {
-      setAfbryderLige(false);
-    }
-  }
-
-  return (
-    <div className="mt-5 border-t border-rule pt-4">
-      <p className="text-2xs uppercase tracking-wide text-ink-faint">Google Drev-backup</p>
-
-      {!status.konfigureret && (
-        <p className="mt-1.5 text-2xs text-ink-muted">
-          Alt gemmes løbende i appens database. Ekstern Google Drev-backup er ikke sat op
-          på serveren endnu.
-        </p>
-      )}
-
-      {urlBesked && <p className="mt-1.5 text-2xs text-ink-muted">{urlBesked}</p>}
-
-      {status.konfigureret && status.forbundet && !status.sidsteFejl && (
-        <>
-          <p className="mt-1.5 text-2xs text-ink-muted">
-            Forbundet. {status.sikkerhedskopieredeBilag} bilag er sikkerhedskopieret
-            {status.afventendeBilag > 0
-              ? `; ${status.afventendeBilag} afventer.`
-              : '. Datasnapshottet er ajour.'}
-          </p>
-          <button
-            type="button"
-            onClick={afbryd}
-            disabled={afbryderLige}
-            className="mt-1.5 text-2xs text-ink-muted underline underline-offset-2"
-          >
-            Afbryd forbindelse
-          </button>
-        </>
-      )}
-
-      {status.konfigureret && status.forbundet && status.sidsteFejl && (
-        <div className="mt-1.5">
-          <Advarsel titel="Backup kræver opmærksomhed">{status.sidsteFejl}</Advarsel>
-          <a
-            href="/api/google/start"
-            className="mt-1.5 inline-block text-2xs text-ink-muted underline underline-offset-2"
-          >
-            Prøv at genforbinde Google Drev
-          </a>
-        </div>
-      )}
-
-      {status.konfigureret && !status.forbundet && (
-        <a
-          href="/api/google/start"
-          className="mt-1.5 inline-block text-2xs text-ink-muted underline underline-offset-2"
-        >
-          Forbind Google Drev
-        </a>
-      )}
-    </div>
-  );
-}
-
 export function GlobalSidebar({
   indkomstAar,
   beregning,
@@ -175,6 +61,7 @@ export function GlobalSidebar({
   profil,
   onAabnProfil,
   onAabnScanner,
+  onHentBackup,
   onGaaTil,
   antalJobs,
   investeringerIAlt,
@@ -182,6 +69,20 @@ export function GlobalSidebar({
 }: Props) {
   const afsat = opsparing.indbetaltTilSkat + opsparing.opsparetPrivat;
   const mangler = Math.max(0, beregning.samletSkatOgAM - afsat);
+  const [henterBackup, setHenterBackup] = useState(false);
+  const [backupFejl, setBackupFejl] = useState<string | null>(null);
+
+  const hentBackup = async () => {
+    setHenterBackup(true);
+    setBackupFejl(null);
+    try {
+      await onHentBackup();
+    } catch (err) {
+      setBackupFejl(err instanceof Error ? err.message : 'Sikkerhedskopien kunne ikke hentes.');
+    } finally {
+      setHenterBackup(false);
+    }
+  };
 
   return (
     <aside className="ikke-print w-full shrink-0 lg:w-72">
@@ -299,7 +200,17 @@ export function GlobalSidebar({
           )}
         </div>
 
-        <GoogleDriveStatusBlok />
+        <div className="mt-5 border-t border-rule pt-4">
+          <p className="text-2xs uppercase tracking-wide text-ink-faint">Lokal sikkerhedskopi</p>
+          <p className="mt-1.5 text-2xs text-ink-muted">
+            Hent alle data og originale bilag i én ZIP-fil. Gem den gerne i en mappe,
+            som din computer synkroniserer til Google Drev eller iCloud.
+          </p>
+          <Knap onClick={hentBackup} disabled={henterBackup} className="mt-2 w-full justify-center">
+            {henterBackup ? 'Samler sikkerhedskopi…' : 'Hent komplet sikkerhedskopi'}
+          </Knap>
+          {backupFejl && <p className="mt-1.5 text-2xs text-negative">{backupFejl}</p>}
+        </div>
 
         <div className="mt-5 border-t border-rule pt-4 text-2xs text-ink-faint">
           <p>

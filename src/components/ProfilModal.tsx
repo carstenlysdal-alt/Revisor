@@ -16,10 +16,18 @@ interface Props {
   profil: BrugerProfil;
   onLuk: () => void;
   onGem: (profil: BrugerProfil) => Promise<unknown>;
+  onHentBackup: () => Promise<unknown>;
   onNulstil: () => Promise<unknown>;
 }
 
-export function ProfilModal({ aaben, profil: startProfil, onLuk, onGem, onNulstil }: Props) {
+export function ProfilModal({
+  aaben,
+  profil: startProfil,
+  onLuk,
+  onGem,
+  onHentBackup,
+  onNulstil,
+}: Props) {
   const [form, setForm] = useState<BrugerProfil>(() => ({
     navn: startProfil.navn ?? '',
     kunstnerNavn: startProfil.kunstnerNavn ?? '',
@@ -44,6 +52,8 @@ export function ProfilModal({ aaben, profil: startProfil, onLuk, onGem, onNulsti
   const [visNulstil, setVisNulstil] = useState(false);
   const [bekraeftelse, setBekraeftelse] = useState('');
   const [nulstiller, setNulstiller] = useState(false);
+  const [henterBackup, setHenterBackup] = useState(false);
+  const [backupHentet, setBackupHentet] = useState(false);
 
   const vaelgKommune = (kommuneNavn: string) => {
     const satser = kommuneNavn ? getKommuneSatser(kommuneNavn, new Date().getFullYear()) : null;
@@ -90,6 +100,20 @@ export function ProfilModal({ aaben, profil: startProfil, onLuk, onGem, onNulsti
       setFejl(err instanceof Error ? err.message : 'Regnskabet kunne ikke nulstilles.');
     } finally {
       setNulstiller(false);
+    }
+  };
+
+  const haandterBackup = async () => {
+    setHenterBackup(true);
+    setBackupHentet(false);
+    setFejl(null);
+    try {
+      await onHentBackup();
+      setBackupHentet(true);
+    } catch (err) {
+      setFejl(err instanceof Error ? err.message : 'Sikkerhedskopien kunne ikke hentes.');
+    } finally {
+      setHenterBackup(false);
     }
   };
 
@@ -189,7 +213,24 @@ export function ProfilModal({ aaben, profil: startProfil, onLuk, onGem, onNulsti
           </Felt>
         </section>
 
-        {/* 2. Fast Bopæl & Skattekommune */}
+        {/* 2. Lokal sikkerhedskopi */}
+        <section className="space-y-3 border-t border-rule pt-4">
+          <h3 className="font-display text-sm font-semibold tracking-tight text-ink">
+            Lokal sikkerhedskopi
+          </h3>
+          <p className="text-xs text-ink-muted">
+            Henter profil, regnskab, chathistorik og alle originale bilag i én ZIP-fil.
+            Gem filen i en privat, lokalt synkroniseret mappe.
+          </p>
+          <Knap onClick={haandterBackup} disabled={henterBackup}>
+            {henterBackup ? 'Samler sikkerhedskopi…' : 'Hent komplet sikkerhedskopi'}
+          </Knap>
+          {backupHentet && (
+            <p className="text-xs font-medium text-positive">Sikkerhedskopien er hentet.</p>
+          )}
+        </section>
+
+        {/* 3. Fast Bopæl & Skattekommune */}
         <section className="space-y-3 border-t border-rule pt-4">
           <h3 className="font-display text-sm font-semibold tracking-tight text-ink">
             Fast bopæl & Skat
@@ -235,7 +276,7 @@ export function ProfilModal({ aaben, profil: startProfil, onLuk, onGem, onNulsti
           </div>
         </section>
 
-        {/* 3. Transport & Kørebog */}
+        {/* 4. Transport & Kørebog */}
         <section className="space-y-3 border-t border-rule pt-4">
           <h3 className="font-display text-sm font-semibold tracking-tight text-ink">
             Transport & Kørselspræferencer
@@ -279,7 +320,7 @@ export function ProfilModal({ aaben, profil: startProfil, onLuk, onGem, onNulsti
           </div>
         </section>
 
-        {/* 4. Noter og faste instruktioner til Revisor AI */}
+        {/* 5. Noter og faste instruktioner til Revisor AI */}
         <section className="space-y-2 border-t border-rule pt-4">
           <Felt
             label="Faste noter til Revisor AI"
@@ -304,8 +345,8 @@ export function ProfilModal({ aaben, profil: startProfil, onLuk, onGem, onNulsti
           </h3>
           <p className="text-xs text-ink-muted">
             Sletter alle indkomstår, jobs, udgifter, investeringer, skatteopsparing, bilag og
-            Revisor-chathistorik fra appen. Din profil og dine faste stamdata bevares. Bilag,
-            der allerede er sikkerhedskopieret til Google Drev, slettes ikke fra Drev.
+            Revisor-chathistorik fra appen. Din profil og dine faste stamdata bevares.
+            Sikkerhedskopier, du allerede har hentet, påvirkes ikke.
           </p>
           {!visNulstil ? (
             <Knap art="fare" onClick={() => setVisNulstil(true)}>

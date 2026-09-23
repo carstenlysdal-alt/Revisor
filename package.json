@@ -20,6 +20,7 @@
     "@google/genai": "^2.21.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
+    "archiver": "^8.0.0",
     "autoprefixer": "^10.4.21",
     "dotenv": "^17.2.3",
     "esbuild": "^0.25.0",
@@ -39,6 +40,7 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
+    "@types/archiver": "^8.0.0",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "@types/pdf-parse": "^1.1.5",

@@ -625,6 +625,10 @@ export default function App() {
                   profil={d.data.profil}
                   onAabnProfil={() => setProfilAaben(true)}
                   onAabnScanner={() => setScannerAaben(true)}
+                  onHentBackup={async () => {
+                    await api.hentBackup();
+                    visBesked('Den komplette sikkerhedskopi er hentet.');
+                  }}
                   onGaaTil={gaaTilFane}
                   antalJobs={aaretsJobs.length}
                   investeringerIAlt={aaretsInvesteringer.reduce((s, i) => s + i.beloeb, 0)}
@@ -699,6 +703,10 @@ export default function App() {
         onGem={async (p) => {
           await d.gemProfil(p);
           visBesked('Din profil og faste stamdata er gemt.');
+        }}
+        onHentBackup={async () => {
+          await api.hentBackup();
+          visBesked('Den komplette sikkerhedskopi er hentet.');
         }}
         onNulstil={async () => {
           await d.nulstilRegnskab();

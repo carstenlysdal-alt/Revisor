@@ -47,6 +47,37 @@ async function kald<T>(sti: string, init?: RequestInit): Promise<T> {
   return svar.status === 204 ? (undefined as T) : ((await svar.json()) as T);
 }
 
+async function hentBackup(): Promise<{ filnavn: string; stoerrelse: number }> {
+  let svar: Response;
+  try {
+    svar = await fetch('/api/backup');
+  } catch {
+    throw new ApiFejl('Der er ikke forbindelse til serveren. Kører den?', 0);
+  }
+
+  if (!svar.ok) {
+    const krop = await svar.json().catch(() => ({}));
+    throw new ApiFejl(
+      krop.fejl || `Sikkerhedskopien kunne ikke oprettes (fejl ${svar.status}).`,
+      svar.status
+    );
+  }
+
+  const blob = await svar.blob();
+  const disposition = svar.headers.get('content-disposition') ?? '';
+  const filnavn = disposition.match(/filename="([^"]+)"/)?.[1] ?? 'revis-komplet-backup.zip';
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filnavn;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Safari kan annullere downloadet, hvis blob-URL'en frigives i samme tick.
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return { filnavn, stoerrelse: blob.size };
+}
+
 const gem = <T>(sti: string, krop: unknown) =>
   kald<T>(sti, { method: 'PUT', body: JSON.stringify(krop) });
 
@@ -68,6 +99,7 @@ export const api = {
   logout: () => kald<{ loggetInd: boolean }>('/auth/logout', { method: 'POST' }),
 
   hentAlt: () => kald<DataSnapshot>('/data'),
+  hentBackup,
   nulstilRegnskab: () =>
     kald<{ ok: true }>('/nulstil', {
       method: 'POST',

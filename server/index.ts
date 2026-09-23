@@ -12,6 +12,7 @@ import { bilagRoutes } from './routes/bilag';
 import { aiRoutes } from './routes/ai';
 import { ruterRoutes } from './routes/ruter';
 import { integrationerRoutes } from './routes/integrationer';
+import { backupRoutes } from './routes/backup';
 import { opretAutomatiskDriveBackup } from './integrations/automatiskBackup';
 import { authRoutes, harKodeord, hastighedsgraense, kraevLogin } from './auth';
 import { udbyderStatus } from './ai/faktor';
@@ -86,6 +87,7 @@ async function start() {
 
   app.use('/api', dataRoutes(repo, driveBackup.planlaeg));
   app.use('/api', bilagRoutes(repo, arkiv, driveBackup.planlaeg));
+  app.use('/api', backupRoutes(repo, arkiv));
   app.use(
     '/api',
     // AI-kald koster penge pr. gang, også for den der er logget ind.

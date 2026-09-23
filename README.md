@@ -34,7 +34,7 @@ npm start
 5. Vælg **Godkend og opret**. Posten placeres på det kontrollerede indkomstår, og det relevante modul åbnes.
 6. Følg estimatet under **Skat overblik**, afstem opsparing og brug **Årsopgørelse** som tjekliste til TastSelv.
 7. Under **Dokumentation** kan du åbne alle uploadede originalbilag og udskrive årets samlede opgørelse.
-8. Forbind Google Drev i sidepanelet, så originalbilag og det aktuelle datasnapshot sikkerhedskopieres automatisk.
+8. Hent jævnligt **Komplet sikkerhedskopi** fra sidepanelet eller din profil. ZIP-filen indeholder hele regnskabet og alle originale bilag og kan gemmes i en lokalt synkroniseret mappe.
 
 Diktering bruger browserens talegenkendelse med sproget `da-DK`. Knappen vises kun, når browseren tilbyder Web Speech Recognition. Mikrofonen kræver browserens tilladelse og normalt HTTPS eller localhost. Browserleverandøren kan behandle lyden som del af sin talegenkendelsestjeneste; appens egen server gemmer ikke lyd.
 
@@ -46,8 +46,8 @@ Appen gemmer alle regnskabsdata på serveren. I produktion bruges PostgreSQL til
 
 - `indkomstaar`, `job`, `fradrag`, `investering` og `opsparing` indeholder regnskabet.
 - `bilag` og `bilag_indhold` indeholder metadata og originalfiler; alle filer kan åbnes under **Dokumentation**.
-- Google Drev-backup gemmer hvert originalbilag samt `revis-data-snapshot.json` i mappen **revis — bilag og backup**.
-- Funktionen **Start helt forfra** sletter regnskab, bilag og chathistorik fra appen, men bevarer profilen og allerede oprettede kopier på Google Drev.
+- Den komplette lokale ZIP-backup indeholder `data.json`, `chat-historik.json`, `manifest.json`, en læsevejledning og alle originalfiler i `bilag/`.
+- Funktionen **Start helt forfra** sletter regnskab, bilag og chathistorik fra appen, men bevarer profilen og sikkerhedskopier, der allerede er downloadet.
 - `npm run backup` kan hente et komplet lokalt arkiv gennem appens beskyttede API.
 
 ## AI-laget
