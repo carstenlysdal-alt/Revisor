@@ -50,11 +50,13 @@ CREATE TABLE IF NOT EXISTS job (
   id                            text PRIMARY KEY,
   indkomstaar_id                text NOT NULL REFERENCES indkomstaar(id) ON DELETE CASCADE,
   hvervgiver                    text NOT NULL DEFAULT '',
+  booker                        text,
   tilknyttet_job                text,
   honorar                       numeric(14,2) NOT NULL DEFAULT 0,
   start_dato                    date NOT NULL,
   slut_dato                     date NOT NULL,
   betalings_dato                date,
+  betalt_skat                   numeric(14,2) NOT NULL DEFAULT 0,
   transportmiddel               text NOT NULL DEFAULT 'NONE'
                                   CHECK (transportmiddel IN ('NONE','OWN_CAR_MC','OWN_BIKE','PASSENGER')),
   antal_km                      numeric(10,2) NOT NULL DEFAULT 0,
@@ -75,6 +77,7 @@ CREATE INDEX IF NOT EXISTS job_indkomstaar_idx ON job (indkomstaar_id);
 CREATE TABLE IF NOT EXISTS fradrag (
   id                text PRIMARY KEY,
   indkomstaar_id    text NOT NULL REFERENCES indkomstaar(id) ON DELETE CASCADE,
+  job_id            text REFERENCES job(id) ON DELETE SET NULL,
   beskrivelse       text NOT NULL DEFAULT '',
   type_kategori     text NOT NULL DEFAULT '',
   faktura_dato      date NOT NULL,
@@ -138,6 +141,10 @@ ALTER TABLE indkomstaar ADD COLUMN IF NOT EXISTS forventet_dagpenge numeric(14,2
 ALTER TABLE indkomstaar ADD COLUMN IF NOT EXISTS seniorfradrag_berettiget boolean NOT NULL DEFAULT false;
 ALTER TABLE indkomstaar ADD COLUMN IF NOT EXISTS bor_paa_udpeget_smaaoe boolean NOT NULL DEFAULT false;
 ALTER TABLE job ADD COLUMN IF NOT EXISTS er_bestyrelseshverv boolean NOT NULL DEFAULT false;
+ALTER TABLE job ADD COLUMN IF NOT EXISTS booker text;
+ALTER TABLE job ADD COLUMN IF NOT EXISTS betalt_skat numeric(14,2) NOT NULL DEFAULT 0;
+ALTER TABLE fradrag ADD COLUMN IF NOT EXISTS job_id text REFERENCES job(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS fradrag_job_idx ON fradrag (job_id);
 ALTER TABLE job ADD COLUMN IF NOT EXISTS tilknyttet_job text;
 
 -- Revisor-chattens hukommelse på tværs af sessioner. Selve chatvinduet

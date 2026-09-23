@@ -78,7 +78,7 @@ export function kanGemmeKladde(
   valgtType: Bilagsklassifikation,
   tekst: KladdeTekst
 ): boolean {
-  if (valgtType === 'JOB') return Boolean(tekst.hvervgiver?.trim());
+  if (valgtType === 'JOB') return Boolean(tekst.hvervgiver?.trim() || tekst.booker?.trim());
   if (valgtType === 'FRADRAG') return Boolean(tekst.beskrivelse?.trim());
   if (valgtType === 'INVESTERING') return Boolean(tekst.titel?.trim());
   return false;
@@ -95,7 +95,9 @@ export function byggJobFraKladde(
   return {
     indkomstAarId,
     hvervgiver: tekst.hvervgiver || '',
+    booker: tekst.booker || '',
     honorar: kladdeTal(tekst, 'honorar'),
+    betaltSkat: kladdeTal(tekst, 'betaltSkat'),
     startDato: start,
     slutDato: tekst.slutDato || start,
     betalingsDato: tekst.betalingsDato || '',

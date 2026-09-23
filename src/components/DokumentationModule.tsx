@@ -1,16 +1,18 @@
 import React, { useMemo, useState } from 'react';
-import type { Fradrag, IndkomstAar, Investering, Job } from '../types';
+import type { Bilag, Fradrag, IndkomstAar, Investering, Job } from '../types';
 import { beregnSkat } from '../lib/tax/beregn';
 import { UkendtIndkomstAarError } from '../lib/tax/satser';
 import { dato, kr } from '../lib/format';
+import { api } from '../lib/api';
 import { Sparkles } from 'lucide-react';
-import { Advarsel, Knap, Sektion, Vaelger } from './ui';
+import { Advarsel, Knap, Sektion, Tabel, Td, Th, TomTilstand, Vaelger } from './ui';
 
 interface Props {
   indkomstAarListe: IndkomstAar[];
   jobs: Job[];
   fradrag: Fradrag[];
   investeringer: Investering[];
+  bilag: Bilag[];
   onAabnChat?: (startBesked?: string) => void;
 }
 
@@ -280,6 +282,7 @@ export function DokumentationModule({
   jobs,
   fradrag,
   investeringer,
+  bilag,
   onAabnChat,
 }: Props) {
   const [valgtAarId, setValgtAarId] = useState<string>('alle');
@@ -290,6 +293,26 @@ export function DokumentationModule({
   );
 
   const scope = valgtAarId === 'alle' ? sorteret : sorteret.filter((a) => a.id === valgtAarId);
+
+  const bilagstilknytninger = useMemo(() => {
+    const kort = new Map<string, string[]>();
+    const tilfoej = (bilagIds: string[] | undefined, tekst: string) => {
+      for (const id of bilagIds ?? []) kort.set(id, [...(kort.get(id) ?? []), tekst]);
+    };
+    for (const job of jobs) {
+      tilfoej(job.bilagIds, `Job: ${job.hvervgiver || job.booker || dato(job.startDato)}`);
+    }
+    for (const post of fradrag) tilfoej(post.bilagIds, `Udgift: ${post.beskrivelse}`);
+    for (const investering of investeringer) {
+      tilfoej(investering.bilagIds, `Investering: ${investering.titel}`);
+    }
+    return kort;
+  }, [jobs, fradrag, investeringer]);
+
+  const formaterStoerrelse = (bytes: number) =>
+    bytes >= 1024 * 1024
+      ? `${(bytes / 1024 / 1024).toLocaleString('da-DK', { maximumFractionDigits: 1 })} MB`
+      : `${Math.max(1, Math.round(bytes / 1024)).toLocaleString('da-DK')} KB`;
 
   return (
     <Sektion
@@ -326,6 +349,75 @@ export function DokumentationModule({
         </>
       }
     >
+      <section className="ikke-print mb-8 border-b border-rule-strong pb-8">
+        <div className="mb-3">
+          <h3 className="font-display text-base font-semibold text-ink">Bilagsarkiv</h3>
+          <p className="mt-0.5 text-2xs text-ink-muted">
+            Alle uploadede originalfiler, også dem der endnu ikke er knyttet til en postering.
+            Filerne åbnes gennem appens beskyttede serverforbindelse.
+          </p>
+        </div>
+        {bilag.length === 0 ? (
+          <TomTilstand besked="Der er endnu ikke uploadet nogen bilag." />
+        ) : (
+          <Tabel minBredde={760}>
+            <thead>
+              <tr>
+                <Th>Fil</Th>
+                <Th>Tilknytning</Th>
+                <Th bredde="9rem">Uploadet</Th>
+                <Th hoejre bredde="6rem">Størrelse</Th>
+                <Th bredde="10rem">Backup</Th>
+                <Th bredde="6rem" />
+              </tr>
+            </thead>
+            <tbody>
+              {bilag.map((fil) => {
+                const tilknytninger = bilagstilknytninger.get(fil.id) ?? [];
+                return (
+                  <tr key={fil.id}>
+                    <Td>
+                      <span className="font-medium text-ink">{fil.filnavn}</span>
+                      <span className="block text-2xs text-ink-faint">{fil.mimeType}</span>
+                    </Td>
+                    <Td>
+                      {tilknytninger.length > 0 ? (
+                        tilknytninger.map((tekst, indeks) => (
+                          <span key={`${tekst}-${indeks}`} className="block text-2xs text-ink-muted">{tekst}</span>
+                        ))
+                      ) : (
+                        <span className="text-2xs text-ink-faint">Ikke tilknyttet endnu</span>
+                      )}
+                    </Td>
+                    <Td tal>{dato(fil.uploadet)}</Td>
+                    <Td hoejre tal>{formaterStoerrelse(fil.stoerrelse)}</Td>
+                    <Td>
+                      <span className={`text-2xs ${fil.drevBackupFejl ? 'text-negative' : 'text-ink-muted'}`}>
+                        {fil.drevBackupFejl
+                          ? 'Google Drev-fejl'
+                          : fil.drevBackupTidspunkt
+                            ? 'Google Drev ✓'
+                            : 'Kun i appen'}
+                      </span>
+                    </Td>
+                    <Td hoejre>
+                      <a
+                        href={api.bilagUrl(fil.id)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-ink-muted underline underline-offset-4 hover:text-ink"
+                      >
+                        Åbn
+                      </a>
+                    </Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </Tabel>
+        )}
+      </section>
+
       {sorteret.length === 0 ? (
         <Advarsel art="neutral" titel="Der er ikke noget at eksportere endnu">
           Opret mindst ét indkomstår med jobs eller fradrag, før der er en opgørelse at printe.

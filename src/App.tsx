@@ -155,7 +155,7 @@ export default function App() {
   const [profilAaben, setProfilAaben] = useState(false);
 
   /** Forsidens spørgeboks åbner chatten og sender teksten med det samme. */
-  const stilSpoergsmaal = (tekst: string) => {
+  const stilSpoergsmaal = (tekst = '') => {
     setChatStartBesked(tekst);
     setChatAaben(true);
   };
@@ -493,6 +493,7 @@ export default function App() {
                     <JobsModule
                       visning="indtaegter"
                       jobs={aaretsJobs}
+                      fradragListe={aaretsFradrag}
                       bilag={d.data.bilag}
                       indkomstAar={aktivtAar}
                       profil={d.data.profil}
@@ -508,6 +509,7 @@ export default function App() {
                     <JobsModule
                       visning="koersel"
                       jobs={aaretsJobs}
+                      fradragListe={aaretsFradrag}
                       bilag={d.data.bilag}
                       indkomstAar={aktivtAar}
                       profil={d.data.profil}
@@ -522,6 +524,7 @@ export default function App() {
                   {visning.fane === 'fradrag' && (
                     <FradragModule
                       fradragListe={aaretsFradrag}
+                      jobs={aaretsJobs}
                       bilag={d.data.bilag}
                       indkomstAar={aktivtAar}
                       beregning={beregning}
@@ -584,6 +587,7 @@ export default function App() {
                       jobs={d.data.jobs}
                       fradrag={d.data.fradrag}
                       investeringer={d.data.investeringer}
+                      bilag={d.data.bilag}
                       onAabnChat={stilSpoergsmaal}
                     />
                   )}
@@ -695,6 +699,11 @@ export default function App() {
         onGem={async (p) => {
           await d.gemProfil(p);
           visBesked('Din profil og faste stamdata er gemt.');
+        }}
+        onNulstil={async () => {
+          await d.nulstilRegnskab();
+          naviger({ fane: 'aar', aar: null });
+          visBesked('Regnskabet er nulstillet. Din profil er bevaret.');
         }}
       />
 

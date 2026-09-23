@@ -166,7 +166,9 @@ const transportmiddelfelt = z.preprocess(
 export const JobUdtraekSkema = z
   .object({
     hvervgiver: tekstfelt,
+    booker: tekstfelt,
     honorar: talfelt,
+    betaltSkat: talfelt,
     startDato: datofelt,
     slutDato: datofelt,
     betalingsDato: datofelt,
@@ -265,7 +267,9 @@ export const JOB_JSON_SKEMA = {
   type: 'object' as const,
   properties: {
     hvervgiver: jsonFelt('string'),
+    booker: jsonFelt('string'),
     honorar: jsonFelt('number'),
+    betaltSkat: jsonFelt('number'),
     startDato: jsonFelt('string'),
     slutDato: jsonFelt('string'),
     betalingsDato: jsonFelt('string'),
@@ -323,7 +327,7 @@ export const SKEMABESKRIVELSE = `Svar med ét JSON-objekt og intet andet. Objekt
 
 Hvert felt inde i job, fradrag og investering har formen {"vaerdi": ..., "sikkerhed": tal mellem 0 og 1}.
 
-job: hvervgiver (tekst), honorar (tal), startDato, slutDato, betalingsDato (YYYY-MM-DD), destinationAdresse (tekst), transportmiddel ("NONE" | "OWN_CAR_MC" | "OWN_BIKE" | "PASSENGER"), antalKm (tal), antalTure (tal), amBidragFritaget (true/false), erRubrik17 (true/false), erBestyrelseshverv (true/false), type (tekst), timerJob (tal), timerTransportForberedelse (tal).
+job: hvervgiver (tekst, udbetaleren), booker (tekst, den der bookede jobbet), honorar (tal), betaltSkat (tal, kun faktisk betalt/indeholdt skat), startDato, slutDato, betalingsDato (YYYY-MM-DD), destinationAdresse (tekst), transportmiddel ("NONE" | "OWN_CAR_MC" | "OWN_BIKE" | "PASSENGER"), antalKm (tal), antalTure (tal), amBidragFritaget (true/false), erRubrik17 (true/false), erBestyrelseshverv (true/false), type (tekst), timerJob (tal), timerTransportForberedelse (tal).
 
 fradrag: beskrivelse (tekst), typeKategori (tekst), fakturaDato (YYYY-MM-DD), fakturaBeloeb (tal inklusive moms), fradragsProcent (0 til 100).
 

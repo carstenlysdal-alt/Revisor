@@ -11,6 +11,24 @@ export function bilagRoutes(
 ): Router {
   const r = Router();
 
+  r.post('/nulstil', async (req, res, next) => {
+    try {
+      if (req.body?.bekraeftelse !== 'SLET ALT') {
+        return res.status(400).json({ fejl: 'Skriv SLET ALT for at bekræfte nulstillingen.' });
+      }
+
+      const data = await repo.hentAlt();
+      for (const bilag of data.bilag) {
+        await arkiv.slet(bilag.sha256, bilag.mimeType);
+      }
+      await repo.nulstilRegnskab();
+      onAendring();
+      res.json({ ok: true });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   /**
    * Gemmer et bilag og fortæller, om det samme indhold allerede findes.
    * Dubletten blokerer ikke, men brugeren får den at vide, før der bruges

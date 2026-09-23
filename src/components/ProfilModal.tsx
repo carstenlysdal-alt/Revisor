@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { BrugerProfil, TransportMiddel } from '../types';
 import { KOMMUNENAVNE, getKommuneSatser } from '../lib/tax/kommuner';
 import { AdresseInput } from './AdresseInput';
@@ -16,9 +16,10 @@ interface Props {
   profil: BrugerProfil;
   onLuk: () => void;
   onGem: (profil: BrugerProfil) => Promise<unknown>;
+  onNulstil: () => Promise<unknown>;
 }
 
-export function ProfilModal({ aaben, profil: startProfil, onLuk, onGem }: Props) {
+export function ProfilModal({ aaben, profil: startProfil, onLuk, onGem, onNulstil }: Props) {
   const [form, setForm] = useState<BrugerProfil>(() => ({
     navn: startProfil.navn ?? '',
     kunstnerNavn: startProfil.kunstnerNavn ?? '',
@@ -33,13 +34,16 @@ export function ProfilModal({ aaben, profil: startProfil, onLuk, onGem }: Props)
     medlemFolkekirken: Boolean(startProfil.medlemFolkekirken),
     standardTransportmiddel: startProfil.standardTransportmiddel ?? 'OWN_CAR_MC',
     standardBilorMærke: startProfil.standardBilorMærke ?? '',
-    fastHvervgiver: startProfil.fastHvervgiver ?? '',
+    fastBooker: startProfil.fastBooker ?? startProfil.fastHvervgiver ?? '',
     noter: startProfil.noter ?? '',
   }));
 
   const [gemmer, setGemmer] = useState(false);
   const [fejl, setFejl] = useState<string | null>(null);
   const [succes, setSucces] = useState(false);
+  const [visNulstil, setVisNulstil] = useState(false);
+  const [bekraeftelse, setBekraeftelse] = useState('');
+  const [nulstiller, setNulstiller] = useState(false);
 
   const vaelgKommune = (kommuneNavn: string) => {
     const satser = kommuneNavn ? getKommuneSatser(kommuneNavn, new Date().getFullYear()) : null;
@@ -73,12 +77,28 @@ export function ProfilModal({ aaben, profil: startProfil, onLuk, onGem }: Props)
     }
   };
 
+  const haandterNulstil = async () => {
+    if (bekraeftelse !== 'SLET ALT') return;
+    setNulstiller(true);
+    setFejl(null);
+    try {
+      await onNulstil();
+      setVisNulstil(false);
+      setBekraeftelse('');
+      onLuk();
+    } catch (err) {
+      setFejl(err instanceof Error ? err.message : 'Regnskabet kunne ikke nulstilles.');
+    } finally {
+      setNulstiller(false);
+    }
+  };
+
   return (
     <Modal
       aaben={aaben}
       titel="Min profil & faste stamdata"
       onLuk={onLuk}
-      maxWidth="max-w-2xl"
+      bredde="max-w-2xl"
       bund={
         <div className="flex w-full items-center justify-between">
           <div>
@@ -155,15 +175,15 @@ export function ProfilModal({ aaben, profil: startProfil, onLuk, onGem }: Props)
           </div>
 
           <Felt
-            label="Fast booker / hvervgiver (valgfrit)"
-            hjaelp="Hvis du oftest udbetales gennem det samme bookingbureau/agentur, mens spillestederne skifter. Så forveksler Revisor AI ikke spillestedet med din udbetaler."
+            label="Fast booker (valgfrit)"
+            hjaelp="Bookingbureau, agent eller person, der ofte booker dine jobs. Den, der udbetaler honoraret, registreres separat som hvervgiver på jobbet."
           >
             {(id) => (
               <Tekstfelt
                 id={id}
-                value={form.fastHvervgiver ?? ''}
-                placeholder="F.eks. Tajmer Booking, PDH Music eller primær udbetaler"
-                onChange={(e) => setForm({ ...form, fastHvervgiver: e.target.value })}
+                value={form.fastBooker ?? ''}
+                placeholder="F.eks. Tajmer Booking, PDH Music eller en agent"
+                onChange={(e) => setForm({ ...form, fastBooker: e.target.value })}
               />
             )}
           </Felt>
@@ -276,6 +296,42 @@ export function ProfilModal({ aaben, profil: startProfil, onLuk, onGem }: Props)
               />
             )}
           </Felt>
+        </section>
+
+        <section className="space-y-3 border-t border-rule pt-4">
+          <h3 className="font-display text-sm font-semibold tracking-tight text-negative">
+            Start helt forfra
+          </h3>
+          <p className="text-xs text-ink-muted">
+            Sletter alle indkomstår, jobs, udgifter, investeringer, skatteopsparing, bilag og
+            Revisor-chathistorik fra appen. Din profil og dine faste stamdata bevares. Bilag,
+            der allerede er sikkerhedskopieret til Google Drev, slettes ikke fra Drev.
+          </p>
+          {!visNulstil ? (
+            <Knap art="fare" onClick={() => setVisNulstil(true)}>
+              Nulstil hele regnskabet…
+            </Knap>
+          ) : (
+            <div className="space-y-3 border border-negative p-3">
+              <p className="text-xs text-negative">
+                Det kan ikke fortrydes. Skriv <strong>SLET ALT</strong> for at fortsætte.
+              </p>
+              <Tekstfelt
+                value={bekraeftelse}
+                onChange={(e) => setBekraeftelse(e.target.value)}
+                placeholder="SLET ALT"
+                autoComplete="off"
+              />
+              <div className="flex gap-2">
+                <Knap onClick={() => { setVisNulstil(false); setBekraeftelse(''); }} disabled={nulstiller}>
+                  Fortryd
+                </Knap>
+                <Knap art="fare" onClick={haandterNulstil} disabled={nulstiller || bekraeftelse !== 'SLET ALT'}>
+                  {nulstiller ? 'Nulstiller…' : 'Slet alle regnskabsdata'}
+                </Knap>
+              </div>
+            </div>
+          )}
         </section>
       </div>
     </Modal>

@@ -106,4 +106,45 @@ describe('FileRepository — Google Drive-forbindelsen', () => {
 
     expect(await repo.hentGoogleDriveForbindelse()).toBeNull();
   });
+
+  it('nulstiller regnskab og chat, men bevarer profil og Google Drive-forbindelse', async () => {
+    await repo.gemProfil({ navn: 'Carsten', hjemmeadresse: 'Testvej 1', kommune: 'Slagelse' });
+    await repo.gemIndkomstAar({
+      id: 'aar-test',
+      aar: 2026,
+      hjemmeadresse: 'Testvej 1',
+      kommune: 'Slagelse',
+      kommuneSkatteprocent: 26.1,
+      kirkeskatteprocent: 0,
+      forventetAIndkomst: 0,
+      forventetPensionSUDagpenge: 0,
+      forventetDagpenge: 0,
+      forventedeFradragAIndkomst: 0,
+      medlemFolkekirken: false,
+      enligForsoerger: false,
+      seniorfradragBerettiget: false,
+      borPaaUdpegetSmaaoe: false,
+      laast: false,
+    });
+    await repo.gemChatBesked({
+      rolle: 'bruger',
+      indhold: 'testdata',
+      tidspunkt: '2026-01-01T00:00:00.000Z',
+    });
+    await repo.gemGoogleDriveForbindelse({
+      refreshToken: 'bevares',
+      mappeId: 'mappe-1',
+      snapshotFilId: null,
+      forbundetTidspunkt: '2026-01-01T00:00:00.000Z',
+      sidsteFejl: null,
+      sidsteFejlTidspunkt: null,
+    });
+
+    await repo.nulstilRegnskab();
+
+    expect((await repo.hentAlt()).indkomstAar).toEqual([]);
+    expect((await repo.hentProfil()).navn).toBe('Carsten');
+    expect(await repo.hentChatHistorik(10)).toEqual([]);
+    expect((await repo.hentGoogleDriveForbindelse())?.refreshToken).toBe('bevares');
+  });
 });

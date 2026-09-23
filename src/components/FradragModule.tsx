@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import type { Bilag, Fradrag, IndkomstAar } from '../types';
+import type { Bilag, Fradrag, IndkomstAar, Job } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
-import { dato, kr, pct, talFraFelt } from '../lib/format';
+import { dato, kr, talFraFelt } from '../lib/format';
 import { api } from '../lib/api';
 import { Sparkles } from 'lucide-react';
 import {
@@ -23,10 +23,12 @@ import {
   Tekstfelt,
   Th,
   TomTilstand,
+  Vaelger,
 } from './ui';
 
 interface Props {
   fradragListe: Fradrag[];
+  jobs: Job[];
   bilag: Bilag[];
   indkomstAar: IndkomstAar;
   beregning: SkatteBeregning;
@@ -53,6 +55,7 @@ const nytFradrag = (indkomstAarId: string, aar: number): Fradrag => ({
 
 export function FradragModule({
   fradragListe,
+  jobs,
   bilag,
   indkomstAar,
   beregning,
@@ -69,6 +72,9 @@ export function FradragModule({
   const [procent, setProcent] = useState('100');
 
   const bilagIndeks = useMemo(() => new Map(bilag.map((b) => [b.id, b])), [bilag]);
+  const jobIndeks = useMemo(() => new Map(jobs.map((j) => [j.id, j])), [jobs]);
+  const jobNavn = (job: Job) =>
+    job.hvervgiver?.trim() || job.booker?.trim() || `Job ${dato(job.startDato)}`;
 
   const grupper = useMemo(() => {
     const kort = new Map<string, Fradrag[]>();
@@ -238,6 +244,11 @@ export function FradragModule({
                           {f.revisorNotat}
                         </span>
                       )}
+                      {f.jobId && jobIndeks.get(f.jobId) && (
+                        <span className="block text-2xs text-ink-faint">
+                          Job: {jobNavn(jobIndeks.get(f.jobId)!)}
+                        </span>
+                      )}
                       {(f.bilagIds ?? []).map((id) => {
                         const b = bilagIndeks.get(id);
                         return b ? (
@@ -327,6 +338,8 @@ export function FradragModule({
                         <>
                           {dato(f.fakturaDato)} · {kr(f.fakturaBeloeb)} kr.
                           {f.fradragsProcent !== 100 && ` · ${f.fradragsProcent} % erhverv`}
+                          {f.jobId && jobIndeks.get(f.jobId) &&
+                            ` · Job: ${jobNavn(jobIndeks.get(f.jobId)!)}`}
                         </>
                       }
                       beloeb={`${kr(f.fradragIDKK)} kr.`}
@@ -441,6 +454,31 @@ export function FradragModule({
                 )}
               </Felt>
             </div>
+
+            <Felt
+              label="Tilknyttet job"
+              hjaelp="Vælg jobbet, hvis udgiften gælder netop dette job, f.eks. parkering eller bro."
+            >
+              {(id) => (
+                <Vaelger
+                  id={id}
+                  value={redigerer.jobId ?? ''}
+                  onChange={(e) =>
+                    setRedigerer({ ...redigerer, jobId: e.target.value || undefined })
+                  }
+                >
+                  <option value="">Ingen bestemt jobtilknytning</option>
+                  {jobs
+                    .filter((j) => j.honorar > 0)
+                    .sort((a, b) => b.startDato.localeCompare(a.startDato))
+                    .map((job) => (
+                      <option key={job.id} value={job.id}>
+                        {dato(job.startDato)} · {jobNavn(job)} · {kr(job.honorar)} kr.
+                      </option>
+                    ))}
+                </Vaelger>
+              )}
+            </Felt>
 
             <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto]">
               <Felt label="Fakturabeløb" paakraevet hjaelp="Hele beløbet inklusive moms.">

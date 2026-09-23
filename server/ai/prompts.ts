@@ -63,7 +63,7 @@ export const chatSystemprompt = (
   const kommune = (profilObj.kommune || beregnObj.kommune || '') as string;
   const kunstnerNavn = (profilObj.kunstnerNavn || '') as string;
   const standardTransport = (profilObj.standardTransportmiddel || 'OWN_CAR_MC') as string;
-  const fastHvervgiver = (profilObj.fastHvervgiver || beregnObj.fastHvervgiver || '') as string;
+  const fastBooker = (profilObj.fastBooker || profilObj.fastHvervgiver || beregnObj.fastBooker || '') as string;
   const kendteHvervgivere = Array.isArray(beregnObj.kendteHvervgivere)
     ? (beregnObj.kendteHvervgivere as string[]).filter(Boolean)
     : [];
@@ -78,7 +78,7 @@ ${kunstnerNavn ? `- Kunstnernavn / Alias: ${kunstnerNavn}` : ''}
 - Fast bopælsadresse (hjem): ${bopael || 'Ikke angivet'}
 ${kommune ? `- Bopælskommune: ${kommune}` : ''}
 - Standard transportmiddel: ${standardTransport}
-${fastHvervgiver ? `- Fast booker / hvervgiver: ${fastHvervgiver} (brugerens primære bookingbureau eller udbetaler)` : ''}
+${fastBooker ? `- Fast booker: ${fastBooker}` : ''}
 ${profilObj.noter ? `- Faste noter til revisor: ${profilObj.noter}` : ''}
 ${kendteHvervgivere.length > 0 ? `- Kendte tidligere hvervgivere/bookere i regnskabet: ${kendteHvervgivere.map((h) => `"${h}"`).join(', ')}` : ''}
 
@@ -89,14 +89,16 @@ AGENTISKE PRINCIPPER OG DECHIFRERING AF INTENTION:
    - Træk på hele den tilgængelige kontekst (brugerens faste bopæl: "${bopael}", eksisterende jobs, aktive udkast og dags dato):
      * SKELN SKARPT MELLEM HVERVGIVER OG SPILLESTED / ARBEJDSSTED / VÆRT:
        - Sæt ALDRIG lighedstegn mellem spillested/arbejdssted og hvervgiver (eller vært)!
-       - Hvervgiver er den juridiske kontraktpart, bookingbureau, agentur eller udbetaler, der betaler honoraret og indberetter B-indkomst til Skattestyrelsen (f.eks. et bookingbureau som Tajmer Booking, PDH Music, en arrangør mv.). For brugeren er hvervgiveren ofte den SAMME booker hen over mange jobs, mens stederne varierer.
-       ${fastHvervgiver ? `- Brugeren har en fast booker/hvervgiver ("${fastHvervgiver}"). Når brugeren blot nævner et spillested/by og et beløb uden at nævne en anden udbetaler, skal hvervgiver automatisk sættes til "${fastHvervgiver}".` : ''}
-       ${!fastHvervgiver && kendteHvervgivere.length > 0 ? `- Brugeren har tidligere brugt følgende bookere/hvervgivere: ${kendteHvervgivere.join(', ')}. Hvis brugeren nævner et spillested, skal spillestedet IKKE gøres til hvervgiver.` : ''}
+       - Hvervgiver er den juridiske kontraktpart eller udbetaler, der betaler honoraret og indberetter B-indkomst. Booker er bureauet, agenten eller personen, der formidlede jobbet. De kan være den samme, men skal gemmes i hvert sit felt, når begge kendes.
+       ${fastBooker ? `- Brugeren har en fast booker ("${fastBooker}"). Brug den som booker, når ingen anden booker nævnes; sæt den kun som hvervgiver, hvis det også fremgår, at den udbetaler honoraret.` : ''}
+       ${!fastBooker && kendteHvervgivere.length > 0 ? `- Brugeren har tidligere brugt følgende hvervgivere/bookere: ${kendteHvervgivere.join(', ')}. Hvis brugeren nævner et spillested, skal spillestedet IKKE automatisk gøres til hvervgiver.` : ''}
        - Destination / arbejdssted ("destinationAdresse"): Det fysiske spillested, hotel, konferencecenter eller adresse, hvortil der er kørt (f.eks. "Comwell Kolding", "Vega", "Hotel Nyborg Strand", "Kulturhuset Trommen", eller en adresse).
        - Vært / kunde: Den konferencevært, festarrangør eller institution, som har hyret bookeren. Værten er IKKE hvervgiver, medmindre brugeren har indgået kontrakten direkte med vedkommende.
        - EKSEMPEL: "Jeg spillede på Comwell i Kolding for 4000 kr."
          -> destinationAdresse = "Comwell Kolding"
-         -> hvervgiver = ${fastHvervgiver ? `"${fastHvervgiver}"` : 'brugerens faste booker, eller spørg venligt hvis det er ukendt, men ALDRIG "Comwell Kolding"'}.
+         -> booker = ${fastBooker ? `"${fastBooker}"` : 'den nævnte booker, hvis nogen, men ALDRIG automatisk "Comwell Kolding"'}.
+         -> hvervgiver udfyldes kun, når udbetaleren/kontraktparten kendes.
+       - betaltSkat er kun faktisk betalt eller indeholdt skat, der står i brugerens oplysninger eller dokument. Beregn eller gæt aldrig feltet.
      * Tidsangivelser: "i dag", "i går", "i søndags", "i weekenden" omregnes straks til den korrekte dato (YYYY-MM-DD). Sæt startDato (og slutDato ved enkeltstående jobs/kørsel).
      * Kørsel og transport: "kørte selv", "i min bil", "kørte i egen bil", "egen bil" -> sæt transportmiddel til "OWN_CAR_MC". Antal ture sættes til 1.
      * Tur/retur er altid standard: Kørsel regnes altid som en samlet tur/retur fra brugerens faste bopæl ("${bopael}") til destinationen (og hjem igen).

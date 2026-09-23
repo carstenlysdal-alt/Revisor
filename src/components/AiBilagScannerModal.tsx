@@ -434,8 +434,8 @@ export function AiBilagScannerModal({
 
           {valgtType === 'JOB' && (
             <div className="space-y-4 border-t border-rule pt-4">
-              <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
-                <Felt label="Hvervgiver" paakraevet>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Felt label="Hvervgiver">
                   {(id) => (
                     <>
                       <Tekstfelt
@@ -448,6 +448,21 @@ export function AiBilagScannerModal({
                     </>
                   )}
                 </Felt>
+                <Felt label="Booker">
+                  {(id) => (
+                    <>
+                      <Tekstfelt
+                        id={id}
+                        value={tekst.booker ?? ''}
+                        onChange={(e) => setTekst({ ...tekst, booker: e.target.value })}
+                        className={usikkert(sik('job', 'booker')) ? 'border-negative' : ''}
+                      />
+                      <UsikkerMarkering sikkerhed={sik('job', 'booker')} />
+                    </>
+                  )}
+                </Felt>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
                 <Felt label="Honorar" paakraevet>
                   {(id) => (
                     <>
@@ -457,6 +472,18 @@ export function AiBilagScannerModal({
                         onVaerdi={(v) => setTekst({ ...tekst, honorar: v })}
                       />
                       <UsikkerMarkering sikkerhed={sik('job', 'honorar')} />
+                    </>
+                  )}
+                </Felt>
+                <Felt label="Betalt skat for jobbet">
+                  {(id) => (
+                    <>
+                      <BeloebFelt
+                        id={id}
+                        vaerdi={tekst.betaltSkat ?? ''}
+                        onVaerdi={(v) => setTekst({ ...tekst, betaltSkat: v })}
+                      />
+                      <UsikkerMarkering sikkerhed={sik('job', 'betaltSkat')} />
                     </>
                   )}
                 </Felt>

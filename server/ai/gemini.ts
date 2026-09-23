@@ -39,7 +39,9 @@ const RESPONSE_SCHEMA = {
       nullable: true,
       properties: {
         hvervgiver: felt(Type.STRING),
+        booker: felt(Type.STRING),
         honorar: felt(Type.NUMBER),
+        betaltSkat: felt(Type.NUMBER),
         startDato: felt(Type.STRING),
         slutDato: felt(Type.STRING),
         betalingsDato: felt(Type.STRING),
@@ -82,7 +84,9 @@ const RESPONSE_SCHEMA = {
 /** Samme feltgrupper som RESPONSE_SCHEMA, genbrugt til værktøjets parametre. */
 const JOB_FELTER = {
   hvervgiver: felt(Type.STRING),
+  booker: felt(Type.STRING),
   honorar: felt(Type.NUMBER),
+  betaltSkat: felt(Type.NUMBER),
   startDato: felt(Type.STRING),
   slutDato: felt(Type.STRING),
   betalingsDato: felt(Type.STRING),

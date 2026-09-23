@@ -2,15 +2,14 @@ import readline from 'readline';
 
 /**
  * Rydder hele regnskabet: alle indkomstår, jobs, fradrag, investeringer,
- * opsparing og bilag. Bruges til at starte helt forfra, fx efter testdata.
+ * opsparing, bilag og chat-historik. Bruges til at starte helt forfra, fx
+ * efter testdata. Profilen og faste forbindelser bevares.
  *
  * Går gennem appens eget API, ligesom backup.ts, i stedet for direkte i
  * databasen — af samme grund: der skal ikke findes en vej uden om login.
  *
- * Sletning af hvert indkomstår cascader jobs, fradrag, investeringer og
- * opsparing i databasen. Bilag hænger ikke på et indkomstår og skal derfor
- * slettes for sig, ét ad gangen, gennem det samme sletBilag-kald som resten
- * af appen bruger.
+ * Serverens samlede nulstillingskald rydder både regnskab, bilag og
+ * chat-historik, men bevarer profil og faste forbindelser.
  */
 
 const URL_BASE = (process.env.REVISOR_URL || 'http://localhost:3000').replace(/\/$/, '');
@@ -27,7 +26,9 @@ function spoerg(spoergsmaal: string): Promise<string> {
 
 async function main() {
   console.log(`\nDette sletter ALT i regnskabet på ${URL_BASE}:`);
-  console.log('alle indkomstår, jobs, fradrag, investeringer, opsparing og bilag.');
+  console.log('alle indkomstår, jobs, fradrag, investeringer, opsparing, bilag og chat-historik.');
+  console.log('Din profil og faste forbindelser bevares.');
+  console.log('Eksisterende sikkerhedskopier i Google Drev slettes ikke fra Drev.');
   console.log('Det kan ikke fortrydes. Tag en backup først, hvis du er i tvivl:');
   console.log(`  REVISOR_URL="${URL_BASE}" npm run backup\n`);
 
@@ -97,36 +98,18 @@ async function main() {
     process.exit(1);
   }
 
-  let fejlet = 0;
-
-  for (const bilag of data.bilag) {
-    const res = await fetch(`${URL_BASE}/api/bilag/${bilag.id}`, {
-      method: 'DELETE',
-      headers,
-    });
-    if (!res.ok) {
-      console.warn(`  Kunne ikke slette bilag ${bilag.filnavn} (HTTP ${res.status}).`);
-      fejlet += 1;
-    }
-  }
-  if (data.bilag.length > 0) console.log(`Bilag slettet: ${data.bilag.length - fejlet} af ${data.bilag.length}.`);
-
-  for (const aar of data.indkomstAar) {
-    const res = await fetch(`${URL_BASE}/api/indkomstaar/${aar.id}`, {
-      method: 'DELETE',
-      headers,
-    });
-    if (!res.ok) {
-      console.warn(`  Kunne ikke slette indkomståret ${aar.aar} (HTTP ${res.status}).`);
-      fejlet += 1;
-    }
-  }
-  if (data.indkomstAar.length > 0) {
-    console.log(`Indkomstår slettet: ${data.indkomstAar.length} (jobs, fradrag, investeringer og opsparing følger med).`);
+  const nulstil = await fetch(`${URL_BASE}/api/nulstil`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ bekraeftelse: 'SLET ALT' }),
+  });
+  if (!nulstil.ok) {
+    const fejl = (await nulstil.json().catch(() => ({}))) as { fejl?: string };
+    console.error(`\n${fejl.fejl || `Nulstillingen fejlede (HTTP ${nulstil.status}).`}`);
+    process.exit(1);
   }
 
-  console.log(fejlet > 0 ? `\nFærdig, men ${fejlet} kald fejlede — se advarslerne ovenfor.` : '\nFærdig. Regnskabet er tomt.');
-  if (fejlet > 0) process.exitCode = 1;
+  console.log('\nFærdig. Regnskabet og Revisor-chathistorikken er tomme. Profilen er bevaret.');
 }
 
 void main();

@@ -138,6 +138,11 @@ export function useRevisorData(aktiv: boolean) {
     );
   }, []);
 
+  const nulstilRegnskab = useCallback(async () => {
+    await api.nulstilRegnskab();
+    setData((d) => ({ ...tomt, profil: d.profil }));
+  }, []);
+
   return {
     data,
     tilstand,
@@ -154,5 +159,6 @@ export function useRevisorData(aktiv: boolean) {
     sletInvestering,
     gemOpsparing,
     tilfoejBilag,
+    nulstilRegnskab,
   };
 }

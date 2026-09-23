@@ -93,6 +93,9 @@ export interface Repository {
   ): Promise<void>;
   sletBilag(id: string): Promise<void>;
 
+  /** Sletter regnskabsdata, bilag og chat-historik, men bevarer profil og forbindelser. */
+  nulstilRegnskab(): Promise<void>;
+
   /** Erstatter hele datasættet. Bruges af eksempeldata og nulstilling. */
   erstatAlt(snapshot: DataSnapshot): Promise<void>;
 

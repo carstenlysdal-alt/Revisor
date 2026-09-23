@@ -16,6 +16,9 @@ export interface BrugerProfil {
   medlemFolkekirken?: boolean;
   standardTransportmiddel?: TransportMiddel;
   standardBilorMærke?: string;
+  /** Fast bookingbureau eller person. Adskilt fra den, der faktisk udbetaler honoraret. */
+  fastBooker?: string;
+  /** @deprecated Beholdes kun, så ældre profiler kan migreres til fastBooker. */
   fastHvervgiver?: string;
   noter?: string;
 }
@@ -42,6 +45,8 @@ export interface Job {
   id: string;
   indkomstAarId: string;
   hvervgiver: string;
+  /** Bureau, agent eller person, der bookede jobbet. Kan være en anden end hvervgiveren. */
+  booker?: string;
   /** Valgfri tilknytning til et job for en kørselspost (f.eks. ved en øver eller prøve knyttet til et job). */
   tilknyttetJob?: string;
   honorar: number;
@@ -49,6 +54,8 @@ export interface Job {
   startDato: string;
   slutDato: string;
   betalingsDato: string;
+  /** Faktisk registreret skat/B-skat, som brugeren henfører til netop dette job. */
+  betaltSkat?: number;
   transportmiddel: TransportMiddel;
   /** Strækning for én tur. */
   antalKm: number;
@@ -86,6 +93,8 @@ export interface Job {
 export interface Fradrag {
   id: string;
   indkomstAarId: string;
+  /** Valgfri tilknytning til det job, som udgiften vedrører. */
+  jobId?: string;
   beskrivelse: string;
   typeKategori: string;
   fakturaDato: string;
@@ -141,7 +150,9 @@ export interface UdtruktFelt<T> {
 
 export interface JobUdtraek {
   hvervgiver: UdtruktFelt<string>;
+  booker?: UdtruktFelt<string>;
   honorar: UdtruktFelt<number>;
+  betaltSkat?: UdtruktFelt<number>;
   startDato: UdtruktFelt<string>;
   slutDato: UdtruktFelt<string>;
   betalingsDato: UdtruktFelt<string>;

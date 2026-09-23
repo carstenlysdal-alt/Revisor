@@ -68,6 +68,11 @@ export const api = {
   logout: () => kald<{ loggetInd: boolean }>('/auth/logout', { method: 'POST' }),
 
   hentAlt: () => kald<DataSnapshot>('/data'),
+  nulstilRegnskab: () =>
+    kald<{ ok: true }>('/nulstil', {
+      method: 'POST',
+      body: JSON.stringify({ bekraeftelse: 'SLET ALT' }),
+    }),
   hentProfil: () => kald<BrugerProfil>('/profil'),
   gemProfil: (p: BrugerProfil) =>
     kald<BrugerProfil>('/profil', {

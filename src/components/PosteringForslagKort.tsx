@@ -282,8 +282,8 @@ export function PosteringForslagKort({
 
       {forslag.klassifikation === 'JOB' && (
         <div className="mt-3 space-y-3">
-          <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
-            <Felt label="Hvervgiver" paakraevet>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Felt label="Hvervgiver">
               {(id) => (
                 <>
                   <Tekstfelt
@@ -295,6 +295,20 @@ export function PosteringForslagKort({
                 </>
               )}
             </Felt>
+            <Felt label="Booker">
+              {(id) => (
+                <>
+                  <Tekstfelt
+                    id={id}
+                    value={tekst.booker ?? ''}
+                    onChange={(e) => setTekst({ ...tekst, booker: e.target.value })}
+                  />
+                  <UsikkerMærke sikkerhed={sik(forslag.job as never, 'booker')} />
+                </>
+              )}
+            </Felt>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
             <Felt label="Honorar" paakraevet>
               {(id) => (
                 <>
@@ -304,6 +318,18 @@ export function PosteringForslagKort({
                     onVaerdi={(v) => setTekst({ ...tekst, honorar: v })}
                   />
                   <UsikkerMærke sikkerhed={sik(forslag.job as never, 'honorar')} />
+                </>
+              )}
+            </Felt>
+            <Felt label="Betalt skat for jobbet">
+              {(id) => (
+                <>
+                  <BeloebFelt
+                    id={id}
+                    vaerdi={tekst.betaltSkat ?? ''}
+                    onVaerdi={(v) => setTekst({ ...tekst, betaltSkat: v })}
+                  />
+                  <UsikkerMærke sikkerhed={sik(forslag.job as never, 'betaltSkat')} />
                 </>
               )}
             </Felt>

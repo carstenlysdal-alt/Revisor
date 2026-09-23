@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import type { Bilag, BrugerProfil, IndkomstAar, Job, TransportMiddel } from '../types';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Bilag, BrugerProfil, Fradrag, IndkomstAar, Job, TransportMiddel } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
 import { betalingKrydserAarsskifte } from '../lib/tax/beregn';
 import { beregnKoerselForJob } from '../lib/tax/koersel';
@@ -33,6 +33,7 @@ import { AdresseInput } from './AdresseInput';
 
 interface Props {
   jobs: Job[];
+  fradragListe: Fradrag[];
   bilag: Bilag[];
   indkomstAar: IndkomstAar;
   profil?: BrugerProfil;
@@ -94,18 +95,20 @@ const nyKoersel = (indkomstAarId: string, aar: number): Job => {
   };
 };
 
-const nytJob = (indkomstAarId: string, aar: number, standardHvervgiver?: string): Job => {
+const nytJob = (indkomstAarId: string, aar: number, standardBooker?: string): Job => {
   const dag = idag();
   const d = dag.startsWith(String(aar)) ? dag : `${aar}-01-01`;
   return {
     id: `job-${Date.now()}`,
     indkomstAarId,
-    hvervgiver: standardHvervgiver?.trim() || '',
+    hvervgiver: '',
+    booker: standardBooker?.trim() || '',
     tilknyttetJob: '',
     honorar: 0,
     startDato: d,
     slutDato: d,
     betalingsDato: '',
+    betaltSkat: 0,
     transportmiddel: 'NONE',
     antalKm: 0,
     antalTure: 1,
@@ -120,6 +123,7 @@ const nytJob = (indkomstAarId: string, aar: number, standardHvervgiver?: string)
 
 export function JobsModule({
   jobs,
+  fradragListe,
   bilag,
   indkomstAar,
   profil,
@@ -137,6 +141,7 @@ export function JobsModule({
   const [sletter, setSletter] = useState<Job | null>(null);
 
   const [honorar, setHonorar] = useState('');
+  const [betaltSkat, setBetaltSkat] = useState('');
   const [km, setKm] = useState('');
   const [ture, setTure] = useState('1');
   const [timerJob, setTimerJob] = useState('');
@@ -254,6 +259,19 @@ export function JobsModule({
     () => new Map(beregning.koersel.linjer.map((l) => [l.jobId, l])),
     [beregning]
   );
+  const fradragPrJob = useMemo(() => {
+    const kort = new Map<string, Fradrag[]>();
+    for (const f of fradragListe) {
+      if (!f.jobId) continue;
+      kort.set(f.jobId, [...(kort.get(f.jobId) ?? []), f]);
+    }
+    return kort;
+  }, [fradragListe]);
+
+  const jobNavn = (job: Job) => job.hvervgiver?.trim() || job.booker?.trim() || 'Job uden navn';
+  const jobFradrag = (job: Job) =>
+    (koerselPrJob.get(job.id)?.fradrag ?? 0) +
+    (fradragPrJob.get(job.id) ?? []).reduce((sum, f) => sum + f.fradragIDKK, 0);
 
   const aabn = (job: Job, kopi = false) => {
     setFejl(null);
@@ -264,6 +282,7 @@ export function JobsModule({
       : { ...job, bilagIds: job.bilagIds ?? [] };
     setRedigerer(post);
     setHonorar(post.honorar ? String(post.honorar) : '');
+    setBetaltSkat(post.betaltSkat ? String(post.betaltSkat) : '');
     setKm(post.antalKm ? String(post.antalKm) : '');
     setTure(String(post.antalTure || 1));
     setTimerJob(post.timerJob ? String(post.timerJob) : '');
@@ -305,8 +324,8 @@ export function JobsModule({
         return;
       }
     } else {
-      if (!redigerer.hvervgiver.trim()) {
-        setFejl('Skriv hvem der har hyret dig. Uden hvervgiver kan posten ikke dokumenteres.');
+      if (!redigerer.hvervgiver.trim() && !redigerer.booker?.trim()) {
+        setFejl('Skriv mindst en hvervgiver eller booker, så jobbet kan identificeres.');
         return;
       }
     }
@@ -329,6 +348,7 @@ export function JobsModule({
         ...redigerer,
         tilknyttetJob: redigerer.tilknyttetJob?.trim() || undefined,
         honorar: talFraFelt(honorar),
+        betaltSkat: talFraFelt(betaltSkat),
         antalKm: talFraFelt(km),
         antalTure: Math.max(0, Math.round(talFraFelt(ture))),
         timerJob: talFraFelt(timerJob) || undefined,
@@ -368,7 +388,7 @@ export function JobsModule({
         Opret kørsel
       </Knap>
     ) : (
-      <Knap art="primaer" onClick={() => aabn(nytJob(indkomstAar.id, indkomstAar.aar, profil?.fastHvervgiver))}>
+      <Knap art="primaer" onClick={() => aabn(nytJob(indkomstAar.id, indkomstAar.aar, profil?.fastBooker ?? profil?.fastHvervgiver))}>
         Nyt job
       </Knap>
     );
@@ -548,15 +568,17 @@ export function JobsModule({
       ) : (
         <Responsiv
           tabel={
-            <Tabel minBredde={720}>
+            <Tabel minBredde={1040}>
           <thead>
             <tr>
               <Th bredde="2.5rem" />
-              <Th>Hvervgiver</Th>
+              <Th>Hvervgiver / booker</Th>
               <Th bredde="7rem">Dato</Th>
               <Th bredde="7rem">Betaling</Th>
               <Th hoejre bredde="8rem">Honorar</Th>
-              <Th bredde="13rem" />
+              <Th hoejre bredde="7rem">Skat betalt</Th>
+              <Th hoejre bredde="8rem">Fradrag</Th>
+              <Th bredde="12rem" />
             </tr>
           </thead>
           <tbody>
@@ -568,9 +590,17 @@ export function JobsModule({
                     <Rubrik nr={job.erRubrik17 ? 17 : 12} aktiv />
                   </Td>
                   <Td>
-                    <span className="font-medium text-ink">{job.hvervgiver}</span>
+                    <button
+                      type="button"
+                      onClick={() => aabn(job)}
+                      className="font-medium text-ink underline-offset-4 hover:underline"
+                    >
+                      {jobNavn(job)}
+                    </button>
                     <span className="block text-2xs text-ink-faint">
                       {[
+                        job.hvervgiver && job.booker ? `Booket af ${job.booker}` : null,
+                        !job.hvervgiver && job.booker ? 'Ingen særskilt hvervgiver' : null,
                         job.type,
                         job.amBidragFritaget ? 'Fritaget for AM-bidrag' : null,
                         job.timerJob ? timer(job.timerJob) : null,
@@ -610,6 +640,17 @@ export function JobsModule({
                   <Td hoejre tal>
                     {kr(job.honorar)}
                   </Td>
+                  <Td hoejre tal>{kr(job.betaltSkat ?? 0)}</Td>
+                  <Td hoejre tal>
+                    <button
+                      type="button"
+                      onClick={() => aabn(job)}
+                      className="underline underline-offset-4 hover:text-ink"
+                      title="Se kørsel og øvrige udgifter for jobbet"
+                    >
+                      {kr(jobFradrag(job))}
+                    </button>
+                  </Td>
                   <Td hoejre>
                     <div className="ikke-print flex justify-end gap-1">
                       <Knap
@@ -641,6 +682,8 @@ export function JobsModule({
               celler={[
                 { indhold: `${visteJobs.length} ${visteJobs.length === 1 ? 'job' : 'jobs'}`, span: 4 },
                 { indhold: kr(beregning.honorarerRubrik12 + beregning.rubrik17Indkomst), hoejre: true, tal: true },
+                { indhold: kr(visteJobs.reduce((sum, j) => sum + (j.betaltSkat ?? 0), 0)), hoejre: true, tal: true },
+                { indhold: kr(visteJobs.reduce((sum, j) => sum + jobFradrag(j), 0)), hoejre: true, tal: true },
                 { indhold: '' },
               ]}
             />
@@ -650,25 +693,23 @@ export function JobsModule({
           liste={
             <>
               {visteJobs.map((job) => {
-                const linje = koerselPrJob.get(job.id);
                 return (
                   <MobilPost
                     key={job.id}
                     rubrik={job.erRubrik17 ? 17 : 12}
-                    titel={job.hvervgiver}
+                    titel={jobNavn(job)}
                     undertitel={
                       <>
                         {dato(job.startDato)}
                         {job.betalingsDato && ` · betales ${dato(job.betalingsDato)}`}
                         {job.type && ` · ${job.type}`}
+                        {job.hvervgiver && job.booker && ` · booket af ${job.booker}`}
                         {job.amBidragFritaget && ' · fritaget for AM-bidrag'}
                       </>
                     }
                     beloeb={`${kr(job.honorar)} kr.`}
                     beloebNote={
-                      linje && linje.fradrag > 0
-                        ? `+ ${kr(linje.fradrag)} kr. kørsel`
-                        : undefined
+                      `${kr(job.betaltSkat ?? 0)} kr. skat · ${kr(jobFradrag(job))} kr. fradrag`
                     }
                     handlinger={
                       laast ? undefined : (
@@ -707,7 +748,11 @@ export function JobsModule({
         onLuk={() => setRedigerer(null)}
         titel={
           jobs.some((j) => j.id === redigerer?.id)
-            ? visning === 'koersel'
+            ? laast
+              ? visning === 'koersel'
+                ? 'Kørselsdetaljer'
+                : 'Jobdetaljer'
+              : visning === 'koersel'
               ? 'Rediger kørsel'
               : 'Rediger job'
             : visning === 'koersel'
@@ -715,12 +760,16 @@ export function JobsModule({
               : 'Nyt job'
         }
         bund={
-          <>
-            <Knap onClick={() => setRedigerer(null)}>Annullér</Knap>
-            <Knap art="primaer" onClick={gem} disabled={gemmer}>
-              {gemmer ? 'Gemmer' : visning === 'koersel' ? 'Gem kørsel' : 'Gem job'}
-            </Knap>
-          </>
+          laast ? (
+            <Knap onClick={() => setRedigerer(null)}>Luk</Knap>
+          ) : (
+            <>
+              <Knap onClick={() => setRedigerer(null)}>Annullér</Knap>
+              <Knap art="primaer" onClick={gem} disabled={gemmer}>
+                {gemmer ? 'Gemmer' : visning === 'koersel' ? 'Gem kørsel' : 'Gem job'}
+              </Knap>
+            </>
+          )
         }
       >
         {redigerer && (
@@ -821,8 +870,8 @@ export function JobsModule({
               </>
             ) : (
               <>
-                <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
-                  <Felt label="Hvervgiver" paakraevet>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Felt label="Hvervgiver" hjaelp="Den virksomhed eller person, der udbetaler honoraret.">
                     {(id) => (
                       <Tekstfelt
                         id={id}
@@ -832,8 +881,24 @@ export function JobsModule({
                       />
                     )}
                   </Felt>
+                  <Felt label="Booker" hjaelp="Bureau, agent eller person, der bookede jobbet, hvis det er en anden.">
+                    {(id) => (
+                      <Tekstfelt
+                        id={id}
+                        value={redigerer.booker ?? ''}
+                        placeholder="Hvem bookede jobbet"
+                        onChange={(e) => setRedigerer({ ...redigerer, booker: e.target.value })}
+                      />
+                    )}
+                  </Felt>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
                   <Felt label="Honorar" paakraevet hjaelp="Beløbet før AM-bidrag og skat.">
                     {(id) => <BeloebFelt id={id} vaerdi={honorar} onVaerdi={setHonorar} />}
+                  </Felt>
+                  <Felt label="Betalt skat for jobbet" hjaelp="Den faktiske B-skat eller skat, du henfører til netop dette job.">
+                    {(id) => <BeloebFelt id={id} vaerdi={betaltSkat} onVaerdi={setBetaltSkat} />}
                   </Felt>
                 </div>
 
@@ -887,6 +952,40 @@ export function JobsModule({
                     året, hvor du fik endelig ret til honoraret; for et almindeligt afsluttet job
                     vil det normalt være slutåret.
                   </Advarsel>
+                )}
+
+                {jobs.some((j) => j.id === redigerer.id) && (
+                  <div className="border-t border-rule pt-4">
+                    <div className="flex items-baseline justify-between gap-4">
+                      <h3 className="font-display text-sm font-semibold text-ink">Fradrag på jobbet</h3>
+                      <span className="tal text-sm font-semibold text-ink">{kr(jobFradrag(redigerer))} kr.</span>
+                    </div>
+                    <div className="mt-2 divide-y divide-rule border-y border-rule text-xs">
+                      {(koerselPrJob.get(redigerer.id)?.fradrag ?? 0) > 0 && (
+                        <div className="flex justify-between gap-4 py-2">
+                          <span>
+                            Kørsel · {(koerselPrJob.get(redigerer.id)?.kmIAlt ?? 0).toLocaleString('da-DK')} km
+                          </span>
+                          <span className="tal">{kr(koerselPrJob.get(redigerer.id)?.fradrag ?? 0)} kr.</span>
+                        </div>
+                      )}
+                      {(fradragPrJob.get(redigerer.id) ?? []).map((f) => (
+                        <div key={f.id} className="flex justify-between gap-4 py-2">
+                          <span>
+                            {f.beskrivelse}
+                            <span className="ml-1 text-ink-faint">· {f.typeKategori || 'Udgift'} · {dato(f.fakturaDato)}</span>
+                          </span>
+                          <span className="tal">{kr(f.fradragIDKK)} kr.</span>
+                        </div>
+                      ))}
+                      {jobFradrag(redigerer) === 0 && (
+                        <p className="py-2 text-ink-muted">Der er endnu ingen kørsel eller øvrige udgifter knyttet til jobbet.</p>
+                      )}
+                    </div>
+                    <p className="mt-2 text-2xs text-ink-muted">
+                      Parkering, bro og andre udgifter knyttes til jobbet under Udgifter & fradrag.
+                    </p>
+                  </div>
                 )}
               </>
             )}

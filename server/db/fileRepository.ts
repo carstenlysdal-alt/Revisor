@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import type {
   Bilag,
+  BrugerProfil,
   Fradrag,
   IndkomstAar,
   Investering,
@@ -13,6 +14,7 @@ import {
   DataSnapshot,
   GoogleDriveForbindelse,
   Repository,
+  tomtProfil,
   tomtSnapshot,
 } from './repository';
 
@@ -198,6 +200,18 @@ export class FileRepository implements Repository {
       s.fradrag.forEach((f) => (f.bilagIds = f.bilagIds.filter((x) => x !== id)));
       s.investeringer.forEach((i) => (i.bilagIds = i.bilagIds.filter((x) => x !== id)));
     });
+  }
+
+  async nulstilRegnskab() {
+    await this.transaktion<void>((s) => {
+      s.indkomstAar = [];
+      s.jobs = [];
+      s.fradrag = [];
+      s.investeringer = [];
+      s.opsparing = {};
+      s.bilag = [];
+    });
+    await fs.rm(this.chatFilsti, { force: true });
   }
 
   erstatAlt(snapshot: DataSnapshot) {

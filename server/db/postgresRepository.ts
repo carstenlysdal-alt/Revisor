@@ -123,11 +123,13 @@ export class PostgresRepository implements Repository, BilagsLager {
         id: r.id,
         indkomstAarId: r.indkomstaar_id,
         hvervgiver: r.hvervgiver ?? '',
+        booker: r.booker ?? '',
         tilknyttetJob: r.tilknyttet_job ?? undefined,
         honorar: tal(r.honorar),
         startDato: dato(r.start_dato),
         slutDato: dato(r.slut_dato),
         betalingsDato: r.betalings_dato ? dato(r.betalings_dato) : '',
+        betaltSkat: tal(r.betalt_skat),
         transportmiddel: r.transportmiddel,
         antalKm: tal(r.antal_km),
         antalTure: tal(r.antal_ture),
@@ -151,6 +153,7 @@ export class PostgresRepository implements Repository, BilagsLager {
       (r): Fradrag => ({
         id: r.id,
         indkomstAarId: r.indkomstaar_id,
+        jobId: r.job_id ?? undefined,
         beskrivelse: r.beskrivelse ?? '',
         typeKategori: r.type_kategori ?? '',
         fakturaDato: dato(r.faktura_dato),
@@ -262,19 +265,21 @@ export class PostgresRepository implements Repository, BilagsLager {
 
   async gemJob(j: Job): Promise<Job> {
     await this.pool.query(
-      `INSERT INTO job (id, indkomstaar_id, hvervgiver, tilknyttet_job, honorar, start_dato, slut_dato,
-         betalings_dato, transportmiddel, antal_km, antal_ture, destination_adresse,
+      `INSERT INTO job (id, indkomstaar_id, hvervgiver, booker, tilknyttet_job, honorar, start_dato, slut_dato,
+         betalings_dato, betalt_skat, transportmiddel, antal_km, antal_ture, destination_adresse,
          am_bidrag_fritaget, er_rubrik17, er_bestyrelseshverv, timer_job,
          timer_transport_forberedelse, type, noter, er_eksempel)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
        ON CONFLICT (id) DO UPDATE SET
          indkomstaar_id = EXCLUDED.indkomstaar_id,
          hvervgiver = EXCLUDED.hvervgiver,
+         booker = EXCLUDED.booker,
          tilknyttet_job = EXCLUDED.tilknyttet_job,
          honorar = EXCLUDED.honorar,
          start_dato = EXCLUDED.start_dato,
          slut_dato = EXCLUDED.slut_dato,
          betalings_dato = EXCLUDED.betalings_dato,
+         betalt_skat = EXCLUDED.betalt_skat,
          transportmiddel = EXCLUDED.transportmiddel,
          antal_km = EXCLUDED.antal_km,
          antal_ture = EXCLUDED.antal_ture,
@@ -288,8 +293,9 @@ export class PostgresRepository implements Repository, BilagsLager {
          noter = EXCLUDED.noter,
          er_eksempel = EXCLUDED.er_eksempel`,
       [
-        j.id, j.indkomstAarId, j.hvervgiver, j.tilknyttetJob ?? null, j.honorar, j.startDato, j.slutDato,
-        j.betalingsDato || null, j.transportmiddel, j.antalKm, j.antalTure,
+        j.id, j.indkomstAarId, j.hvervgiver, j.booker ?? null, j.tilknyttetJob ?? null,
+        j.honorar, j.startDato, j.slutDato, j.betalingsDato || null, j.betaltSkat ?? 0,
+        j.transportmiddel, j.antalKm, j.antalTure,
         j.destinationAdresse ?? null, j.amBidragFritaget, Boolean(j.erRubrik17),
         Boolean(j.erBestyrelseshverv), j.timerJob ?? null,
         j.timerTransportForberedelse ?? null, j.type ?? null,
@@ -307,11 +313,12 @@ export class PostgresRepository implements Repository, BilagsLager {
 
   async gemFradrag(f: Fradrag): Promise<Fradrag> {
     await this.pool.query(
-      `INSERT INTO fradrag (id, indkomstaar_id, beskrivelse, type_kategori, faktura_dato,
+      `INSERT INTO fradrag (id, indkomstaar_id, job_id, beskrivelse, type_kategori, faktura_dato,
          faktura_beloeb, fradrags_procent, fradrag_i_dkk, revisor_notat, er_eksempel)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        ON CONFLICT (id) DO UPDATE SET
          indkomstaar_id = EXCLUDED.indkomstaar_id,
+         job_id = EXCLUDED.job_id,
          beskrivelse = EXCLUDED.beskrivelse,
          type_kategori = EXCLUDED.type_kategori,
          faktura_dato = EXCLUDED.faktura_dato,
@@ -321,7 +328,7 @@ export class PostgresRepository implements Repository, BilagsLager {
          revisor_notat = EXCLUDED.revisor_notat,
          er_eksempel = EXCLUDED.er_eksempel`,
       [
-        f.id, f.indkomstAarId, f.beskrivelse, f.typeKategori, f.fakturaDato,
+        f.id, f.indkomstAarId, f.jobId ?? null, f.beskrivelse, f.typeKategori, f.fakturaDato,
         f.fakturaBeloeb, f.fradragsProcent, f.fradragIDKK, f.revisorNotat ?? null,
         Boolean(f.erEksempel),
       ]
@@ -475,6 +482,22 @@ export class PostgresRepository implements Repository, BilagsLager {
     for (const [id, o] of Object.entries(snapshot.opsparing)) await this.gemOpsparing(id, o);
   }
 
+  async nulstilRegnskab(): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('DELETE FROM bilag');
+      await client.query('DELETE FROM indkomstaar');
+      await client.query('DELETE FROM chat_historik');
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
   /* ---------------------------------------------- Google Drive-forbindelse */
 
   async hentGoogleDriveForbindelse(): Promise<GoogleDriveForbindelse | null> {
@@ -570,6 +593,7 @@ export class PostgresRepository implements Repository, BilagsLager {
       medlemFolkekirken: Boolean(r.medlem_folkekirken),
       standardTransportmiddel: r.standard_transportmiddel ?? undefined,
       standardBilorMærke: r.standard_bil_eller_maerke ?? undefined,
+      fastBooker: r.fast_hvervgiver ?? undefined,
       fastHvervgiver: r.fast_hvervgiver ?? undefined,
       noter: r.noter ?? undefined,
     };
@@ -614,7 +638,7 @@ export class PostgresRepository implements Repository, BilagsLager {
         Boolean(p.medlemFolkekirken),
         p.standardTransportmiddel || 'OWN_CAR_MC',
         p.standardBilorMærke || '',
-        p.fastHvervgiver || '',
+        p.fastBooker || p.fastHvervgiver || '',
         p.noter || '',
       ]
     );

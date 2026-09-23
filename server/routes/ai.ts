@@ -123,13 +123,14 @@ export function aiRoutes(repo: Repository, arkiv: BilagsLager): Router {
         new Set([
           ...(((beregning as Record<string, unknown>)?.kendteHvervgivere as string[]) || []),
           ...snapshot.jobs.map((j) => j.hvervgiver).filter(Boolean),
+          ...snapshot.jobs.map((j) => j.booker || '').filter(Boolean),
         ])
       );
 
       const berigetBeregning = {
         ...(typeof beregning === 'object' && beregning !== null ? beregning : {}),
         profil,
-        fastHvervgiver: profil.fastHvervgiver,
+        fastBooker: profil.fastBooker ?? profil.fastHvervgiver,
         kendteHvervgivere,
         navn: profil.navn || (beregning as Record<string, unknown>)?.navn,
         bopaelsadresse:
