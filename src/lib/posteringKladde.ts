@@ -70,7 +70,7 @@ export function findIndkomstAarTilKladde(
   fallbackId: string
 ): string {
   const dato = valgtType === 'JOB' ? (tekst.slutDato || tekst.startDato) : tekst.fakturaDato;
-  const aar = /^\d{4}-\d{2}-\d{2}$/.test(dato ?? '') ? Number(dato.slice(0, 4)) : null;
+  const aar = dato && /^\d{4}-\d{2}-\d{2}$/.test(dato) ? Number(dato.slice(0, 4)) : null;
   return indkomstAarListe.find((kandidat) => kandidat.aar === aar)?.id ?? fallbackId;
 }
 

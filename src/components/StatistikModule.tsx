@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import type { Job } from '../types';
 import { kr } from '../lib/format';
 import { Sparkles } from 'lucide-react';

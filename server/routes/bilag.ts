@@ -18,10 +18,18 @@ export function bilagRoutes(
       }
 
       const data = await repo.hentAlt();
-      for (const bilag of data.bilag) {
-        await arkiv.slet(bilag.sha256, bilag.mimeType);
-      }
+      // Først fjernes referencerne samlet. Hvis databasen fejler, er alle
+      // bilagsfiler stadig intakte. Efter en vellykket nulstilling kan en
+      // enkelt filfejl højst efterlade en utilgængelig restfil, aldrig en
+      // regnskabspost med et bilag, der allerede er slettet.
       await repo.nulstilRegnskab();
+      for (const bilag of data.bilag) {
+        try {
+          await arkiv.slet(bilag.sha256, bilag.mimeType);
+        } catch (err) {
+          console.error(`Kunne ikke rydde bilagsindhold ${bilag.sha256}:`, err);
+        }
+      }
       onAendring();
       res.json({ ok: true });
     } catch (err) {

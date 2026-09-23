@@ -25,6 +25,7 @@ export function tjekKodeord(kodeord: string, gemt: string): boolean {
   if (dele.length !== 3 || dele[0] !== 'scrypt') return false;
 
   const [, salt, forventet] = dele;
+  if (!salt || !forventet) return false;
   let beregnet: Buffer;
   try {
     beregnet = crypto.scryptSync(kodeord, salt, NOEGLE_BYTES);

@@ -47,6 +47,15 @@ export function rensPosteringForslag(raa: RaaPosteringForslag): PosteringForslag
   } as PosteringForslag;
 }
 
+export function navnForForslag(forslag: PosteringForslag): string {
+  return (
+    forslag.job?.hvervgiver?.vaerdi ||
+    forslag.fradrag?.beskrivelse?.vaerdi ||
+    forslag.investering?.titel?.vaerdi ||
+    'posteringen'
+  );
+}
+
 /**
  * Fletter et nyt forslag ind over et eksisterende aktivt forslag.
  * Hvis modellen kun returnerer de felter, brugeren lige har rettet/tilføjet,
@@ -60,16 +69,16 @@ export function fletForslag(
     return nyt;
   }
 
-  const fletGruppe = <
-    T extends Record<string, { vaerdi: unknown; sikkerhed: number } | undefined>
-  >(
+  const fletGruppe = <T extends object>(
     gamle?: T,
     nye?: T
   ): T | undefined => {
     if (!gamle) return nye;
     if (!nye) return gamle;
-    const resultat = { ...gamle } as Record<string, { vaerdi: unknown; sikkerhed: number }>;
-    for (const [felt, nyV] of Object.entries(nye)) {
+    const resultat = { ...gamle } as Record<string, unknown>;
+    for (const [felt, nyV] of Object.entries(nye) as Array<
+      [string, { vaerdi: unknown; sikkerhed: number } | undefined]
+    >) {
       if (nyV && nyV.vaerdi !== null && nyV.vaerdi !== undefined && nyV.vaerdi !== '') {
         resultat[felt] = nyV;
       }

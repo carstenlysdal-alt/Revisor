@@ -79,6 +79,7 @@ const nyKoersel = (indkomstAarId: string, aar: number): Job => {
     indkomstAarId,
     hvervgiver: '',
     tilknyttetJob: '',
+    tilknyttetJobId: undefined,
     honorar: 0,
     startDato: d,
     slutDato: d,
@@ -104,6 +105,7 @@ const nytJob = (indkomstAarId: string, aar: number, standardBooker?: string): Jo
     hvervgiver: '',
     booker: standardBooker?.trim() || '',
     tilknyttetJob: '',
+    tilknyttetJobId: undefined,
     honorar: 0,
     startDato: d,
     slutDato: d,
@@ -242,15 +244,6 @@ export function JobsModule({
     }
   };
 
-  const unikkeJobNavne = useMemo(() => {
-    const navne = new Set<string>();
-    for (const j of jobs) {
-      if (j.tilknyttetJob?.trim()) navne.add(j.tilknyttetJob.trim());
-      if (j.honorar > 0 && j.hvervgiver?.trim()) navne.add(j.hvervgiver.trim());
-    }
-    return Array.from(navne);
-  }, [jobs]);
-
   const bilagIndeks = useMemo(
     () => new Map(bilag.map((b) => [b.id, b])),
     [bilag]
@@ -269,17 +262,41 @@ export function JobsModule({
   }, [fradragListe]);
 
   const jobNavn = (job: Job) => job.hvervgiver?.trim() || job.booker?.trim() || 'Job uden navn';
+  const muligeTilknyttedeJobs = jobs.filter(
+    (job) => job.honorar > 0 || job.transportmiddel === 'NONE'
+  );
   const jobFradrag = (job: Job) =>
     (koerselPrJob.get(job.id)?.fradrag ?? 0) +
+    jobs
+      .filter((koersel) => koersel.id !== job.id && koersel.tilknyttetJobId === job.id)
+      .reduce((sum, koersel) => sum + (koerselPrJob.get(koersel.id)?.fradrag ?? 0), 0) +
     (fradragPrJob.get(job.id) ?? []).reduce((sum, f) => sum + f.fradragIDKK, 0);
 
   const aabn = (job: Job, kopi = false) => {
     setFejl(null);
     setAfstandFejl(null);
     setBeregnetInfo(null);
-    const post = kopi
-      ? { ...job, id: `job-${Date.now()}`, bilagIds: [], betalingsDato: '' }
-      : { ...job, bilagIds: job.bilagIds ?? [] };
+    const legacyTilknytning =
+      !job.tilknyttetJobId && job.tilknyttetJob
+        ? muligeTilknyttedeJobs.find(
+            (kandidat) => kandidat.id !== job.id && jobNavn(kandidat) === job.tilknyttetJob
+          )
+        : undefined;
+    const post: Job = kopi
+      ? {
+          ...job,
+          id: `job-${Date.now()}`,
+          bilagIds: [],
+          betalingsDato: '',
+          betaltSkat: 0,
+          tilknyttetJob: '',
+          tilknyttetJobId: undefined,
+        }
+      : {
+          ...job,
+          bilagIds: job.bilagIds ?? [],
+          tilknyttetJobId: job.tilknyttetJobId ?? legacyTilknytning?.id,
+        };
     setRedigerer(post);
     setHonorar(post.honorar ? String(post.honorar) : '');
     setBetaltSkat(post.betaltSkat ? String(post.betaltSkat) : '');
@@ -347,6 +364,7 @@ export function JobsModule({
       await onGem({
         ...redigerer,
         tilknyttetJob: redigerer.tilknyttetJob?.trim() || undefined,
+        tilknyttetJobId: redigerer.tilknyttetJobId || undefined,
         honorar: talFraFelt(honorar),
         betaltSkat: talFraFelt(betaltSkat),
         antalKm: talFraFelt(km),
@@ -821,24 +839,29 @@ export function JobsModule({
                     hjaelp="Ikke obligatorisk. Udfyld hvis kørslen hører til et bestemt job."
                   >
                     {(id) => (
-                      <>
-                        <Tekstfelt
-                          id={id}
-                          value={redigerer.tilknyttetJob ?? ''}
-                          placeholder="F.eks. Vega Musikhus (valgfrit)"
-                          list="eksisterende-jobs-liste"
-                          onChange={(e) =>
-                            setRedigerer({ ...redigerer, tilknyttetJob: e.target.value })
-                          }
-                        />
-                        {unikkeJobNavne.length > 0 && (
-                          <datalist id="eksisterende-jobs-liste">
-                            {unikkeJobNavne.map((navn) => (
-                              <option key={navn} value={navn} />
-                            ))}
-                          </datalist>
-                        )}
-                      </>
+                      <Vaelger
+                        id={id}
+                        value={redigerer.tilknyttetJobId ?? ''}
+                        onChange={(e) => {
+                          const valgt = muligeTilknyttedeJobs.find(
+                            (job) => job.id === e.target.value
+                          );
+                          setRedigerer({
+                            ...redigerer,
+                            tilknyttetJobId: valgt?.id,
+                            tilknyttetJob: valgt ? jobNavn(valgt) : '',
+                          });
+                        }}
+                      >
+                        <option value="">Ikke knyttet til et bestemt job</option>
+                        {muligeTilknyttedeJobs
+                          .filter((job) => job.id !== redigerer.id)
+                          .map((job) => (
+                            <option key={job.id} value={job.id}>
+                              {jobNavn(job)} · {dato(job.startDato)}
+                            </option>
+                          ))}
+                      </Vaelger>
                     )}
                   </Felt>
                 </div>
@@ -969,6 +992,24 @@ export function JobsModule({
                           <span className="tal">{kr(koerselPrJob.get(redigerer.id)?.fradrag ?? 0)} kr.</span>
                         </div>
                       )}
+                      {jobs
+                        .filter(
+                          (koersel) =>
+                            koersel.id !== redigerer.id &&
+                            koersel.tilknyttetJobId === redigerer.id &&
+                            (koerselPrJob.get(koersel.id)?.fradrag ?? 0) > 0
+                        )
+                        .map((koersel) => (
+                          <div key={koersel.id} className="flex justify-between gap-4 py-2">
+                            <span>
+                              Kørsel: {koersel.hvervgiver} ·{' '}
+                              {(koerselPrJob.get(koersel.id)?.kmIAlt ?? 0).toLocaleString('da-DK')} km
+                            </span>
+                            <span className="tal">
+                              {kr(koerselPrJob.get(koersel.id)?.fradrag ?? 0)} kr.
+                            </span>
+                          </div>
+                        ))}
                       {(fradragPrJob.get(redigerer.id) ?? []).map((f) => (
                         <div key={f.id} className="flex justify-between gap-4 py-2">
                           <span>

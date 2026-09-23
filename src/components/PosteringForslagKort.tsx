@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   BrugerProfil,
   Fradrag,
@@ -22,7 +22,7 @@ import {
   type KladdeFlag,
   type KladdeTekst,
 } from '../lib/posteringKladde';
-import { Afkrydsning, BeloebFelt, Datofelt, Felt, Knap, Tekstfelt, Vaelger } from './ui';
+import { Advarsel, Afkrydsning, BeloebFelt, Datofelt, Felt, Knap, Tekstfelt, Vaelger } from './ui';
 import { AdresseInput } from './AdresseInput';
 import { api } from '../lib/api';
 
@@ -143,7 +143,7 @@ export function PosteringForslagKort({
       setTekst((prev) => ({
         ...prev,
         antalKm: String(res.km),
-        destinationAdresse: res.fundetAdresse || prev.destinationAdresse,
+        destinationAdresse: res.fundetAdresse || prev.destinationAdresse || '',
       }));
       sidsteBeregningRef.current = {
         enkeltTurKm: res.enkeltTurKm ?? (aktivTurRetur ? Math.round((res.km / 2) * 10) / 10 : res.km),
@@ -206,7 +206,8 @@ export function PosteringForslagKort({
     }
   };
 
-  const kanGemme = kanGemmeKladde(forslag.klassifikation, tekst);
+  const kanGemme =
+    kanGemmeKladde(forslag.klassifikation, tekst) && !valgtIndkomstAar?.laast;
 
   // Første render tæller ikke som en bekræftelse — kun en ændring i signalet,
   // efter kortet allerede er vist, betyder at chatten har set en bekræftelse.
@@ -223,7 +224,7 @@ export function PosteringForslagKort({
     setGemmer(true);
     setFejl(null);
     try {
-      let gemtTitel = forslag.titel;
+      let gemtTitel = forslag.besked;
       if (forslag.klassifikation === 'JOB') {
         const nyt = byggJobFraKladde(tekst, flag, valgtIndkomstAarId, []);
         gemtTitel = nyt.hvervgiver || gemtTitel;
@@ -234,7 +235,7 @@ export function PosteringForslagKort({
         await onGemFradrag({ id: `fradrag-${Date.now()}`, ...nyt });
       } else {
         const nyt = byggInvesteringFraKladde(tekst, valgtIndkomstAarId, []);
-        gemtTitel = nyt.beskrivelse || gemtTitel;
+        gemtTitel = nyt.titel || gemtTitel;
         await onGemInvestering({ id: `inv-${Date.now()}`, ...nyt });
       }
       onGemt({ klassifikation: forslag.klassifikation, titel: gemtTitel });
@@ -274,11 +275,19 @@ export function PosteringForslagKort({
             {[...indkomstAarListe]
               .sort((a, b) => b.aar - a.aar)
               .map((aar) => (
-                <option key={aar.id} value={aar.id}>{aar.aar}</option>
+                <option key={aar.id} value={aar.id} disabled={aar.laast}>
+                  {aar.aar}{aar.laast ? ' (låst)' : ''}
+                </option>
               ))}
           </Vaelger>
         )}
       </Felt>
+
+      {valgtIndkomstAar?.laast && (
+        <Advarsel art="neutral" titel={`Indkomståret ${valgtIndkomstAar.aar} er låst`}>
+          Lås året op under Indkomstår, før posten kan oprettes.
+        </Advarsel>
+      )}
 
       {forslag.klassifikation === 'JOB' && (
         <div className="mt-3 space-y-3">

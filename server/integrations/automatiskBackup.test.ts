@@ -62,7 +62,7 @@ describe('automatisk Google Drev-backup', () => {
       'application/pdf'
     );
     expect(opdaterSnapshot).toHaveBeenCalledTimes(2);
-    const sikkerhedskopi = JSON.parse(opdaterSnapshot.mock.calls[0][3]);
+    const sikkerhedskopi = JSON.parse(opdaterSnapshot.mock.calls[0]![3]);
     expect(sikkerhedskopi.bilag[0].drevBackupTidspunkt).toBe('2026-01-03T00:00:00.000Z');
 
     const gemtBilag = await repo.hentBilag('bilag-1');
@@ -91,5 +91,33 @@ describe('automatisk Google Drev-backup', () => {
     expect(bilag?.drevBackupFejl).toMatch(/findes ikke/i);
     expect(forbindelse?.sidsteFejl).toMatch(/mangler\.pdf/i);
     expect((await repo.hentAlt()).bilag).toHaveLength(1);
+  });
+
+  it('uploader bilaget igen, når backupmappen er skiftet', async () => {
+    const indhold = Buffer.from('original til ny mappe');
+    const sha256 = beregnHash(indhold);
+    await arkiv.gem(indhold, 'application/pdf');
+    await repo.gemBilag({
+      id: 'bilag-fra-gammel-mappe',
+      sha256,
+      filnavn: 'gammelt-bilag.pdf',
+      mimeType: 'application/pdf',
+      stoerrelse: indhold.length,
+      uploadet: '2026-01-02T00:00:00.000Z',
+      drevBackupTidspunkt: '2026-01-02T12:00:00.000Z',
+      drevBackupMappeId: 'gammel-mappe',
+    });
+    const upload = vi.fn().mockResolvedValue('nyt-drive-id');
+
+    await koerGoogleDriveBackup(repo, arkiv, {
+      upload,
+      opdaterSnapshot: vi.fn().mockResolvedValue('snapshot-ny'),
+      nu: () => '2026-01-03T00:00:00.000Z',
+    });
+
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect((await repo.hentBilag('bilag-fra-gammel-mappe'))?.drevBackupMappeId).toBe(
+      'mappe-1'
+    );
   });
 });

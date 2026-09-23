@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS job (
   hvervgiver                    text NOT NULL DEFAULT '',
   booker                        text,
   tilknyttet_job                text,
+  tilknyttet_job_id             text REFERENCES job(id) ON DELETE SET NULL,
   honorar                       numeric(14,2) NOT NULL DEFAULT 0,
   start_dato                    date NOT NULL,
   slut_dato                     date NOT NULL,
@@ -146,6 +147,10 @@ ALTER TABLE job ADD COLUMN IF NOT EXISTS betalt_skat numeric(14,2) NOT NULL DEFA
 ALTER TABLE fradrag ADD COLUMN IF NOT EXISTS job_id text REFERENCES job(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS fradrag_job_idx ON fradrag (job_id);
 ALTER TABLE job ADD COLUMN IF NOT EXISTS tilknyttet_job text;
+ALTER TABLE job ADD COLUMN IF NOT EXISTS tilknyttet_job_id text REFERENCES job(id) ON DELETE SET NULL;
+ALTER TABLE job ADD COLUMN IF NOT EXISTS mellemstationer jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE job ADD COLUMN IF NOT EXISTS tur_retur boolean NOT NULL DEFAULT true;
+ALTER TABLE bilag ADD COLUMN IF NOT EXISTS drev_backup_mappe_id text;
 
 -- Revisor-chattens hukommelse på tværs af sessioner. Selve chatvinduet
 -- nulstiller sin visning ved hver åbning, men modellen skal stadig kunne

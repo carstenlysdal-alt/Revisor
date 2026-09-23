@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import type {
   BrugerProfil,
@@ -386,7 +386,7 @@ export function RevisorChatModal({
                             setAktivtForslagIndeks(null);
                             const klassifikation =
                               info?.klassifikation || b.forslag?.klassifikation || 'JOB';
-                            const titel = info?.titel || b.forslag?.titel || '';
+                            const titel = info?.titel || b.forslag?.besked || '';
                             const fane =
                               klassifikation === 'JOB'
                                 ? 'indtaegter'

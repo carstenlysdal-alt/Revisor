@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Bilag, IndkomstAar, Investering } from '../types';
 import { dato, kr, talFraFelt } from '../lib/format';
 import { api } from '../lib/api';

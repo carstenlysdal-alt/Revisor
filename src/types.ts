@@ -49,6 +49,8 @@ export interface Job {
   booker?: string;
   /** Valgfri tilknytning til et job for en kørselspost (f.eks. ved en øver eller prøve knyttet til et job). */
   tilknyttetJob?: string;
+  /** Entydig reference til jobbet. Tekstfeltet ovenfor bevares som læsbart navn og migration. */
+  tilknyttetJobId?: string;
   honorar: number;
   /** YYYY-MM-DD. Sammen med slutdatoen dokumenterer arbejdsperioden. */
   startDato: string;
@@ -131,6 +133,8 @@ export interface Bilag {
   uploadet: string;
   /** Hvornår originalfilen senest blev bekræftet gemt i den tilsluttede Google Drev-mappe. */
   drevBackupTidspunkt?: string | null;
+  /** Den Google Drev-mappe, som backupbekræftelsen gælder for. */
+  drevBackupMappeId?: string | null;
   /** Seneste fejl for netop dette bilag. Nulles efter en vellykket backup. */
   drevBackupFejl?: string | null;
 }

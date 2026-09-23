@@ -9,7 +9,7 @@ import {
   PosteringForslagSkema,
   SKEMABESKRIVELSE,
 } from './skema';
-import { rensAnalyse, rensPosteringForslag, fletForslag, enrichForslagMedAfstand } from './normaliser';
+import { rensAnalyse, rensPosteringForslag, fletForslag, enrichForslagMedAfstand, navnForForslag } from './normaliser';
 import { udtraekPdfTekst, PdfUdenTekstError } from './pdf';
 import { soeg, type Kilde } from './soegning';
 import {
@@ -188,7 +188,7 @@ export function opretDeepseekUdbyder(): AiUdbyder {
           console.error('foreslaaPostering: udkastet kunne ikke læses.', err);
           if (indgang.aktivtForslag) {
             return {
-              tekst: `Jeg har noteret tilføjelsen til dit udkast for ${indgang.aktivtForslag.hvervgiver || indgang.aktivtForslag.titel || 'posteringen'}. Kan du bekræfte de specifikke detaljer (f.eks. dato eller kørsel), så opdaterer jeg straks?`,
+              tekst: `Jeg har noteret tilføjelsen til dit udkast for ${navnForForslag(indgang.aktivtForslag)}. Kan du bekræfte de specifikke detaljer (f.eks. dato eller kørsel), så opdaterer jeg straks?`,
               kilder: kilder ?? [],
               forslag: indgang.aktivtForslag,
             };

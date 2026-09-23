@@ -181,9 +181,9 @@ export function beregnIndkomstskat(
     bundskat +
     kommuneskat +
     kirkeskat +
-    progressive.mellemskat +
-    progressive.topskat +
-    progressive.topTopskat;
+    (progressive.mellemskat ?? 0) +
+    (progressive.topskat ?? 0) +
+    (progressive.topTopskat ?? 0);
 
   // Skatteværdien af personfradraget kan ikke nedsætte skatten til under nul.
   // Den fulde værdi er ens uanset indkomst, så uden loftet her ville linjen
@@ -201,9 +201,9 @@ export function beregnIndkomstskat(
     bundskat,
     kommuneskat,
     kirkeskat,
-    mellemskat: progressive.mellemskat,
-    topskat: progressive.topskat,
-    topTopskat: progressive.topTopskat,
+    mellemskat: progressive.mellemskat ?? 0,
+    topskat: progressive.topskat ?? 0,
+    topTopskat: progressive.topTopskat ?? 0,
     skatteloftNedslag,
     personfradragVaerdi,
     beskaeftigelsesfradrag,

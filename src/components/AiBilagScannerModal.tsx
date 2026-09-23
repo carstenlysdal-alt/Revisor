@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type {
   Bilag,
   BilagsAnalyse,
@@ -7,7 +7,6 @@ import type {
   IndkomstAar,
   Investering,
   Job,
-  TransportMiddel,
 } from '../types';
 import { SIKKERHEDSTAERSKEL } from '../types';
 import { api, filTilBase64 } from '../lib/api';
@@ -196,8 +195,8 @@ export function AiBilagScannerModal({
     ]?.sikkerhed;
 
   const tal = (navn: string) => kladdeTal(tekst, navn);
-  const valgtAar =
-    indkomstAarListe.find((aar) => aar.id === valgtIndkomstAarId)?.aar ?? indkomstAar.aar;
+  const valgtAarPost = indkomstAarListe.find((aar) => aar.id === valgtIndkomstAarId);
+  const valgtAar = valgtAarPost?.aar ?? indkomstAar.aar;
 
   const gem = async () => {
     if (!bilag) return;
@@ -241,7 +240,7 @@ export function AiBilagScannerModal({
     }
   };
 
-  const kanGemme = kanGemmeKladde(valgtType, tekst);
+  const kanGemme = kanGemmeKladde(valgtType, tekst) && !valgtAarPost?.laast;
 
   useEffect(() => {
     // Forsidens dropzone åbner scanneren og leverer filen i samme handling.
@@ -426,11 +425,19 @@ export function AiBilagScannerModal({
                 {[...indkomstAarListe]
                   .sort((a, b) => b.aar - a.aar)
                   .map((aar) => (
-                    <option key={aar.id} value={aar.id}>{aar.aar}</option>
+                    <option key={aar.id} value={aar.id} disabled={aar.laast}>
+                      {aar.aar}{aar.laast ? ' (låst)' : ''}
+                    </option>
                   ))}
               </Vaelger>
             )}
           </Felt>
+
+          {valgtAarPost?.laast && (
+            <Advarsel art="neutral" titel={`Indkomståret ${valgtAarPost.aar} er låst`}>
+              Lås året op under Indkomstår, før posten kan oprettes.
+            </Advarsel>
+          )}
 
           {valgtType === 'JOB' && (
             <div className="space-y-4 border-t border-rule pt-4">

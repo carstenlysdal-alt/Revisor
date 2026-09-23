@@ -70,14 +70,18 @@ async function soegDuckDuckGo(spoergsmaal: string): Promise<Kilde[]> {
 
   let fund: RegExpExecArray | null;
   while ((fund = moenster.exec(html)) && kilder.length < MAKS_RESULTATER) {
+    const raaUrl = fund[1];
+    const raaTitel = fund[2];
+    const raaUddrag = fund[3];
+    if (!raaUrl || !raaTitel || !raaUddrag) continue;
     const url = decodeURIComponent(
-      (fund[1].match(/uddg=([^&]+)/)?.[1] ?? fund[1]) as string
+      raaUrl.match(/uddg=([^&]+)/)?.[1] ?? raaUrl
     );
     if (!DOMAENER.some((d) => url.includes(d))) continue;
     kilder.push({
-      titel: forkort(fund[2].replace(/<[^>]*>/g, ''), 160),
+      titel: forkort(raaTitel.replace(/<[^>]*>/g, ''), 160),
       url,
-      uddrag: forkort(fund[3].replace(/<[^>]*>/g, '')),
+      uddrag: forkort(raaUddrag.replace(/<[^>]*>/g, '')),
     });
   }
 

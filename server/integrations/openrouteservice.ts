@@ -111,8 +111,9 @@ export async function geokodDawa(adresse: string): Promise<Placering | null> {
         adgangsadresse?: { adgangspunkt?: { koordinater?: [number, number] } };
       }[];
       const coords = data?.[0]?.adgangsadresse?.adgangspunkt?.koordinater;
-      if (coords && coords.length === 2) {
-        return { lon: coords[0], lat: coords[1], adresse: data[0].adressebetegnelse };
+      const fundet = data[0];
+      if (fundet && coords && coords.length === 2) {
+        return { lon: coords[0], lat: coords[1], adresse: fundet.adressebetegnelse };
       }
     }
 
@@ -125,8 +126,9 @@ export async function geokodDawa(adresse: string): Promise<Placering | null> {
         adgangspunkt?: { koordinater?: [number, number] };
       }[];
       const coords = adgData?.[0]?.adgangspunkt?.koordinater;
-      if (coords && coords.length === 2) {
-        return { lon: coords[0], lat: coords[1], adresse: adgData[0].adressebetegnelse };
+      const fundet = adgData[0];
+      if (fundet && coords && coords.length === 2) {
+        return { lon: coords[0], lat: coords[1], adresse: fundet.adressebetegnelse };
       }
     }
   } catch {
@@ -351,7 +353,7 @@ export async function beregnRuteKm(fra: Koordinat, til: Koordinat): Promise<numb
  */
 export async function beregnRuteKmFlere(punkter: Koordinat[]): Promise<number> {
   if (punkter.length < 2) return 0;
-  if (punkter.length === 2) return beregnRuteKm(punkter[0], punkter[1]);
+  if (punkter.length === 2) return beregnRuteKm(punkter[0]!, punkter[1]!);
 
   try {
     const coordsStr = punkter.map((p) => `${p.lon},${p.lat}`).join(';');
@@ -371,7 +373,7 @@ export async function beregnRuteKmFlere(punkter: Koordinat[]): Promise<number> {
 
   let total = 0;
   for (let i = 0; i < punkter.length - 1; i++) {
-    total += await beregnRuteKm(punkter[i], punkter[i + 1]);
+    total += await beregnRuteKm(punkter[i]!, punkter[i + 1]!);
   }
   return Math.round(total * 10) / 10;
 }
@@ -451,7 +453,7 @@ export async function beregnRuteDetaljer(
     turRetur,
     fundetAdresse: til.adresse || destinationAdresse,
     fraAdresse: fra.adresse || hjemmeadresse,
-    mellemstationer: mellemPunkter.map((m, idx) => m.adresse || raaMellem[idx]),
+    mellemstationer: mellemPunkter.map((m, idx) => m.adresse || raaMellem[idx] || ''),
   };
 }
 

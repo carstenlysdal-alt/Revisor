@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { IndkomstAar } from '../types';
 import {
   GENNEMSNIT,
@@ -7,7 +7,7 @@ import {
   getKommuneSatser,
 } from '../lib/tax/kommuner';
 import { TILGAENGELIGE_AAR } from '../lib/tax/satser';
-import { kr, talFraFelt } from '../lib/format';
+import { talFraFelt } from '../lib/format';
 import { AdresseInput } from './AdresseInput';
 import {
   Advarsel,
@@ -19,7 +19,6 @@ import {
   Sektion,
   Tabel,
   Td,
-  Tekstfelt,
   Th,
   TomTilstand,
   Vaelger,
@@ -170,7 +169,7 @@ export function IndkomstAarModule({
       beskrivelse="Året styrer, hvilke satser der regnes med, og hvilken kommuneskat der bruges. Alt andet i appen hænger på et indkomstår."
       handling={
         ledigeAar.length > 0 ? (
-          <Knap art="primaer" onClick={() => aabn(tomtAar(ledigeAar[ledigeAar.length - 1]))}>
+          <Knap art="primaer" onClick={() => aabn(tomtAar(ledigeAar[ledigeAar.length - 1]!))}>
             Nyt indkomstår
           </Knap>
         ) : null
@@ -181,7 +180,7 @@ export function IndkomstAarModule({
           besked="Der er ikke oprettet noget indkomstår endnu. Opret det år, du vil registrere honorarer for, så følger resten efter."
           handling={
             <>
-              <Knap art="primaer" onClick={() => aabn(tomtAar(ledigeAar[ledigeAar.length - 1] ?? TILGAENGELIGE_AAR[0]))}>
+              <Knap art="primaer" onClick={() => aabn(tomtAar(ledigeAar[ledigeAar.length - 1] ?? TILGAENGELIGE_AAR[0]!))}>
                 Opret indkomstår
               </Knap>
               <Knap art="tekst" onClick={onIndlaesEksempel}>

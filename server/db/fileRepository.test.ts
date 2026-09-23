@@ -147,4 +147,41 @@ describe('FileRepository — Google Drive-forbindelsen', () => {
     expect(await repo.hentChatHistorik(10)).toEqual([]);
     expect((await repo.hentGoogleDriveForbindelse())?.refreshToken).toBe('bevares');
   });
+
+  it('fjerner job-id fra tilknyttet kørsel, når jobbet slettes', async () => {
+    await repo.gemJob({
+      id: 'job-1',
+      indkomstAarId: 'aar-1',
+      hvervgiver: 'Spillested',
+      honorar: 1000,
+      startDato: '2026-01-01',
+      slutDato: '2026-01-01',
+      betalingsDato: '',
+      transportmiddel: 'NONE',
+      antalKm: 0,
+      antalTure: 0,
+      amBidragFritaget: false,
+      bilagIds: [],
+    });
+    await repo.gemJob({
+      id: 'koersel-1',
+      indkomstAarId: 'aar-1',
+      hvervgiver: 'Øver',
+      tilknyttetJob: 'Spillested',
+      tilknyttetJobId: 'job-1',
+      honorar: 0,
+      startDato: '2026-01-02',
+      slutDato: '2026-01-02',
+      betalingsDato: '',
+      transportmiddel: 'OWN_CAR_MC',
+      antalKm: 10,
+      antalTure: 1,
+      amBidragFritaget: false,
+      bilagIds: [],
+    });
+
+    await repo.sletJob('job-1');
+
+    expect((await repo.hentAlt()).jobs[0]?.tilknyttetJobId).toBeUndefined();
+  });
 });

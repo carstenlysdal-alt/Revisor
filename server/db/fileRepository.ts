@@ -141,6 +141,9 @@ export class FileRepository implements Repository {
   sletJob(id: string) {
     return this.transaktion<void>((s) => {
       s.jobs = s.jobs.filter((j) => j.id !== id);
+      s.jobs.forEach((j) => {
+        if (j.tilknyttetJobId === id) j.tilknyttetJobId = undefined;
+      });
     });
   }
 
@@ -184,12 +187,18 @@ export class FileRepository implements Repository {
     return s.bilag.find((b) => b.id === id) ?? null;
   }
 
-  opdaterBilagDriveStatus(id: string, tidspunkt: string | null, fejl: string | null) {
+  opdaterBilagDriveStatus(
+    id: string,
+    tidspunkt: string | null,
+    fejl: string | null,
+    mappeId: string | null
+  ) {
     return this.transaktion<void>((s) => {
       const bilag = s.bilag.find((b) => b.id === id);
       if (!bilag) return;
       bilag.drevBackupTidspunkt = tidspunkt;
       bilag.drevBackupFejl = fejl;
+      bilag.drevBackupMappeId = mappeId;
     });
   }
 

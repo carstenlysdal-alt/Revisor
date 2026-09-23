@@ -34,6 +34,7 @@ import {
   opretEllerFindMappe,
   udvekslKodeForToken,
 } from './googleDrive';
+import { erGyldigGoogleState } from '../routes/integrationer';
 
 const gammel = {
   id: process.env.GOOGLE_CLIENT_ID,
@@ -68,20 +69,30 @@ describe('harGoogleDriveKonfiguration', () => {
 describe('byggAuthUrl', () => {
   it('kaster GoogleDriveIkkeKonfigureretError uden konfiguration', () => {
     delete process.env.GOOGLE_CLIENT_SECRET;
-    expect(() => byggAuthUrl()).toThrow(GoogleDriveIkkeKonfigureretError);
+    expect(() => byggAuthUrl('test-state')).toThrow(GoogleDriveIkkeKonfigureretError);
   });
 
   it('beder om offline adgang, samtykke hver gang, og kun drive.file-scopet', () => {
     generateAuthUrlMock.mockReturnValue('https://accounts.google.com/o/oauth2/auth?...');
 
-    const url = byggAuthUrl();
+    const url = byggAuthUrl('test-state');
 
     expect(url).toContain('accounts.google.com');
     expect(generateAuthUrlMock).toHaveBeenCalledWith({
       access_type: 'offline',
       prompt: 'consent',
       scope: ['https://www.googleapis.com/auth/drive.file'],
+      state: 'test-state',
     });
+  });
+});
+
+describe('Google OAuth state', () => {
+  it('accepterer kun den præcise engangsværdi fra cookien', () => {
+    expect(erGyldigGoogleState('samme-state', 'samme-state')).toBe(true);
+    expect(erGyldigGoogleState('samme-state', 'anden-state')).toBe(false);
+    expect(erGyldigGoogleState(undefined, 'samme-state')).toBe(false);
+    expect(erGyldigGoogleState('samme-state', '')).toBe(false);
   });
 });
 

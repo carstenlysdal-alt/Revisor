@@ -85,7 +85,7 @@ export class PostgresRepository implements Repository, BilagsLager {
       this.pool.query('SELECT * FROM investering ORDER BY faktura_dato DESC'),
       this.pool.query('SELECT * FROM opsparing'),
       this.pool.query(`SELECT id, sha256, filnavn, mime_type, stoerrelse, uploadet,
-                              drev_backup_tidspunkt, drev_backup_fejl
+                              drev_backup_tidspunkt, drev_backup_fejl, drev_backup_mappe_id
                        FROM bilag ORDER BY uploadet DESC`),
     ]);
 
@@ -125,6 +125,7 @@ export class PostgresRepository implements Repository, BilagsLager {
         hvervgiver: r.hvervgiver ?? '',
         booker: r.booker ?? '',
         tilknyttetJob: r.tilknyttet_job ?? undefined,
+        tilknyttetJobId: r.tilknyttet_job_id ?? undefined,
         honorar: tal(r.honorar),
         startDato: dato(r.start_dato),
         slutDato: dato(r.slut_dato),
@@ -134,6 +135,8 @@ export class PostgresRepository implements Repository, BilagsLager {
         antalKm: tal(r.antal_km),
         antalTure: tal(r.antal_ture),
         destinationAdresse: r.destination_adresse ?? '',
+        mellemstationer: Array.isArray(r.mellemstationer) ? r.mellemstationer : [],
+        turRetur: r.tur_retur === null || r.tur_retur === undefined ? true : Boolean(r.tur_retur),
         amBidragFritaget: Boolean(r.am_bidrag_fritaget),
         erRubrik17: Boolean(r.er_rubrik17),
         erBestyrelseshverv: Boolean(r.er_bestyrelseshverv),
@@ -198,6 +201,7 @@ export class PostgresRepository implements Repository, BilagsLager {
           ? r.drev_backup_tidspunkt.toISOString()
           : r.drev_backup_tidspunkt,
         drevBackupFejl: r.drev_backup_fejl ?? null,
+        drevBackupMappeId: r.drev_backup_mappe_id ?? null,
       })
     );
 
@@ -265,16 +269,17 @@ export class PostgresRepository implements Repository, BilagsLager {
 
   async gemJob(j: Job): Promise<Job> {
     await this.pool.query(
-      `INSERT INTO job (id, indkomstaar_id, hvervgiver, booker, tilknyttet_job, honorar, start_dato, slut_dato,
+      `INSERT INTO job (id, indkomstaar_id, hvervgiver, booker, tilknyttet_job, tilknyttet_job_id, honorar, start_dato, slut_dato,
          betalings_dato, betalt_skat, transportmiddel, antal_km, antal_ture, destination_adresse,
-         am_bidrag_fritaget, er_rubrik17, er_bestyrelseshverv, timer_job,
+         mellemstationer, tur_retur, am_bidrag_fritaget, er_rubrik17, er_bestyrelseshverv, timer_job,
          timer_transport_forberedelse, type, noter, er_eksempel)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
        ON CONFLICT (id) DO UPDATE SET
          indkomstaar_id = EXCLUDED.indkomstaar_id,
          hvervgiver = EXCLUDED.hvervgiver,
          booker = EXCLUDED.booker,
          tilknyttet_job = EXCLUDED.tilknyttet_job,
+         tilknyttet_job_id = EXCLUDED.tilknyttet_job_id,
          honorar = EXCLUDED.honorar,
          start_dato = EXCLUDED.start_dato,
          slut_dato = EXCLUDED.slut_dato,
@@ -284,6 +289,8 @@ export class PostgresRepository implements Repository, BilagsLager {
          antal_km = EXCLUDED.antal_km,
          antal_ture = EXCLUDED.antal_ture,
          destination_adresse = EXCLUDED.destination_adresse,
+         mellemstationer = EXCLUDED.mellemstationer,
+         tur_retur = EXCLUDED.tur_retur,
          am_bidrag_fritaget = EXCLUDED.am_bidrag_fritaget,
          er_rubrik17 = EXCLUDED.er_rubrik17,
          er_bestyrelseshverv = EXCLUDED.er_bestyrelseshverv,
@@ -294,11 +301,11 @@ export class PostgresRepository implements Repository, BilagsLager {
          er_eksempel = EXCLUDED.er_eksempel`,
       [
         j.id, j.indkomstAarId, j.hvervgiver, j.booker ?? null, j.tilknyttetJob ?? null,
-        j.honorar, j.startDato, j.slutDato, j.betalingsDato || null, j.betaltSkat ?? 0,
-        j.transportmiddel, j.antalKm, j.antalTure,
-        j.destinationAdresse ?? null, j.amBidragFritaget, Boolean(j.erRubrik17),
-        Boolean(j.erBestyrelseshverv), j.timerJob ?? null,
-        j.timerTransportForberedelse ?? null, j.type ?? null,
+        j.tilknyttetJobId ?? null, j.honorar, j.startDato, j.slutDato,
+        j.betalingsDato || null, j.betaltSkat ?? 0, j.transportmiddel, j.antalKm, j.antalTure,
+        j.destinationAdresse ?? null, JSON.stringify(j.mellemstationer ?? []), j.turRetur ?? true,
+        j.amBidragFritaget, Boolean(j.erRubrik17), Boolean(j.erBestyrelseshverv),
+        j.timerJob ?? null, j.timerTransportForberedelse ?? null, j.type ?? null,
         j.noter ?? null, Boolean(j.erEksempel),
       ]
     );
@@ -390,7 +397,7 @@ export class PostgresRepository implements Repository, BilagsLager {
   async findBilagVedHash(sha256: string): Promise<Bilag | null> {
     const { rows } = await this.pool.query(
       `SELECT id, sha256, filnavn, mime_type, stoerrelse, uploadet,
-              drev_backup_tidspunkt, drev_backup_fejl
+              drev_backup_tidspunkt, drev_backup_fejl, drev_backup_mappe_id
        FROM bilag WHERE sha256 = $1`,
       [sha256]
     );
@@ -400,7 +407,7 @@ export class PostgresRepository implements Repository, BilagsLager {
   async hentBilag(id: string): Promise<Bilag | null> {
     const { rows } = await this.pool.query(
       `SELECT id, sha256, filnavn, mime_type, stoerrelse, uploadet,
-              drev_backup_tidspunkt, drev_backup_fejl
+              drev_backup_tidspunkt, drev_backup_fejl, drev_backup_mappe_id
        FROM bilag WHERE id = $1`,
       [id]
     );
@@ -420,19 +427,21 @@ export class PostgresRepository implements Repository, BilagsLager {
           ? r.drev_backup_tidspunkt.toISOString()
           : (r.drev_backup_tidspunkt as string | null),
       drevBackupFejl: (r.drev_backup_fejl as string | null) ?? null,
+      drevBackupMappeId: (r.drev_backup_mappe_id as string | null) ?? null,
     };
   }
 
   async opdaterBilagDriveStatus(
     id: string,
     tidspunkt: string | null,
-    fejl: string | null
+    fejl: string | null,
+    mappeId: string | null
   ): Promise<void> {
     await this.pool.query(
       `UPDATE bilag
-       SET drev_backup_tidspunkt = $2, drev_backup_fejl = $3
+       SET drev_backup_tidspunkt = $2, drev_backup_fejl = $3, drev_backup_mappe_id = $4
        WHERE id = $1`,
-      [id, tidspunkt, fejl]
+      [id, tidspunkt, fejl, mappeId]
     );
   }
 

@@ -89,7 +89,8 @@ export interface Repository {
   opdaterBilagDriveStatus(
     id: string,
     tidspunkt: string | null,
-    fejl: string | null
+    fejl: string | null,
+    mappeId: string | null
   ): Promise<void>;
   sletBilag(id: string): Promise<void>;
 

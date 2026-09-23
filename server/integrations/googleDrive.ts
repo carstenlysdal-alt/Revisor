@@ -56,12 +56,13 @@ function tilTypetFejl(err: unknown): never {
   throw err;
 }
 
-export function byggAuthUrl(): string {
+export function byggAuthUrl(state: string): string {
   const klient = opretOAuthKlient();
   return klient.generateAuthUrl({
     access_type: 'offline',
     prompt: 'consent',
     scope: [SCOPE],
+    state,
   });
 }
 

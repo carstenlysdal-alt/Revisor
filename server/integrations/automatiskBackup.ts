@@ -40,7 +40,9 @@ export async function koerGoogleDriveBackup(
   let tokenUdloebet = false;
   const snapshot = await repo.hentAlt();
 
-  for (const bilag of snapshot.bilag.filter((b) => !b.drevBackupTidspunkt)) {
+  for (const bilag of snapshot.bilag.filter(
+    (b) => !b.drevBackupTidspunkt || b.drevBackupMappeId !== forbindelse.mappeId
+  )) {
     try {
       const indhold = await arkiv.hent(bilag.sha256, bilag.mimeType);
       await handlinger.upload(
@@ -50,11 +52,16 @@ export async function koerGoogleDriveBackup(
         indhold,
         bilag.mimeType
       );
-      await repo.opdaterBilagDriveStatus(bilag.id, handlinger.nu(), null);
+      await repo.opdaterBilagDriveStatus(
+        bilag.id,
+        handlinger.nu(),
+        null,
+        forbindelse.mappeId
+      );
     } catch (err) {
       const besked = fejltekst(err);
       fejl.push(`${bilag.filnavn}: ${besked}`);
-      await repo.opdaterBilagDriveStatus(bilag.id, null, besked);
+      await repo.opdaterBilagDriveStatus(bilag.id, null, besked, null);
       if (err instanceof GoogleDriveTokenUdloebetError) {
         tokenUdloebet = true;
         break;

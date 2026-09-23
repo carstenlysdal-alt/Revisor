@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Job, OpsparingsTracker } from '../types';
 import type { SkatteBeregning } from '../lib/tax/beregn';
 import { dato, kr, pct, talFraFelt } from '../lib/format';

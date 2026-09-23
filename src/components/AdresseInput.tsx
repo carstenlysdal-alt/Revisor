@@ -82,7 +82,7 @@ export function AdresseInput({
       setIndeks((prev) => (prev > 0 ? prev - 1 : forslag.length - 1));
     } else if (e.key === 'Enter' && indeks >= 0 && indeks < forslag.length) {
       e.preventDefault();
-      vaelgForslag(forslag[indeks].tekst);
+      vaelgForslag(forslag[indeks]!.tekst);
     } else if (e.key === 'Escape') {
       setVisForslag(false);
     }

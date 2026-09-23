@@ -500,7 +500,9 @@ export function Modal({
   bund?: React.ReactNode;
 }) {
   const panel = useRef<HTMLDivElement>(null);
+  const onLukRef = useRef(onLuk);
   const titelId = useId();
+  onLukRef.current = onLuk;
 
   useEffect(() => {
     if (!aaben) return;
@@ -513,7 +515,7 @@ export function Modal({
 
     const påTast = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onLuk();
+        onLukRef.current();
         return;
       }
       if (e.key !== 'Tab' || !panel.current) return;
@@ -523,8 +525,8 @@ export function Modal({
       );
       if (fokusérbare.length === 0) return;
 
-      const foerste = fokusérbare[0];
-      const sidste = fokusérbare[fokusérbare.length - 1];
+      const foerste = fokusérbare[0]!;
+      const sidste = fokusérbare[fokusérbare.length - 1]!;
       if (e.shiftKey && document.activeElement === foerste) {
         e.preventDefault();
         sidste.focus();
@@ -540,7 +542,7 @@ export function Modal({
       document.body.style.overflow = '';
       forrigeFokus?.focus();
     };
-  }, [aaben, onLuk]);
+  }, [aaben]);
 
   if (!aaben) return null;
 
