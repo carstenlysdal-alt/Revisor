@@ -25,7 +25,7 @@ export function Sektion({
             <p className="mt-0.5 max-w-[68ch] text-2xs text-ink-muted">{beskrivelse}</p>
           )}
         </div>
-        {handling && <div className="ikke-print flex shrink-0 gap-2">{handling}</div>}
+        {handling && <div className="ikke-print flex max-w-full flex-wrap gap-2">{handling}</div>}
       </header>
       <div className="pt-1">{children}</div>
     </section>

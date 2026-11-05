@@ -340,7 +340,7 @@ export default function App() {
             <span className="tal hidden text-2xs text-ink-faint sm:inline">B-indkomst</span>
           </button>
 
-          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-4">
             <button
               type="button"
               onClick={() => setProfilAaben(true)}
@@ -375,7 +375,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => naviger({ fane: 'aar' })}
-                className="text-2xs text-ink-muted underline underline-offset-4 hover:text-ink"
+                className="whitespace-nowrap text-2xs text-ink-muted underline underline-offset-4 hover:text-ink"
               >
                 Administrér
               </button>
@@ -398,7 +398,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => void auth.logUd()}
-                className="text-2xs text-ink-muted underline underline-offset-4 hover:text-ink"
+                className="whitespace-nowrap text-2xs text-ink-muted underline underline-offset-4 hover:text-ink"
               >
                 Log ud
               </button>

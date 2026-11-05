@@ -36,6 +36,10 @@
 @layer base {
   html {
     color-scheme: light;
+    /* Sikkerhedsnet: intet må kunne rulle siden sidelæns. "clip" frem for
+       "hidden", fordi hidden gør body til rullecontainer og ødelægger den
+       klæbende topbar (position: sticky). */
+    overflow-x: clip;
   }
 
   body {
@@ -46,7 +50,7 @@
     line-height: 1.55;
     -webkit-font-smoothing: antialiased;
     /* Ingen vandret scroll på siden. Brede tabeller scroller i egen container. */
-    overflow-x: hidden;
+    overflow-x: clip;
   }
 
   /* Tal skal stå under hinanden. En beløbskolonne, der hopper, kan ikke læses. */
