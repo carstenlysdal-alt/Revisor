@@ -85,11 +85,34 @@
 }
 
 @layer utilities {
+  /* Samme sideafstand i browseren og som iPhone-webapp, også på tværs. */
+  .app-safe-inline {
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+
+  @media (min-width: 640px) {
+    .app-safe-inline {
+      padding-left: max(1.5rem, env(safe-area-inset-left, 0px));
+      padding-right: max(1.5rem, env(safe-area-inset-right, 0px));
+    }
+  }
+
   /* Bevidst restriktiv overgang. Ease-out, ingen bounce. */
   .overgang {
     transition-property: color, background-color, border-color, opacity, transform;
     transition-duration: 160ms;
     transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+/* Safari zoomer ellers ind ved fokus på appens kompakte formularfelter.
+   Bevar brugerens mulighed for selv at zoome med fingrene. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 1rem;
   }
 }
 

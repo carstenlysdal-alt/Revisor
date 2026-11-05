@@ -318,7 +318,7 @@ export function IkonKnap({
       aria-label={label}
       title={label}
       {...rest}
-      className={`overgang inline-flex h-8 w-8 items-center justify-center rounded-[4px] text-ink-faint hover:bg-sunk hover:text-ink ${className}`}
+      className={`overgang inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[4px] text-ink-faint hover:bg-sunk hover:text-ink lg:h-10 lg:w-10 ${className}`}
     >
       {children}
     </button>
@@ -563,7 +563,7 @@ export function Modal({
         aria-labelledby={titelId}
         className={`min-h-dvh w-full bg-surface sm:min-h-0 sm:border sm:border-rule-strong sm:shadow-lg ${bredde}`}
       >
-        <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-rule bg-surface px-5 py-4">
+        <header className="app-safe-inline sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-rule bg-surface pb-4 pt-[calc(1rem+env(safe-area-inset-top))] sm:pt-4">
           <div>
             <h2 id={titelId} className="font-display text-base font-bold text-ink">
               {titel}
@@ -579,10 +579,10 @@ export function Modal({
           </IkonKnap>
         </header>
 
-        <div className="px-5 py-5">{children}</div>
+        <div className="app-safe-inline pt-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">{children}</div>
 
         {bund && (
-          <footer className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-rule bg-sunk px-5 py-3">
+          <footer className="app-safe-inline sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-rule bg-sunk pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
             {bund}
           </footer>
         )}

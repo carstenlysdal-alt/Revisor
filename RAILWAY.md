@@ -56,6 +56,17 @@ Skemaet i `server/db/schema.sql` køres automatisk ved opstart, og alt i det er
 Sundhedstjekket ligger på `/api/health` og kræver ikke login. Det svarer kun,
 at containeren lever, og røber intet om indholdet.
 
+## Brug på iPhone
+
+Åbn appens adresse i Safari, vælg **Del → Føj til hjemmeskærm**, og slå
+**Åbn som webapp** til, hvis valget vises. Start derefter revis fra ikonet.
+Appen åbner som et selvstændigt vindue og kræver internetforbindelse.
+
+På iPhone viser topbjælken den aktuelle sektion og det valgte år. **Menu**
+giver adgang til alle sektioner, årsvælger, profil og log ud. Menuen og
+formularerne kan rulles, også når telefonen ligger ned. Appens faste knapper
+holder afstand til statuslinjen, kamerahakket og hjemindikatoren.
+
 ## Hvor bilagene ligger
 
 I databasen, som `bytea` i tabellen `bilag_indhold`, nøglet på filens

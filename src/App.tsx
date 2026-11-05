@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRevisorData } from './hooks/useRevisorData';
 import { useAuth } from './hooks/useAuth';
 import { Login } from './components/Login';
@@ -21,20 +21,9 @@ import { GlobalSidebar } from './components/GlobalSidebar';
 import { AiBilagScannerModal } from './components/AiBilagScannerModal';
 import { RevisorChatModal } from './components/RevisorChatModal';
 import { ProfilModal } from './components/ProfilModal';
-import {
-  BarChart2,
-  Briefcase,
-  Building2,
-  Calculator,
-  Car,
-  FileCheck,
-  FileText,
-  Home,
-  Receipt,
-  Sparkles,
-  User,
-} from 'lucide-react';
-import { Advarsel, Knap, RevisorMaerke } from './components/ui';
+import { Sparkles } from 'lucide-react';
+import { AppNavigation } from './components/AppNavigation';
+import { Advarsel, Knap } from './components/ui';
 import { kr } from './lib/format';
 
 function MobilOverblik({
@@ -87,52 +76,6 @@ function MobilOverblik({
         </button>
       )}
     </div>
-  );
-}
-
-/** Daglig drift: det, der løbende registreres. */
-const FANER_DRIFT = [
-  { id: 'forside', navn: 'Forside', ikon: Home },
-  { id: 'indtaegter', navn: 'Indtægter', ikon: Briefcase },
-  { id: 'fradrag', navn: 'Udgifter & fradrag', ikon: Receipt },
-  { id: 'koersel', navn: 'Kørsel', ikon: Car },
-  { id: 'investeringer', navn: 'Investeringer', ikon: Building2 },
-];
-
-/** Samlet overblik: det, der ser tilbage på hele året. */
-const FANER_OVERBLIK = [
-  { id: 'overblik', navn: 'Skatteoverblik', ikon: Calculator },
-  { id: 'aarsopgoerelse', navn: 'Årsopgørelse', ikon: FileCheck },
-  { id: 'statistik', navn: 'Statistik', ikon: BarChart2 },
-  { id: 'dokumentation', navn: 'Dokumentation', ikon: FileText },
-];
-
-function FaneKnap({
-  fane,
-  aktiv,
-  onNaviger,
-}: {
-  fane: { id: string; navn: string; ikon?: React.ComponentType<{ className?: string }> };
-  aktiv: boolean;
-  onNaviger: (naeste: { fane: string }) => void;
-}) {
-  const Ikon = fane.ikon;
-  return (
-    <li>
-      <button
-        type="button"
-        onClick={() => onNaviger({ fane: fane.id })}
-        aria-current={aktiv ? 'page' : undefined}
-        className={`overgang inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-xs ${
-          aktiv
-            ? 'border-ink font-semibold text-ink'
-            : 'border-transparent text-ink-muted hover:text-ink'
-        }`}
-      >
-        {Ikon && <Ikon className="h-3.5 w-3.5 shrink-0" />}
-        <span>{fane.navn}</span>
-      </button>
-    </li>
   );
 }
 
@@ -317,110 +260,30 @@ export default function App() {
     aktivtAar && beregning && !['aar', 'statistik'].includes(visning.fane);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-dvh">
       {besked && (
         <div
           role="status"
-          className="ikke-print fixed bottom-5 right-5 z-50 border border-rule-strong bg-surface px-4 py-2.5 text-xs shadow-lg"
+          className="ikke-print fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-50 max-w-[calc(100%-2rem)] lg:bottom-5 border border-rule-strong bg-surface px-4 py-2.5 text-xs shadow-lg"
         >
           {besked}
         </div>
       )}
 
-      <header className="ikke-print sticky top-0 z-30 border-b border-rule bg-surface">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <button
-            type="button"
-            onClick={() => naviger({ fane: 'forside' })}
-            className="overgang flex items-baseline gap-2 hover:opacity-70"
-          >
-            <span className="font-display text-base font-extrabold tracking-tight text-ink">
-              revis
-            </span>
-            <span className="tal hidden text-2xs text-ink-faint sm:inline">B-indkomst</span>
-          </button>
+      <AppNavigation
+        visning={visning}
+        aarListe={aarListe}
+        aktivtAar={aktivtAar}
+        profilNavn={d.data.profil?.navn}
+        visRevisor={Boolean(aktivtAar && beregning)}
+        kraeverLogin={Boolean(auth.status?.kraeverLogin)}
+        onNaviger={naviger}
+        onProfil={() => setProfilAaben(true)}
+        onRevisor={() => setChatAaben(true)}
+        onLogUd={() => void auth.logUd()}
+      />
 
-          <div className="flex min-w-0 items-center gap-2 sm:gap-4">
-            <button
-              type="button"
-              onClick={() => setProfilAaben(true)}
-              className="overgang flex items-center gap-1.5 rounded-[4px] border border-rule-strong bg-surface px-2.5 py-1 text-xs text-ink hover:bg-sunk"
-              title="Rediger din profil og faste stamdata (bopæl, skat, kørselspræferencer)"
-            >
-              <User className="h-3.5 w-3.5 text-ink-muted" />
-              <span className="hidden sm:inline">
-                {d.data.profil?.navn ? d.data.profil.navn : 'Min profil'}
-              </span>
-              <span className="sm:hidden">Profil</span>
-            </button>
-
-            {aarListe.length > 0 && (
-            <div className="flex items-center gap-2">
-              <label htmlFor="aar-vaelger" className="sr-only text-2xs text-ink-muted sm:not-sr-only">
-                Indkomstår
-              </label>
-              <select
-                id="aar-vaelger"
-                value={aktivtAar?.id ?? ''}
-                onChange={(e) => naviger({ aar: e.target.value })}
-                className="tal rounded-[4px] border border-rule-strong bg-surface px-2 py-1 text-xs text-ink"
-              >
-                {aarListe.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.aar}
-                    {a.laast ? ' (låst)' : ''}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => naviger({ fane: 'aar' })}
-                className="whitespace-nowrap text-2xs text-ink-muted underline underline-offset-4 hover:text-ink"
-              >
-                Administrér
-              </button>
-            </div>
-            )}
-            {aktivtAar && beregning && (
-              // Den eneste vej til Revisor-chatten på skrivebordet — sidebaren
-              // gentager den ikke. Kun på lg+: mobilen har sin egen faste
-              // Revisor-knap i bundnavigationen.
-              <button
-                type="button"
-                onClick={() => setChatAaben(true)}
-                className="overgang hidden items-center gap-1.5 rounded-[4px] border border-rule-strong px-2.5 py-1 text-xs font-medium text-ink hover:bg-sunk lg:flex"
-              >
-                <RevisorMaerke stoerrelse="sm" />
-                Revisor
-              </button>
-            )}
-            {auth.status?.kraeverLogin && (
-              <button
-                type="button"
-                onClick={() => void auth.logUd()}
-                className="whitespace-nowrap text-2xs text-ink-muted underline underline-offset-4 hover:text-ink"
-              >
-                Log ud
-              </button>
-            )}
-          </div>
-        </div>
-
-        <nav aria-label="Moduler" className="mx-auto flex max-w-7xl items-center justify-between gap-4 overflow-x-auto px-4 sm:px-6">
-          <ul className="flex gap-1 pb-px">
-            {FANER_DRIFT.map((f) => (
-              <FaneKnap key={f.id} fane={f} aktiv={visning.fane === f.id} onNaviger={naviger} />
-            ))}
-          </ul>
-          <ul className="flex gap-1 pb-px">
-            {FANER_OVERBLIK.map((f) => (
-              <FaneKnap key={f.id} fane={f} aktiv={visning.fane === f.id} onNaviger={naviger} />
-            ))}
-          </ul>
-        </nav>
-      </header>
-
-      <main className="mx-auto max-w-7xl px-4 pt-6 pb-28 sm:px-6 sm:pt-8 lg:pb-8">
+      <main className="app-safe-inline mx-auto max-w-7xl pt-6 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:pt-8 lg:pb-8">
         {handlingsfejl && (
           <div className="mb-5">
             <Advarsel titel="Handlingen slog fejl">{handlingsfejl}</Advarsel>
@@ -643,12 +506,12 @@ export default function App() {
       {aktivtAar && (
         <nav
           aria-label="Hurtige handlinger"
-          className="ikke-print fixed inset-x-0 bottom-0 z-40 flex items-stretch gap-px border-t border-rule-strong bg-rule lg:hidden"
+          className="ikke-print fixed inset-x-0 bottom-0 z-40 flex items-stretch gap-px border-t border-rule-strong bg-surface pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] lg:hidden"
         >
           <button
             type="button"
             onClick={() => setScannerAaben(true)}
-            className="flex flex-1 items-center justify-center gap-2 bg-ink px-4 py-3.5 text-sm font-semibold text-surface"
+            className="flex min-w-0 flex-1 items-center justify-center gap-2 bg-ink px-4 py-3.5 text-sm font-semibold text-surface"
           >
             <svg
               aria-hidden="true"
