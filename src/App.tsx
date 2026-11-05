@@ -337,10 +337,10 @@ export default function App() {
             <span className="font-display text-base font-extrabold tracking-tight text-ink">
               revis
             </span>
-            <span className="tal text-2xs text-ink-faint">B-indkomst</span>
+            <span className="tal hidden text-2xs text-ink-faint sm:inline">B-indkomst</span>
           </button>
 
-          <div className="flex items-center gap-3 sm:gap-4">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
             <button
               type="button"
               onClick={() => setProfilAaben(true)}
@@ -356,7 +356,7 @@ export default function App() {
 
             {aarListe.length > 0 && (
             <div className="flex items-center gap-2">
-              <label htmlFor="aar-vaelger" className="text-2xs text-ink-muted">
+              <label htmlFor="aar-vaelger" className="sr-only text-2xs text-ink-muted sm:not-sr-only">
                 Indkomstår
               </label>
               <select

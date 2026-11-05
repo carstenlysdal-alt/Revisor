@@ -548,7 +548,10 @@ export function Modal({
 
   return (
     <div
-      className="ikke-print fixed inset-0 z-50 flex h-dvh items-stretch justify-center overflow-y-auto bg-ink/25 sm:h-auto sm:items-start sm:p-8"
+      // items-start, ikke items-stretch: panelet skal være lige så højt som sit
+      // indhold. Med stretch får det overlayets faste højde, og bag­grunden
+      // holder op, så snart man ruller forbi første skærmhøjde.
+      className="ikke-print fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-ink/25 sm:p-8"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onLuk();
       }}
